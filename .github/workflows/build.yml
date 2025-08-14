@@ -18,6 +18,9 @@ jobs:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
     
     steps:
     - name: Checkout code
