@@ -1,0 +1,324 @@
+{% extends "layout.html" %}
+{% from 'components/provider_modal.html' import provider_modal %}
+{% from 'components/delete_confirmation_modal.html' import delete_confirmation_modal %}
+
+{% block title %}Providers - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-hospital-building mr-2"></i>
+          Healthcare Providers
+        </h1>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#addProviderModal">
+          <i class="mdi mdi-plus mr-1"></i>
+          Add New Provider
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- Providers List -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-view-list mr-2"></i>
+              All Healthcare Providers
+            </h3>
+            <div class="card-tools">
+              <div class="input-group input-group-sm" style="width: 250px;">
+                <input type="text" id="searchProviders" class="form-control float-right" placeholder="Search providers...">
+                <div class="input-group-append">
+                  <button type="button" class="btn btn-default">
+                    <i class="mdi mdi-magnify"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <table id="providersTable" class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Specialty</th>
+                  <th>Total Results</th>
+                  <th>Patient Count</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be loaded via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Add Provider Modal -->
+<div class="modal fade" id="addProviderModal" tabindex="-1" role="dialog" aria-labelledby="addProviderModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addProviderModalLabel">
+          <i class="mdi mdi-doctor mr-2"></i>
+          Add New Provider
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addProviderForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="providerName">Provider Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="providerName" name="name" required>
+            <small class="form-text text-muted">Enter the full name of the healthcare provider</small>
+          </div>
+          <div class="form-group">
+            <label for="providerSpecialty">Specialty</label>
+            <input type="text" class="form-control" id="providerSpecialty" name="specialty" placeholder="e.g., Cardiology, Internal Medicine">
+            <small class="form-text text-muted">Medical specialty or area of expertise</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Save Provider
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Provider Modal -->
+<div class="modal fade" id="editProviderModal" tabindex="-1" role="dialog" aria-labelledby="editProviderModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editProviderModalLabel">
+          <i class="mdi mdi-pencil mr-2"></i>
+          Edit Provider
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="editProviderForm">
+        <input type="hidden" id="editProviderId" name="id">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editProviderName">Provider Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="editProviderName" name="name" required>
+          </div>
+          <div class="form-group">
+            <label for="editProviderSpecialty">Specialty</label>
+            <input type="text" class="form-control" id="editProviderSpecialty" name="specialty">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Update Provider
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+{{ delete_confirmation_modal(
+    modal_id='deleteProviderModal',
+    entity_name='Provider',
+    entity_type='provider',
+    warning_message='This action cannot be undone. The provider will only be deleted if they have no associated lab results.',
+    deletion_endpoint='/api/providers'
+) }}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    let providersTable;
+    
+    // Initialize DataTable
+    function initializeTable() {
+        providersTable = $('#providersTable').DataTable({
+            ajax: {
+                url: '/api/providers',
+                dataSrc: ''
+            },
+            columns: [
+                { data: 'name' },
+                { data: 'specialty', defaultContent: '<span class="text-muted">Not specified</span>' },
+                { data: 'result_count', defaultContent: '0' },
+                { data: 'patient_count', defaultContent: '0' },
+                {
+                    data: 'id',
+                    orderable: false,
+                    render: function(data, type, row) {
+                        const hasResults = row.result_count > 0;
+                        const deleteButtonClass = hasResults ? 'btn-secondary disabled' : 'btn-danger delete-provider';
+                        const deleteButtonAttrs = hasResults ? 'disabled' : `data-id="${data}" data-name="${row.name}"`;
+                        const deleteTitle = hasResults ? 'Cannot delete provider with associated lab results' : 'Delete';
+                        
+                        return `
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-primary edit-provider" data-id="${data}" title="Edit">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm ${deleteButtonClass}" ${deleteButtonAttrs} title="${deleteTitle}">
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+            ],
+            responsive: true,
+            order: [[0, 'asc']],
+            pageLength: 25
+        });
+    }
+
+    // Initialize table on load
+    initializeTable();
+
+    // Search functionality
+    $('#searchProviders').on('keyup', function() {
+        providersTable.search(this.value).draw();
+    });
+
+    // Add Provider Form
+    $('#addProviderForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            name: $('#providerName').val().trim(),
+            specialty: $('#providerSpecialty').val().trim() || null
+        };
+
+        $.ajax({
+            url: '/api/providers',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addProviderModal').modal('hide');
+                $('#addProviderForm')[0].reset();
+                providersTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Provider "${formData.name}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add provider';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Edit Provider
+    $(document).on('click', '.edit-provider', function() {
+        const providerId = $(this).data('id');
+        
+        $.get(`/api/providers/${providerId}`, function(provider) {
+            $('#editProviderId').val(provider.id);
+            $('#editProviderName').val(provider.name);
+            $('#editProviderSpecialty').val(provider.specialty || '');
+            $('#editProviderModal').modal('show');
+        });
+    });
+
+    // Update Provider Form
+    $('#editProviderForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const providerId = $('#editProviderId').val();
+        const formData = {
+            name: $('#editProviderName').val().trim(),
+            specialty: $('#editProviderSpecialty').val().trim() || null
+        };
+
+        $.ajax({
+            url: `/api/providers/${providerId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#editProviderModal').modal('hide');
+                providersTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Provider "${formData.name}" has been updated successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update provider';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Delete Provider
+    $(document).on('click', '.delete-provider', function() {
+        const providerId = $(this).data('id');
+        const providerName = $(this).data('name');
+        showProviderDeleteModal(providerId, providerName);
+    });
+
+    // Reset forms when modals are hidden
+    $('#addProviderModal').on('hidden.bs.modal', function() {
+        $('#addProviderForm')[0].reset();
+    });
+});
+</script>
+{% endblock %}

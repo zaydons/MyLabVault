@@ -1,0 +1,322 @@
+{% extends "layout.html" %}
+{% from 'components/simple_add_modal.html' import simple_add_modal %}
+{% from 'components/delete_confirmation_modal.html' import delete_confirmation_modal %}
+{% from 'components/edit_modal.html' import edit_modal %}
+{% from 'components/details_modal.html' import details_modal %}
+
+{% block title %}Panels - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-view-grid mr-2"></i>
+          Lab Test Panels
+        </h1>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#addPanelModal">
+          <i class="mdi mdi-plus mr-1"></i>
+          Add New Panel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- Panels List -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-view-list mr-2"></i>
+              All Lab Test Panels
+            </h3>
+            <div class="card-tools">
+              <div class="input-group input-group-sm" style="width: 250px;">
+                <input type="text" id="searchPanels" class="form-control float-right" placeholder="Search panels...">
+                <div class="input-group-append">
+                  <button type="button" class="btn btn-default">
+                    <i class="mdi mdi-magnify"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <table id="panelsTable" class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>Panel Name</th>
+                  <th>Lab Tests</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be loaded via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Add Panel Modal -->
+{{ simple_add_modal(
+    modal_id='addPanelModal',
+    entity_name='Panel',
+    field_name='panel',
+    field_label='Panel Name',
+    placeholder='e.g., Basic Metabolic Panel, Lipid Panel',
+    help_text='Enter the name of the lab test panel (e.g., Basic Metabolic Panel, Lipid Panel)',
+    examples='Basic Metabolic Panel, Comprehensive Metabolic Panel, Lipid Panel, Complete Blood Count, Thyroid Panel, Liver Function Tests',
+    api_endpoint='/api/panels',
+    icon_class='mdi-view-grid',
+    success_callback='reloadPanelsTable'
+) }}
+
+<!-- Edit Panel Modal -->
+{{ edit_modal(
+    modal_id='editPanelModal',
+    entity_name='Panel',
+    fields=[
+        {'id': 'editPanelName', 'name': 'name', 'label': 'Panel Name', 'type': 'text', 'required': true, 'placeholder': 'e.g., Basic Metabolic Panel'}
+    ],
+    api_endpoint='/api/panels',
+    success_callback='reloadPanelsTable'
+) }}
+
+<!-- Delete Confirmation Modal -->
+{{ delete_confirmation_modal(
+    modal_id='deletePanelModal',
+    entity_name='Panel',
+    entity_type='panel',
+    warning_message='This action cannot be undone. The panel will only be deleted if it has no associated lab tests.',
+    deletion_endpoint='/api/panels'
+) }}
+
+<!-- Panel Details Modal -->
+<div class="modal fade" id="panelDetailsModal" tabindex="-1" role="dialog" aria-labelledby="panelDetailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="panelDetailsModalLabel">
+          <i class="mdi mdi-information mr-2"></i>
+          <span id="panelDetailsTitle">Panel Details</span>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="panelDetailsContent">
+          <!-- Content will be loaded dynamically -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="mdi mdi-close mr-1"></i>
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    let panelsTable;
+    
+    // Initialize DataTable
+    function initializeTable() {
+        panelsTable = $('#panelsTable').DataTable({
+            ajax: {
+                url: '/api/panels',
+                dataSrc: ''
+            },
+            columns: [
+                { data: 'name' },
+                { data: 'lab_count', defaultContent: '0' },
+                {
+                    data: 'id',
+                    orderable: false,
+                    render: function(data, type, row) {
+                        const hasLabs = row.lab_count && row.lab_count > 0;
+                        const deleteDisabled = hasLabs ? 'disabled' : '';
+                        const deleteTitle = hasLabs ? 'Cannot delete - has associated lab tests' : 'Delete';
+                        
+                        return `
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-info view-panel" data-id="${data}" title="View Details">
+                                    <i class="mdi mdi-information"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary edit-panel" data-id="${data}" title="Edit">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger delete-panel ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+            ],
+            responsive: true,
+            order: [[0, 'asc']],
+            pageLength: 25
+        });
+    }
+
+    // Initialize table on load
+    initializeTable();
+
+    // Search functionality
+    $('#searchPanels').on('keyup', function() {
+        panelsTable.search(this.value).draw();
+    });
+
+    // Success callback for panel creation
+    function reloadPanelsTable(data) {
+        panelsTable.ajax.reload();
+    }
+
+    // View Panel Details
+    $(document).on('click', '.view-panel', function() {
+        const panelId = $(this).data('id');
+        
+        $.get(`/api/panels/${panelId}/summary`, function(data) {
+            $('#panelDetailsTitle').text(data.panel.name);
+            
+            let content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><strong>Panel Information</strong></h6>
+                        <p><strong>Name:</strong> ${data.panel.name}</p>
+                        <p><strong>Lab Tests Count:</strong> ${data.lab_count}</p>
+                    </div>
+                </div>
+            `;
+            
+            if (data.labs && data.labs.length > 0) {
+                content += `
+                    <hr>
+                    <h6><strong>Associated Lab Tests</strong></h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Lab Test Name</th>
+                                    <th>Unit</th>
+                                    <th>Reference Range</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.labs.forEach(function(lab) {
+                    content += `
+                        <tr>
+                            <td>${lab.name}</td>
+                            <td>${lab.unit || 'N/A'}</td>
+                            <td>${lab.ref_low !== null && lab.ref_high !== null ? lab.ref_low + ' - ' + lab.ref_high : 'N/A'}</td>
+                        </tr>
+                    `;
+                });
+                
+                content += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                content += `
+                    <hr>
+                    <div class="alert alert-info">
+                        <i class="mdi mdi-information mr-2"></i>
+                        No lab tests are currently associated with this panel.
+                    </div>
+                `;
+            }
+            
+            $('#panelDetailsContent').html(content);
+            $('#panelDetailsModal').modal('show');
+        });
+    });
+
+    // Edit Panel
+    $(document).on('click', '.edit-panel', function() {
+        const panelId = $(this).data('id');
+        
+        $.get(`/api/panels/${panelId}`, function(panel) {
+            $('#editPanelId').val(panel.id);
+            $('#editPanelName').val(panel.name);
+            $('#editPanelModal').modal('show');
+        });
+    });
+
+    // Update Panel Form
+    $('#editPanelForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const panelId = $('#editPanelId').val();
+        const formData = {
+            name: $('#editPanelName').val().trim()
+        };
+
+        $.ajax({
+            url: `/api/panels/${panelId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#editPanelModal').modal('hide');
+                panelsTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Panel "${formData.name}" has been updated successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update panel';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Delete Panel
+    $(document).on('click', '.delete-panel', function() {
+        if ($(this).hasClass('disabled')) {
+            return false;
+        }
+        const panelId = $(this).data('id');
+        const panelName = $(this).data('name');
+        showPanelDeleteModal(panelId, panelName);
+    });
+
+});
+</script>
+{% endblock %}

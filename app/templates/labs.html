@@ -1,0 +1,803 @@
+{% extends "layout.html" %}
+
+{% block title %}Lab Tests - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-test-tube mr-2"></i>
+          Lab Tests
+        </h1>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#addLabModal">
+          <i class="mdi mdi-plus mr-1"></i>
+          Add New Lab Test
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- Filter Controls -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-filter mr-2"></i>
+              Filter Lab Tests
+            </h3>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-4">
+                <label for="filterPanel">Filter by Panel:</label>
+                <select id="filterPanel" class="form-control">
+                  <option value="">All Panels</option>
+                  <!-- Options will be loaded dynamically -->
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="filterUnit">Filter by Unit:</label>
+                <select id="filterUnit" class="form-control">
+                  <option value="">All Units</option>
+                  <!-- Options will be loaded dynamically -->
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="searchLabs">Search Lab Tests:</label>
+                <input type="text" id="searchLabs" class="form-control" placeholder="Search by name...">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Lab Tests List -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-view-list mr-2"></i>
+              All Lab Tests
+            </h3>
+          </div>
+          <div class="card-body">
+            <table id="labsTable" class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Panel</th>
+                  <th>Unit</th>
+                  <th>Reference Range</th>
+                  <th>Results</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be loaded via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Add Lab Test Modal -->
+<div class="modal fade" id="addLabModal" tabindex="-1" role="dialog" aria-labelledby="addLabModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addLabModalLabel">
+          <i class="mdi mdi-flask mr-2"></i>
+          Add New Lab Test
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addLabForm">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="labName">Lab Test Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="labName" name="name" required placeholder="e.g., Glucose, Cholesterol">
+                <small class="form-text text-muted">Enter the name of the lab test</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="labPanel">Panel <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <select class="form-control" id="labPanel" name="panel_id" required>
+                    <option value="">Select a panel</option>
+                    <!-- Options will be loaded dynamically -->
+                  </select>
+                  <div class="input-group-append">
+                    <button class="btn btn-outline-success" type="button" id="addNewPanel" title="Add New Panel">
+                      <i class="mdi mdi-plus"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="labUnit">Unit <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <select class="form-control" id="labUnit" name="unit_id" required>
+                    <option value="">Select a unit</option>
+                    <!-- Options will be loaded dynamically -->
+                  </select>
+                  <div class="input-group-append">
+                    <button class="btn btn-outline-success" type="button" id="addNewUnit" title="Add New Unit">
+                      <i class="mdi mdi-plus"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-12">
+              <div class="form-group">
+                <label for="labRefType">Reference Range Type</label>
+                <select class="form-control" id="labRefType" name="ref_type">
+                  <option value="range">Range (Low - High)</option>
+                  <option value="greater">Greater Than (>)</option>
+                  <option value="less">Less Than (<)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="row" id="rangeInputs">
+            <div class="col-md-6" id="refLowGroup">
+              <div class="form-group">
+                <label for="labRefLow">Reference Low</label>
+                <input type="number" step="0.01" class="form-control" id="labRefLow" name="ref_low" placeholder="e.g., 70">
+                <small class="form-text text-muted">Lower reference range (optional)</small>
+              </div>
+            </div>
+            <div class="col-md-6" id="refHighGroup">
+              <div class="form-group">
+                <label for="labRefHigh">Reference High</label>
+                <input type="number" step="0.01" class="form-control" id="labRefHigh" name="ref_high" placeholder="e.g., 100">
+                <small class="form-text text-muted">Upper reference range (optional)</small>
+              </div>
+            </div>
+          </div>
+          <div class="row" id="singleValueInput" style="display: none;">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="labRefValue" id="refValueLabel">Reference Value</label>
+                <input type="number" step="0.01" class="form-control" id="labRefValue" name="ref_value" placeholder="e.g., 10">
+                <small class="form-text text-muted" id="refValueHelp">Reference value for comparison</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Save Lab Test
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Lab Test Modal -->
+<div class="modal fade" id="editLabModal" tabindex="-1" role="dialog" aria-labelledby="editLabModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editLabModalLabel">
+          <i class="mdi mdi-pencil mr-2"></i>
+          Edit Lab Test
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="editLabForm">
+        <input type="hidden" id="editLabId" name="id">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editLabName">Lab Test Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="editLabName" name="name" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editLabPanel">Panel <span class="text-danger">*</span></label>
+                <select class="form-control" id="editLabPanel" name="panel_id" required>
+                  <option value="">Select a panel</option>
+                  <!-- Options will be loaded dynamically -->
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editLabUnit">Unit <span class="text-danger">*</span></label>
+                <select class="form-control" id="editLabUnit" name="unit_id" required>
+                  <option value="">Select a unit</option>
+                  <!-- Options will be loaded dynamically -->
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editLabRefLow">Reference Low</label>
+                <input type="number" step="0.01" class="form-control" id="editLabRefLow" name="ref_low">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editLabRefHigh">Reference High</label>
+                <input type="number" step="0.01" class="form-control" id="editLabRefHigh" name="ref_high">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Update Lab Test
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteLabModal" tabindex="-1" role="dialog" aria-labelledby="deleteLabModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteLabModalLabel">
+          <i class="mdi mdi-delete mr-2"></i>
+          Confirm Deletion
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          <i class="mdi mdi-alert mr-2"></i>
+          Are you sure you want to delete the lab test "<span id="deleteLabName"></span>"?
+        </div>
+        <p class="text-muted">This action cannot be undone. The lab test will only be deleted if it has no associated results.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="mdi mdi-close mr-1"></i>
+          Cancel
+        </button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteLab">
+          <i class="mdi mdi-delete mr-1"></i>
+          Delete Lab Test
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Panel Modal -->
+<div class="modal fade" id="addPanelModal" tabindex="-1" role="dialog" aria-labelledby="addPanelModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addPanelModalLabel">
+          <i class="mdi mdi-folder-plus mr-2"></i>
+          Add New Panel
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addPanelForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="panelName">Panel Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="panelName" name="name" required placeholder="e.g., Basic Metabolic Panel">
+            <small class="form-text text-muted">Enter the name of the lab panel</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Panel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Unit Modal -->
+<div class="modal fade" id="addUnitModal" tabindex="-1" role="dialog" aria-labelledby="addUnitModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addUnitModalLabel">
+          <i class="mdi mdi-ruler mr-2"></i>
+          Add New Unit
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addUnitForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="unitName">Unit Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="unitName" name="name" required placeholder="e.g., mg/dL, mmol/L">
+            <small class="form-text text-muted">Enter the unit of measurement</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Unit
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    let labsTable;
+    let currentDeleteId = null;
+    let panels = [];
+    let units = [];
+    
+    // Load panels and units for dropdowns
+    function loadDropdownData() {
+        // Load panels
+        $.get('/api/panels', function(data) {
+            panels = data;
+            const panelOptions = panels.map(panel => 
+                `<option value="${panel.id}">${panel.name}</option>`
+            ).join('');
+            
+            $('#labPanel, #editLabPanel').html('<option value="">Select a panel</option>' + panelOptions);
+            $('#filterPanel').html('<option value="">All Panels</option>' + panelOptions);
+        });
+        
+        // Load units
+        $.get('/api/units', function(data) {
+            units = data;
+            const unitOptions = units.map(unit => 
+                `<option value="${unit.id}">${unit.name}</option>`
+            ).join('');
+            
+            $('#labUnit, #editLabUnit').html('<option value="">Select a unit</option>' + unitOptions);
+            $('#filterUnit').html('<option value="">All Units</option>' + unitOptions);
+        });
+    }
+    
+    // Initialize DataTable
+    function initializeTable() {
+        labsTable = $('#labsTable').DataTable({
+            ajax: {
+                url: '/api/labs',
+                dataSrc: ''
+            },
+            columns: [
+                { data: 'name' },
+                { data: 'panel_name', defaultContent: 'N/A' },
+                { data: 'unit_name', defaultContent: 'N/A' },
+                { 
+                    data: null,
+                    render: function(data, type, row) {
+                        if (row.ref_type === 'greater' && row.ref_value !== null) {
+                            return `> ${row.ref_value}`;
+                        } else if (row.ref_type === 'less' && row.ref_value !== null) {
+                            return `< ${row.ref_value}`;
+                        } else if (row.ref_type === 'range' || !row.ref_type) {
+                            if (row.ref_low !== null && row.ref_high !== null) {
+                                return `${row.ref_low} - ${row.ref_high}`;
+                            } else if (row.ref_low !== null) {
+                                return `> ${row.ref_low}`;
+                            } else if (row.ref_high !== null) {
+                                return `< ${row.ref_high}`;
+                            }
+                        }
+                        return 'Not set';
+                    }
+                },
+                { data: 'result_count', defaultContent: '0' },
+                {
+                    data: 'id',
+                    orderable: false,
+                    render: function(data, type, row) {
+                        const hasResults = row.result_count && row.result_count > 0;
+                        const deleteDisabled = hasResults ? 'disabled' : '';
+                        const deleteTitle = hasResults ? 'Cannot delete - has associated results' : 'Delete';
+                        
+                        return `
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-info view-lab" data-id="${data}" title="View Details">
+                                    <i class="mdi mdi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary edit-lab" data-id="${data}" title="Edit">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger delete-lab ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+            ],
+            responsive: true,
+            order: [[0, 'asc']],
+            pageLength: 25
+        });
+    }
+
+    // Initialize everything on load
+    loadDropdownData();
+    initializeTable();
+
+    // Reference range type change handler
+    $('#labRefType').on('change', function() {
+        const refType = $(this).val();
+        toggleReferenceInputs(refType);
+    });
+
+    function toggleReferenceInputs(refType) {
+        if (refType === 'range') {
+            $('#rangeInputs').show();
+            $('#singleValueInput').hide();
+            $('#labRefLow, #labRefHigh').prop('disabled', false);
+            $('#labRefValue').prop('disabled', true);
+        } else {
+            $('#rangeInputs').hide();
+            $('#singleValueInput').show();
+            $('#labRefLow, #labRefHigh').prop('disabled', true);
+            $('#labRefValue').prop('disabled', false);
+            
+            if (refType === 'greater') {
+                $('#refValueLabel').text('Minimum Value (>)');
+                $('#refValueHelp').text('Values greater than this are normal');
+            } else if (refType === 'less') {
+                $('#refValueLabel').text('Maximum Value (<)');
+                $('#refValueHelp').text('Values less than this are normal');
+            }
+        }
+    }
+
+    // Add New Panel button handler
+    $('#addNewPanel').on('click', function() {
+        $('#addPanelModal').modal('show');
+    });
+
+    // Add New Unit button handler
+    $('#addNewUnit').on('click', function() {
+        $('#addUnitModal').modal('show');
+    });
+
+    // Add Panel Form
+    $('#addPanelForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            name: $('#panelName').val().trim()
+        };
+
+        $.ajax({
+            url: '/api/panels',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addPanelModal').modal('hide');
+                $('#addPanelForm')[0].reset();
+                
+                // Reload dropdown data
+                loadDropdownData();
+                
+                // Select the new panel
+                setTimeout(() => {
+                    $('#labPanel').val(response.data.id);
+                }, 500);
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Panel "${formData.name}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add panel';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Add Unit Form
+    $('#addUnitForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            name: $('#unitName').val().trim()
+        };
+
+        $.ajax({
+            url: '/api/units',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addUnitModal').modal('hide');
+                $('#addUnitForm')[0].reset();
+                
+                // Reload dropdown data
+                loadDropdownData();
+                
+                // Select the new unit
+                setTimeout(() => {
+                    $('#labUnit').val(response.data.id);
+                }, 500);
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Unit "${formData.name}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add unit';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Search functionality
+    $('#searchLabs').on('keyup', function() {
+        labsTable.search(this.value).draw();
+    });
+
+    // Filter functionality
+    $('#filterPanel, #filterUnit').on('change', function() {
+        const panelId = $('#filterPanel').val();
+        const unitId = $('#filterUnit').val();
+        
+        let url = '/api/labs?';
+        if (panelId) url += `panel_id=${panelId}&`;
+        if (unitId) url += `unit_id=${unitId}&`;
+        
+        labsTable.ajax.url(url).load();
+    });
+
+    // Add Lab Form
+    $('#addLabForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const refType = $('#labRefType').val();
+        const formData = {
+            name: $('#labName').val().trim(),
+            panel_id: parseInt($('#labPanel').val()),
+            unit_id: parseInt($('#labUnit').val()),
+            ref_type: refType
+        };
+
+        if (refType === 'range') {
+            formData.ref_low = $('#labRefLow').val() ? parseFloat($('#labRefLow').val()) : null;
+            formData.ref_high = $('#labRefHigh').val() ? parseFloat($('#labRefHigh').val()) : null;
+            formData.ref_value = null;
+        } else {
+            formData.ref_low = null;
+            formData.ref_high = null;
+            formData.ref_value = $('#labRefValue').val() ? parseFloat($('#labRefValue').val()) : null;
+        }
+
+        $.ajax({
+            url: '/api/labs',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addLabModal').modal('hide');
+                $('#addLabForm')[0].reset();
+                labsTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Lab test "${formData.name}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add lab test';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // View Lab Details
+    $(document).on('click', '.view-lab', function() {
+        const labId = $(this).data('id');
+        window.location.href = `/lab/${labId}`;
+    });
+
+    // Edit Lab
+    $(document).on('click', '.edit-lab', function() {
+        const labId = $(this).data('id');
+        
+        $.get(`/api/labs/${labId}`, function(lab) {
+            $('#editLabId').val(lab.id);
+            $('#editLabName').val(lab.name);
+            $('#editLabPanel').val(lab.panel_id);
+            $('#editLabUnit').val(lab.unit_id);
+            $('#editLabRefLow').val(lab.ref_low);
+            $('#editLabRefHigh').val(lab.ref_high);
+            $('#editLabModal').modal('show');
+        });
+    });
+
+    // Update Lab Form
+    $('#editLabForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const labId = $('#editLabId').val();
+        const formData = {
+            name: $('#editLabName').val().trim(),
+            panel_id: parseInt($('#editLabPanel').val()),
+            unit_id: parseInt($('#editLabUnit').val()),
+            ref_low: $('#editLabRefLow').val() ? parseFloat($('#editLabRefLow').val()) : null,
+            ref_high: $('#editLabRefHigh').val() ? parseFloat($('#editLabRefHigh').val()) : null
+        };
+
+        $.ajax({
+            url: `/api/labs/${labId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#editLabModal').modal('hide');
+                labsTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Lab test "${formData.name}" has been updated successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update lab test';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Delete Lab
+    $(document).on('click', '.delete-lab', function() {
+        if ($(this).hasClass('disabled')) {
+            return false;
+        }
+        currentDeleteId = $(this).data('id');
+        const labName = $(this).data('name');
+        $('#deleteLabName').text(labName);
+        $('#deleteLabModal').modal('show');
+    });
+
+    // Confirm Delete
+    $('#confirmDeleteLab').on('click', function() {
+        if (!currentDeleteId) return;
+
+        $.ajax({
+            url: `/api/labs/${currentDeleteId}`,
+            method: 'DELETE',
+            success: function(response) {
+                $('#deleteLabModal').modal('hide');
+                labsTable.ajax.reload();
+                currentDeleteId = null;
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Lab test has been deleted successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to delete lab test';
+                alert('Error: ' + error);
+                $('#deleteLabModal').modal('hide');
+                currentDeleteId = null;
+            }
+        });
+    });
+
+    // Reset forms when modals are hidden
+    $('#addLabModal').on('hidden.bs.modal', function() {
+        $('#addLabForm')[0].reset();
+    });
+});
+</script>
+{% endblock %}

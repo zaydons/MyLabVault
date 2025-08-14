@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Select Patient - MyLabVault</title>
+
+  <!-- Google Font: Source Sans Pro -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <!-- Material Design Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css">
+  <!-- Theme style -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .patient-selection-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .patient-card {
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: 2px solid transparent;
+      background: white;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    .patient-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+      border-color: #007bff;
+    }
+    
+    .patient-avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #007bff, #28a745);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: white;
+      font-weight: bold;
+      margin: 0 auto 15px;
+    }
+    
+    .add-patient-card {
+      border: 2px dashed #dee2e6;
+      background: rgba(255,255,255,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+    }
+    
+    .add-patient-card:hover {
+      border-color: #28a745;
+      background: rgba(40, 167, 69, 0.1);
+    }
+    
+    .brand-section {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    
+    .brand-logo {
+      font-size: 3rem;
+      color: white;
+      margin-bottom: 10px;
+    }
+    
+    .brand-title {
+      font-size: 2.5rem;
+      font-weight: 300;
+      color: white;
+      margin-bottom: 10px;
+    }
+    
+    .brand-subtitle {
+      color: rgba(255,255,255,0.8);
+      font-size: 1.1rem;
+    }
+    
+    .patients-grid {
+      max-width: 1000px;
+      width: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="patient-selection-container">
+    <div class="patients-grid">
+      <!-- Brand Section -->
+      <div class="brand-section">
+        <div class="brand-logo">
+          <i class="mdi mdi-flask"></i>
+        </div>
+        <h1 class="brand-title">MyLabVault</h1>
+        <p class="brand-subtitle">Select a patient to view their lab results</p>
+      </div>
+
+      <!-- Patients Grid -->
+      <div class="row" id="patientsGrid">
+        <!-- Loading state -->
+        <div class="col-12 text-center" id="loadingState">
+          <div class="spinner-border text-light" role="status">
+            <span class="sr-only">Loading...</span>
+          </div>
+          <div class="text-light mt-3">Loading patients...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Patient Modal -->
+  <div class="modal fade" id="addPatientModal" tabindex="-1" role="dialog" aria-labelledby="addPatientModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addPatientModalLabel">
+            <i class="mdi mdi-account-plus mr-2"></i>
+            Add New Patient
+          </h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <form id="addPatientForm">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="patientName">Patient Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="patientName" name="name" required placeholder="Enter patient's full name">
+            </div>
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="patientDOB">Date of Birth</label>
+                  <input type="date" class="form-control" id="patientDOB" name="date_of_birth">
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="patientGender">Gender</label>
+                  <select class="form-control" id="patientGender" name="gender">
+                    <option value="">Select gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">
+              <i class="mdi mdi-close mr-1"></i>
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-success">
+              <i class="mdi mdi-content-save mr-1"></i>
+              Add Patient
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Bootstrap 4 -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+  $(document).ready(function() {
+      loadPatients();
+      
+      // Add patient form submission
+      $('#addPatientForm').on('submit', function(e) {
+          e.preventDefault();
+          
+          const formData = {
+              name: $('#patientName').val().trim(),
+              date_of_birth: $('#patientDOB').val() || null,
+              gender: $('#patientGender').val() || null
+          };
+
+          $.ajax({
+              url: '/api/patients',
+              method: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify(formData),
+              success: function(response) {
+                  $('#addPatientModal').modal('hide');
+                  $('#addPatientForm')[0].reset();
+                  
+                  // Reload patients and then select the new patient
+                  loadPatients().then(() => {
+                      if (response.data && response.data.id) {
+                          selectPatient(response.data.id);
+                      }
+                  });
+              },
+              error: function(xhr) {
+                  const error = xhr.responseJSON?.detail || 'Failed to add patient';
+                  alert('Error: ' + error);
+              }
+          });
+      });
+  });
+
+  function loadPatients() {
+      return new Promise((resolve, reject) => {
+          $.get('/api/patients', function(patients) {
+              displayPatients(patients);
+              resolve(patients);
+          }).fail(function() {
+              $('#loadingState').html(`
+                  <div class="alert alert-danger">
+                      <i class="mdi mdi-alert mr-2"></i>
+                      Failed to load patients
+                  </div>
+              `);
+              reject();
+          });
+      });
+  }
+
+  function displayPatients(patients) {
+      const grid = $('#patientsGrid');
+      $('#loadingState').remove();
+      
+      if (patients.length === 0) {
+          grid.html(`
+              <div class="col-12 text-center">
+                  <div class="card patient-card add-patient-card" onclick="showAddPatientModal()">
+                      <div class="card-body">
+                          <div class="text-center">
+                              <i class="mdi mdi-account-plus" style="font-size: 4rem; color: #28a745; margin-bottom: 15px;"></i>
+                              <h4 class="text-muted">Add Your First Patient</h4>
+                              <p class="text-muted">Click here to get started</p>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          `);
+          return;
+      }
+      
+      let html = '';
+      
+      // Add existing patients
+      patients.forEach(patient => {
+          const initials = getPatientInitials(patient.name);
+          const age = patient.date_of_birth ? calculateAge(patient.date_of_birth) : 'N/A';
+          const resultCount = patient.result_count || 0;
+          
+          html += `
+              <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-4">
+                  <div class="card patient-card" onclick="selectPatient(${patient.id})">
+                      <div class="card-body text-center p-4">
+                          <div class="patient-avatar">${initials}</div>
+                          <h5 class="card-title mb-1">${patient.name}</h5>
+                          <p class="text-muted small mb-2">Age: ${age}</p>
+                          <div class="row text-center">
+                              <div class="col-12">
+                                  <small class="text-muted">Lab Results</small><br>
+                                  <strong class="text-primary">${resultCount}</strong>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          `;
+      });
+      
+      // Add "Add Patient" card
+      html += `
+          <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-4">
+              <div class="card patient-card add-patient-card" onclick="showAddPatientModal()">
+                  <div class="card-body text-center">
+                      <div class="text-center">
+                          <i class="mdi mdi-account-plus" style="font-size: 3rem; color: #28a745; margin-bottom: 15px;"></i>
+                          <h5 class="text-muted">Add Patient</h5>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      `;
+      
+      grid.html(html);
+  }
+
+  function getPatientInitials(name) {
+      return name.split(' ').map(word => word.charAt(0).toUpperCase()).join('').substring(0, 2);
+  }
+
+  function calculateAge(dateOfBirth) {
+      const today = new Date();
+      const birthDate = new Date(dateOfBirth);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+      }
+      return age;
+  }
+
+  function selectPatient(patientId) {
+      // Store selected patient in session/localStorage
+      localStorage.setItem('selectedPatientId', patientId);
+      
+      // Redirect to main application
+      window.location.href = '/dashboard';
+  }
+
+  function showAddPatientModal() {
+      $('#addPatientModal').modal('show');
+  }
+  </script>
+</body>
+</html>

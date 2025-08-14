@@ -1,0 +1,497 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ lab_info.name if lab_info else 'Lab Details' }} - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        {% if lab_info %}
+        <h1 class="m-0">
+          <i class="mdi mdi-test-tube mr-2"></i>
+          {{ lab_info.name }}
+        </h1>
+        {% else %}
+        <h1 class="m-0">
+          <i class="mdi mdi-test-tube mr-2"></i>
+          Lab Details
+        </h1>
+        {% endif %}
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <a href="/labs" class="btn btn-outline-secondary">
+          <i class="mdi mdi-arrow-left mr-1"></i>
+          Back to Lab Tests
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    {% if not lab_info %}
+    <!-- Error State -->
+    <div class="alert alert-danger" role="alert">
+      <h4 class="alert-heading">Error!</h4>
+      <p>Unable to load lab details. The lab test may not exist or there might be a connection issue.</p>
+      <a href="/results" class="btn btn-outline-danger">
+        <i class="mdi mdi-arrow-left mr-1"></i>
+        Back to Results
+      </a>
+    </div>
+    {% else %}
+    
+    <!-- Lab Info Card -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Lab Test Information</h3>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <strong>Panel:</strong> {{ lab_info.panel.name if lab_info.panel else '—' }}
+              </div>
+              <div class="col-md-3">
+                <strong>Unit:</strong> {{ lab_info.unit.name if lab_info.unit else '—' }}
+              </div>
+              <div class="col-md-3">
+                <strong>Reference Range:</strong> 
+                {% if lab_info.ref_low is not none and lab_info.ref_high is not none %}
+                  {{ lab_info.ref_low }} - {{ lab_info.ref_high }} {{ lab_info.unit.name if lab_info.unit else '' }}
+                {% elif lab_info.ref_value %}
+                  {{ lab_info.ref_value }}
+                {% else %}
+                  —
+                {% endif %}
+              </div>
+              <div class="col-md-3">
+                <strong>Total Results:</strong> {{ lab_results|length | number_format }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart Section -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-chart-line mr-2"></i>
+              Results Trend Chart
+            </h3>
+          </div>
+          <div class="card-body">
+            {% if lab_results|length %}
+              <!-- Always render chart container - JavaScript will handle displaying appropriate content -->
+              <div style="height: 300px; position: relative;">
+                <canvas id="labTrendChart" style="width: 100%; height: 100%;"></canvas>
+              </div>
+              <!-- Debug info (remove later) -->
+              <div style="display: none;" id="debug-info">
+                Total results: {{ lab_results|length }}
+                {% for result in lab_results %}
+                  Result {{ loop.index }}: "{{ result.result }}" is_numeric: {{ result.result | is_numeric }}
+                {% endfor %}
+              </div>
+            {% else %}
+              <div 
+                class="d-flex align-items-center justify-content-center bg-light"
+                style="height: 300px; border-radius: 8px; border: 2px dashed #dee2e6;"
+              >
+                <div class="text-center text-muted">
+                  <i class="mdi mdi-chart-line mb-3" style="font-size: 3rem;"></i>
+                  <h5>No Data Available</h5>
+                  <p>No results available to chart for this lab test</p>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-flask mr-2"></i>
+              All Results for {{ lab_info.name }} ({{ lab_results|length | number_format }} total)
+            </h3>
+          </div>
+          <div class="card-body">
+            {% if lab_results %}
+            <table id="labResultsTable" class="table table-bordered table-striped" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Result</th>
+                  <th>Provider</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for result in lab_results %}
+                <tr>
+                  <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                  <td>
+                    {{ result.result }} {{ lab_info.unit.name if lab_info.unit else '' }}
+                  </td>
+                  <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
+                  <td>
+                    {% set status = result.result | get_result_status(lab_info.ref_low, lab_info.ref_high) %}
+                    {% if status == 'normal' %}
+                      <span class="badge badge-success">Normal</span>
+                    {% elif status == 'low' %}
+                      <span class="badge badge-warning">Low</span>
+                    {% elif status == 'high' %}
+                      <span class="badge badge-warning">High</span>
+                    {% else %}
+                      <span class="badge badge-secondary">Unknown</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="btn-group btn-group-sm">
+                      <button class="btn btn-danger delete-btn" data-id="{{ result.id }}" onclick="deleteResult('{{ result.id }}')" title="Delete Result">
+                        <i class="mdi mdi-trash-can"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <div class="text-center py-4">
+              <i class="mdi mdi-flask text-muted mb-3" style="font-size: 3rem;"></i>
+              <h5 class="text-muted">No Results Found</h5>
+              <p class="text-muted">This lab test has no recorded results</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if lab_results|length > 0 %}
+<script type="application/json" id="lab-data">
+{
+    "hasResults": true,
+    "labName": {{ lab_info.name | tojson }},
+    "unitName": {{ lab_info.unit.name | tojson if lab_info.unit else '""' }},
+    "refLow": {{ lab_info.ref_low | tojson }},
+    "refHigh": {{ lab_info.ref_high | tojson }},
+    "results": [
+        {% for result in lab_results %}
+        {
+            "date": {{ result.date_collected.strftime('%Y-%m-%d') | tojson }},
+            "value": {{ result.result | tojson }},
+            "dateDisplay": {{ result.date_collected.strftime('%m/%d/%Y') | tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]
+}
+</script>
+{% else %}
+<script type="application/json" id="lab-data">
+{
+    "hasResults": false
+}
+</script>
+{% endif %}
+
+<script>
+$(document).ready(function() {
+    const labDataElement = document.getElementById('lab-data');
+    if (!labDataElement) {
+        console.error('Lab data element not found');
+        return;
+    }
+    
+    const labData = JSON.parse(labDataElement.textContent);
+    
+    if (labData.hasResults) {
+        $('#labResultsTable').DataTable({
+            responsive: true,
+            pageLength: 25,
+            order: [[0, 'desc']],
+            columnDefs: [
+                {
+                    targets: [4],
+                    orderable: false,
+                    searchable: false
+                }
+            ],
+            dom: 'Bfrtip',
+            buttons: [
+                'copy', 'csv', 'excel', 'pdf', 'print'
+            ]
+        });
+        
+        createLabChart(labData);
+    }
+});
+
+function createLabChart(labData) {
+    const canvas = document.getElementById('labTrendChart');
+    if (!canvas || !window.Chart || !labData.hasResults) {
+        return;
+    }
+
+    // Filter and prepare numeric results
+    const numericResults = labData.results
+        .filter(r => !isNaN(parseFloat(r.value)))
+        .map(r => ({
+            ...r,
+            numeric_value: parseFloat(r.value)
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+
+    if (numericResults.length === 0) {
+        // Show placeholder for non-numeric results
+        const container = canvas.parentElement;
+        container.innerHTML = `
+            <div class="d-flex align-items-center justify-content-center bg-light h-100" style="border-radius: 8px; border: 2px dashed #dee2e6;">
+                <div class="text-center text-muted">
+                    <i class="mdi mdi-information-outline mb-3" style="font-size: 3rem;"></i>
+                    <h5>Chart Not Available</h5>
+                    <p>This lab test contains qualitative results that cannot be charted</p>
+                    <small class="text-muted">${labData.results.length} qualitative results available</small>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const dates = numericResults.map(r => r.dateDisplay);
+    const values = numericResults.map(r => r.numeric_value);
+    const refLow = labData.refLow;
+    const refHigh = labData.refHigh;
+
+    const datasets = [{
+        label: labData.labName + (labData.unitName ? ` (${labData.unitName})` : ''),
+        data: values,
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointBackgroundColor: values.map(value => {
+            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
+            }
+            return '#007bff';
+        }),
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+    }];
+
+    // Add reference lines only if values are valid numbers
+    if (refLow !== null && !isNaN(refLow)) {
+        datasets.push({
+            label: 'Lower Reference',
+            data: Array(dates.length).fill(refLow),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+        });
+    }
+
+    if (refHigh !== null && !isNaN(refHigh)) {
+        datasets.push({
+            label: 'Upper Reference',
+            data: Array(dates.length).fill(refHigh),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+        });
+    }
+
+    // Add reference range fill between lines
+    if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+        datasets.push({
+            label: 'Normal Range',
+            data: Array(dates.length).fill(refHigh),
+            borderColor: 'rgba(40, 167, 69, 0.3)',
+            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+            borderWidth: 0,
+            fill: '+1', // Fill to the next dataset (lower reference line)
+            pointRadius: 0,
+            pointHoverRadius: 0,
+        });
+        
+        datasets.push({
+            label: '', // Hidden label
+            data: Array(dates.length).fill(refLow),
+            borderColor: 'rgba(40, 167, 69, 0.3)',
+            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+            borderWidth: 0,
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+        });
+    }
+
+
+    try {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: labData.labName + ' Trend Over Time',
+                        font: {
+                            size: 16,
+                            weight: 'bold',
+                            family: 'IBM Plex Sans'
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            filter: function(legendItem, data) {
+                                // Only show the main lab data series, hide reference lines and ranges
+                                const dataset = data.datasets[legendItem.datasetIndex];
+                                return dataset.label && !dataset.label.includes('Reference') && dataset.label !== 'Normal Range' && dataset.label !== '';
+                            },
+                            font: {
+                                family: 'IBM Plex Sans'
+                            }
+                        },
+                        onClick: function(e, legendItem, legend) {
+                            // Disable legend click functionality to prevent toggling
+                            return false;
+                        }
+                    },
+                    tooltip: {
+                        titleFont: {
+                            family: 'IBM Plex Sans'
+                        },
+                        bodyFont: {
+                            family: 'IBM Plex Sans'
+                        },
+                        callbacks: {
+                            afterLabel: function(context) {
+                                const value = context.parsed.y;
+                                if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+                                    if (value < refLow) return 'Status: Low';
+                                    if (value > refHigh) return 'Status: High';
+                                    return 'Status: Normal';
+                                }
+                                return 'Status: Normal';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Date',
+                            font: {
+                                family: 'IBM Plex Sans'
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                family: 'IBM Plex Sans'
+                            }
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: labData.unitName || 'Value',
+                            font: {
+                                family: 'IBM Plex Sans'
+                            }
+                        },
+                        ticks: {
+                            font: {
+                                family: 'IBM Plex Sans'
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error creating Chart.js chart:', error);
+        const container = canvas.parentElement;
+        container.innerHTML = `
+            <div class="d-flex align-items-center justify-content-center bg-light h-100" style="border-radius: 8px; border: 1px solid #dee2e6;">
+                <div class="text-center text-muted">
+                    <i class="mdi mdi-chart-line mb-3" style="font-size: 3rem;"></i>
+                    <h5>Chart Loading Error</h5>
+                    <p>Unable to render chart. Please check console for details.</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function deleteResult(id) {
+    if (confirm('Are you sure you want to delete this result?')) {
+        fetch(`/api/results/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to delete result. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting result:', error);
+            alert('Failed to delete result. Please try again.');
+        });
+    }
+}
+</script>
+{% endblock %}

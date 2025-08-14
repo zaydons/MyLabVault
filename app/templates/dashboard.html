@@ -1,0 +1,142 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-view-dashboard mr-2"></i>
+          Dashboard
+        </h1>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    <!-- Info boxes -->
+    <div class="row">
+      <div class="col-lg-3 col-6">
+        <div class="info-box bg-info">
+          <span class="info-box-icon">
+            <i class="mdi mdi-file-document"></i>
+          </span>
+          <div class="info-box-content">
+            <span class="info-box-number">{{ dashboard_data.stats.total_results | number_format }}</span>
+            <span class="info-box-text">Total Results</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-6">
+        <div class="info-box bg-success">
+          <span class="info-box-icon">
+            <i class="mdi mdi-chart-line"></i>
+          </span>
+          <div class="info-box-content">
+            <span class="info-box-number">{{ dashboard_data.stats.recent_results | number_format }}</span>
+            <span class="info-box-text">Recent Results</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-6">
+        <div class="info-box bg-warning">
+          <span class="info-box-icon">
+            <i class="mdi mdi-flask"></i>
+          </span>
+          <div class="info-box-content">
+            <span class="info-box-number">{{ dashboard_data.stats.total_labs | number_format }}</span>
+            <span class="info-box-text">Lab Tests</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-3 col-6">
+        <div class="info-box bg-danger">
+          <span class="info-box-icon">
+            <i class="mdi mdi-office-building"></i>
+          </span>
+          <div class="info-box-content">
+            <span class="info-box-number">{{ dashboard_data.stats.total_providers | number_format }}</span>
+            <span class="info-box-text">Providers</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Results -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-file-document mr-2"></i>
+              Recent Results
+            </h3>
+            <div class="card-tools">
+              <a href="/results" class="btn btn-primary btn-sm">
+                View All Results
+              </a>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            {% if dashboard_data.recent_results %}
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Lab Test</th>
+                    <th>Result</th>
+                    <th>Provider</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for result in dashboard_data.recent_results[:10] %}
+                  <tr>
+                    <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                    <td>
+                      {% if result.lab_id %}
+                        <a href="/lab/{{ result.lab_id }}" class="lab-link text-primary font-weight-bold" style="text-decoration: none;">
+                          <strong>{{ result.lab_name or result.lab.name or 'Unknown Lab' }}</strong>
+                        </a>
+                      {% else %}
+                        <strong>{{ result.lab_name or (result.lab.name if result.lab else 'Unknown Lab') }}</strong>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {{ result.value or result.result }} {{ result.unit_symbol or (result.lab.unit.name if result.lab and result.lab.unit else '') }}
+                    </td>
+                    <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
+                    <td>
+                      <span class="badge badge-success">
+                        Normal
+                      </span>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+              <i class="mdi mdi-flask text-muted mb-3" style="font-size: 3rem;"></i>
+              <h5 class="text-muted">No Recent Results</h5>
+              <p class="text-muted">Import a PDF or add results manually to get started</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

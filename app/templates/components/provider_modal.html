@@ -1,0 +1,112 @@
+<!-- Standard Add Provider Modal Component -->
+{% macro provider_modal(modal_id, modal_title="Add New Provider", form_id="addProviderForm", name_field_id="providerName", specialty_field_id="providerSpecialty", save_button_id="saveProviderBtn", save_button_text="Add Provider", icon_class="mdi-plus") %}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi {{ icon_class }} mr-2"></i>
+          {{ modal_title }}
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="{{ form_id }}">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="{{ name_field_id }}">Provider Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="{{ name_field_id }}" name="name" required placeholder="Dr. Smith, LabCorp, Quest, etc.">
+            <small class="form-text text-muted">Enter the full name of the healthcare provider or lab</small>
+          </div>
+          <div class="form-group">
+            <label for="{{ specialty_field_id }}">Specialty (Optional)</label>
+            <input type="text" class="form-control" id="{{ specialty_field_id }}" name="specialty" placeholder="e.g., Cardiology, Laboratory">
+            <small class="form-text text-muted">Medical specialty or area of expertise</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success" id="{{ save_button_id }}">
+            <i class="mdi mdi-check mr-1"></i>
+            {{ save_button_text }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+<!-- Standard JavaScript for Provider Modal -->
+{% macro provider_modal_script(form_id, name_field_id, specialty_field_id, modal_id, success_callback="null") %}
+<script>
+// Standard provider creation function for {{ modal_id }}
+async function createProvider{{ modal_id.replace('Modal', '').title() }}() {
+    const name = document.getElementById('{{ name_field_id }}').value.trim();
+    const specialty = document.getElementById('{{ specialty_field_id }}').value.trim();
+    
+    if (!name) {
+        alert('Provider name is required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/providers/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: name,
+                specialty: specialty || null
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            $('#{{ modal_id }}').modal('hide');
+            $('#{{ form_id }}')[0].reset();
+            
+            // Show success message
+            const alertHtml = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-check mr-2"></i>
+                    Provider "${name}" has been added successfully.
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alertHtml);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+            
+            // Execute success callback if provided
+            if ({{ success_callback }} && typeof {{ success_callback }} === 'function') {
+                {{ success_callback }}(data.data);
+            }
+        } else {
+            throw new Error(data.detail || data.message || 'Failed to create provider');
+        }
+    } catch (error) {
+        console.error('Provider creation error:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+// Bind form submission
+$('#{{ form_id }}').on('submit', function(e) {
+    e.preventDefault();
+    createProvider{{ modal_id.replace('Modal', '').title() }}();
+});
+
+// Reset form when modal is hidden
+$('#{{ modal_id }}').on('hidden.bs.modal', function() {
+    $('#{{ form_id }}')[0].reset();
+});
+</script>
+{% endmacro %}

@@ -1,0 +1,347 @@
+{% extends "layout.html" %}
+
+{% block title %}Settings - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-cog mr-2"></i>
+          Application Settings
+        </h1>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- User Interface Settings -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-palette mr-2"></i>
+              User Interface
+            </h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label for="darkModeToggle">Theme Preference</label>
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="darkModeToggle" {{ 'checked' if user_settings.dark_mode }}>
+                <label class="custom-control-label" for="darkModeToggle">
+                  <i class="mdi mdi-moon-waxing-crescent mr-1"></i>
+                  Dark Mode
+                </label>
+              </div>
+              <small class="form-text text-muted">Toggle between light and dark theme</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-information mr-2"></i>
+              System Information
+            </h3>
+          </div>
+          <div class="card-body">
+            <div id="systemInfo">
+              <!-- System info will be loaded dynamically -->
+              <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="sr-only">Loading...</span>
+                </div>
+                <div class="mt-2">Loading system information...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Management Section -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card card-danger">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-database-remove mr-2"></i>
+              Data Management
+            </h3>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-warning">
+              <i class="mdi mdi-alert-triangle mr-2"></i>
+              <strong>Warning:</strong> The actions below are destructive and cannot be undone. Use with extreme caution!
+            </div>
+            
+            <div class="row">
+              <div class="col-md-8">
+                <h5>Reset All Data</h5>
+                <p class="text-muted">This will permanently delete:</p>
+                <ul class="text-muted">
+                  <li>All lab results and test data</li>
+                  <li>All imported PDF files</li>
+                  <li>All providers, panels, and units</li>
+                  <li>All user settings (except this page will reload with defaults)</li>
+                </ul>
+                <p><strong class="text-danger">This action cannot be undone!</strong></p>
+              </div>
+              <div class="col-md-4 text-right">
+                <button type="button" class="btn btn-danger btn-lg" id="resetDataBtn" onclick="showResetConfirmation()">
+                  <i class="mdi mdi-delete-forever mr-2"></i>
+                  Reset All Data
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Reset Confirmation Modal -->
+<div class="modal fade" id="resetConfirmationModal" tabindex="-1" role="dialog" aria-labelledby="resetConfirmationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="resetConfirmationModalLabel">
+          <i class="mdi mdi-alert-octagon mr-2"></i>
+          Confirm Data Reset
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+          <i class="mdi mdi-alert-triangle mr-2"></i>
+          <strong>DANGER:</strong> You are about to permanently delete all data in MyLabVault!
+        </div>
+        
+        <h6><strong>This will delete:</strong></h6>
+        <div class="row">
+          <div class="col-md-6">
+            <ul class="list-unstyled">
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="labResultsCount">0</span> Lab Results</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="labsCount">0</span> Lab Tests</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="panelsCount">0</span> Panels</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="unitsCount">0</span> Units</li>
+            </ul>
+          </div>
+          <div class="col-md-6">
+            <ul class="list-unstyled">
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="providersCount">0</span> Providers</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="pdfImportsCount">0</span> PDF Imports</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="pdfFilesCount">0</span> PDF Files</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> All User Settings</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div class="alert alert-info mt-3">
+          <i class="mdi mdi-information mr-2"></i>
+          <strong>Total Items to Delete:</strong> <span id="totalItemsCount">0</span>
+        </div>
+        
+        <p><strong class="text-danger">This action cannot be undone. Are you absolutely sure you want to proceed?</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="mdi mdi-close mr-1"></i>
+          Cancel
+        </button>
+        <button type="button" class="btn btn-danger" id="confirmResetBtn" onclick="executeDataReset()">
+          <i class="mdi mdi-delete-forever mr-1"></i>
+          <span id="resetBtnText">Reset All Data</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Load system information on page load
+    loadSystemInfo();
+    
+    // Dark mode toggle
+    $('#darkModeToggle').on('change', function() {
+        const isEnabled = $(this).is(':checked');
+        
+        $.ajax({
+            url: '/api/settings/user',
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ dark_mode: isEnabled }),
+            success: function(response) {
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Theme updated successfully. Refreshing page...
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                
+                // Refresh page to apply theme changes
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update theme';
+                alert('Error: ' + error);
+                // Reset toggle on error
+                $('#darkModeToggle').prop('checked', !isEnabled);
+            }
+        });
+    });
+    
+});
+
+function loadSystemInfo() {
+    $.get('/api/settings/data-counts', function(response) {
+        if (response.success) {
+            const data = response.data;
+            const total = response.total_items;
+            
+            const systemInfoHtml = `
+                <div class="row">
+                    <div class="col-6">
+                        <small class="text-muted">Lab Results:</small><br>
+                        <strong>${data.lab_results.toLocaleString()}</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted">Lab Tests:</small><br>
+                        <strong>${data.labs.toLocaleString()}</strong>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-6">
+                        <small class="text-muted">Panels:</small><br>
+                        <strong>${data.panels.toLocaleString()}</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted">Units:</small><br>
+                        <strong>${data.units.toLocaleString()}</strong>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-6">
+                        <small class="text-muted">Providers:</small><br>
+                        <strong>${data.providers.toLocaleString()}</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted">PDF Imports:</small><br>
+                        <strong>${data.pdf_imports.toLocaleString()}</strong>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-12 text-center">
+                        <small class="text-muted">PDF Files:</small><br>
+                        <strong>${data.pdf_files.toLocaleString()}</strong>
+                    </div>
+                </div>
+                <hr class="my-3">
+                <div class="text-center">
+                    <small class="text-muted">Total Items in System:</small><br>
+                    <h4 class="text-primary">${total.toLocaleString()}</h4>
+                </div>
+            `;
+            
+            $('#systemInfo').html(systemInfoHtml);
+        }
+    }).fail(function() {
+        $('#systemInfo').html(`
+            <div class="alert alert-warning">
+                <i class="mdi mdi-alert mr-2"></i>
+                Unable to load system information
+            </div>
+        `);
+    });
+}
+
+function showResetConfirmation() {
+    // Load current data counts before showing modal
+    $.get('/api/settings/data-counts', function(response) {
+        if (response.success) {
+            const data = response.data;
+            
+            // Update counts in modal
+            $('#labResultsCount').text(data.lab_results.toLocaleString());
+            $('#labsCount').text(data.labs.toLocaleString());
+            $('#panelsCount').text(data.panels.toLocaleString());
+            $('#unitsCount').text(data.units.toLocaleString());
+            $('#providersCount').text(data.providers.toLocaleString());
+            $('#pdfImportsCount').text(data.pdf_imports.toLocaleString());
+            $('#pdfFilesCount').text(data.pdf_files.toLocaleString());
+            $('#totalItemsCount').text(response.total_items.toLocaleString());
+        }
+        
+        // Reset button state
+        $('#resetBtnText').text('Reset All Data');
+        
+        // Show modal
+        $('#resetConfirmationModal').modal('show');
+    });
+}
+
+function executeDataReset() {    
+    // Show loading state
+    $('#confirmResetBtn').prop('disabled', true);
+    $('#resetBtnText').html('<i class="spinner-border spinner-border-sm mr-2"></i>Resetting Data...');
+    
+    $.ajax({
+        url: '/api/settings/reset-data',
+        method: 'POST',
+        success: function(response) {
+            $('#resetConfirmationModal').modal('hide');
+            
+            // Show success message
+            const alert = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-check mr-2"></i>
+                    ${response.message} Refreshing page...
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alert);
+            
+            // Refresh page after delay
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        },
+        error: function(xhr) {
+            const error = xhr.responseJSON?.detail || 'Failed to reset data';
+            alert('Error: ' + error);
+            
+            // Reset button state
+            $('#confirmResetBtn').prop('disabled', false);
+            $('#resetBtnText').text('Reset All Data');
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+# This file ensures the app/data directory is tracked in git
+# The directory is needed for the application to store:
+# - SQLite database files
+# - Uploaded PDF files
+# - Other application data files

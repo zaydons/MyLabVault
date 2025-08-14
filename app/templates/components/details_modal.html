@@ -1,0 +1,226 @@
+<!-- Standard Details Modal Component (for viewing detailed information) -->
+{% macro details_modal(modal_id, entity_name, size="lg", icon_class="mdi-information") %}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog modal-{{ size }}" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi {{ icon_class }} mr-2"></i>
+          <span id="{{ modal_id }}Title">{{ entity_name }} Details</span>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="{{ modal_id }}Body">
+        <div class="text-center p-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+          </div>
+          <p class="mt-2 text-muted">Loading {{ entity_name.lower() }} details...</p>
+        </div>
+      </div>
+      <div class="modal-footer" id="{{ modal_id }}Footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Standard details modal function
+function show{{ entity_name.replace(' ', '') }}Details(id, data = null, title = null) {
+    const modal = document.getElementById('{{ modal_id }}');
+    const titleElement = document.getElementById('{{ modal_id }}Title');
+    const bodyElement = document.getElementById('{{ modal_id }}Body');
+    
+    // Set title
+    if (title) {
+        titleElement.textContent = title;
+    } else {
+        titleElement.textContent = '{{ entity_name }} Details';
+    }
+    
+    // Show loading initially
+    bodyElement.innerHTML = `
+        <div class="text-center p-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading {{ entity_name.lower() }} details...</p>
+        </div>
+    `;
+    
+    // Show modal
+    $('#{{ modal_id }}').modal('show');
+    
+    // If data is provided, use it directly
+    if (data) {
+        populate{{ entity_name.replace(' ', '') }}Details(data);
+    } else if (id) {
+        // Otherwise fetch data
+        fetch{{ entity_name.replace(' ', '') }}Details(id);
+    }
+}
+
+// Function to populate modal with data (to be customized per implementation)
+function populate{{ entity_name.replace(' ', '') }}Details(data) {
+    const bodyElement = document.getElementById('{{ modal_id }}Body');
+    
+    // Default implementation - override this function for custom display
+    let html = '<div class="row">';
+    
+    Object.keys(data).forEach(key => {
+        if (data[key] !== null && data[key] !== undefined && data[key] !== '') {
+            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            html += `
+                <div class="col-md-6 mb-3">
+                    <strong>${label}:</strong><br>
+                    <span class="text-muted">${data[key]}</span>
+                </div>
+            `;
+        }
+    });
+    
+    html += '</div>';
+    bodyElement.innerHTML = html;
+}
+
+// Function to fetch data (to be customized per implementation)
+async function fetch{{ entity_name.replace(' ', '') }}Details(id) {
+    try {
+        // This should be overridden with the actual API endpoint
+        const response = await fetch(`/api/{{ entity_name.lower().replace(' ', '-') }}/${id}`);
+        const result = await response.json();
+        
+        if (response.ok) {
+            populate{{ entity_name.replace(' ', '') }}Details(result.data || result);
+        } else {
+            throw new Error(result.detail || result.message || 'Failed to load details');
+        }
+    } catch (error) {
+        console.error('Error fetching {{ entity_name.lower() }} details:', error);
+        const bodyElement = document.getElementById('{{ modal_id }}Body');
+        bodyElement.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="mdi mdi-alert mr-2"></i>
+                <strong>Error:</strong> ${error.message}
+            </div>
+        `;
+    }
+}
+</script>
+{% endmacro %}
+
+<!-- Standard PDF Modal Component (for displaying PDFs) -->
+{% macro pdf_modal(modal_id="pdfModal") %}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi mdi-file-pdf-box mr-2"></i>
+          <span id="{{ modal_id }}Title">PDF Viewer</span>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="{{ modal_id }}LoadingMessage" class="text-center p-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading PDF...</span>
+          </div>
+          <p class="mt-2">Loading PDF document...</p>
+        </div>
+        <iframe id="{{ modal_id }}Iframe" 
+                style="width: 100%; height: 70vh; border: none; display: none;"
+                title="PDF Document Viewer">
+        </iframe>
+        <div id="{{ modal_id }}ErrorMessage" style="display: none;" class="alert alert-danger m-3">
+          <i class="mdi mdi-alert mr-2"></i>
+          <strong>Error:</strong> Unable to load PDF document.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a id="{{ modal_id }}DownloadBtn" href="#" class="btn btn-outline-primary" target="_blank" style="display: none;">
+          <i class="mdi mdi-download mr-1"></i>
+          Download PDF
+        </a>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Standard PDF modal function
+function showPDF(filename, title = null) {
+    const modal = document.getElementById('{{ modal_id }}');
+    const titleElement = document.getElementById('{{ modal_id }}Title');
+    const iframe = document.getElementById('{{ modal_id }}Iframe');
+    const loadingMessage = document.getElementById('{{ modal_id }}LoadingMessage');
+    const errorMessage = document.getElementById('{{ modal_id }}ErrorMessage');
+    const downloadBtn = document.getElementById('{{ modal_id }}DownloadBtn');
+    
+    try {
+        // Set title
+        titleElement.textContent = title || filename || 'PDF Viewer';
+        
+        // Reset modal state
+        iframe.style.display = 'none';
+        loadingMessage.style.display = 'block';
+        errorMessage.style.display = 'none';
+        downloadBtn.style.display = 'none';
+        iframe.src = '';
+        
+        // Show modal
+        $('#{{ modal_id }}').modal('show');
+        
+        // Set iframe source after modal is shown
+        $('#{{ modal_id }}').on('shown.bs.modal', function() {
+            const pdfUrl = `/api/pdf/file/${encodeURIComponent(filename)}`;
+            iframe.src = pdfUrl;
+            downloadBtn.href = pdfUrl;
+            downloadBtn.style.display = 'inline-block';
+            
+            // Handle iframe load
+            iframe.onload = function() {
+                loadingMessage.style.display = 'none';
+                iframe.style.display = 'block';
+            };
+            
+            iframe.onerror = function() {
+                loadingMessage.style.display = 'none';
+                errorMessage.style.display = 'block';
+            };
+            
+            // Remove event handler after first use
+            $('#{{ modal_id }}').off('shown.bs.modal');
+        });
+        
+    } catch (error) {
+        console.error('Error showing PDF modal:', error);
+        showNotification('Unable to display PDF: ' + error.message, 'error', 'PDF Viewer Error');
+    }
+}
+
+// Clear PDF iframe when modal closes to save memory
+$(document).ready(function() {
+    $('#{{ modal_id }}').on('hidden.bs.modal', function() {
+        document.getElementById('{{ modal_id }}Iframe').src = '';
+    });
+    
+    // Improve accessibility by managing focus when modal is shown/hidden
+    $('#{{ modal_id }}').on('shown.bs.modal', function() {
+        // Remove aria-hidden after modal is fully shown
+        $(this).removeAttr('aria-hidden');
+    });
+    
+    $('#{{ modal_id }}').on('hide.bs.modal', function() {
+        // Clear focus from any elements inside the modal before hiding
+        $(this).find('*').blur();
+    });
+});
+</script>
+{% endmacro %}

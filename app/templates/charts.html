@@ -1,0 +1,774 @@
+{% extends "layout.html" %}
+
+{% block title %}Charts - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-chart-line mr-2"></i>
+          Lab Result Charts
+        </h1>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- Panel Selection Section -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-view-grid mr-2"></i>
+              View Charts by Lab Panel
+            </h3>
+          </div>
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <label for="panelSelect" class="form-label">Select Lab Panel:</label>
+                <select id="panelSelect" class="form-control">
+                  <option value="">Choose a panel...</option>
+                  {% for panel in panels %}
+                  <option value="{{ panel.id }}">{{ panel.name }} ({{ panel.lab_count }} labs)</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-2">
+                <button id="loadPanelCharts" class="btn btn-primary" disabled>
+                  <i class="mdi mdi-chart-multiple mr-1"></i>
+                  Load Charts
+                </button>
+              </div>
+              <div class="col-md-6">
+                <div class="text-muted">
+                  <small>
+                    <i class="mdi mdi-information mr-1"></i>
+                    Select a panel to view trend charts for all labs within that panel
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel Charts Container -->
+    <div id="panelChartsContainer" style="display: none;">
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title" id="panelChartsTitle">
+                <i class="mdi mdi-chart-multiple mr-2"></i>
+                Panel Charts
+              </h3>
+            </div>
+            <div class="card-body">
+              <div id="panelChartsContent" class="row">
+                <!-- Charts will be loaded here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <!-- Individual Lab Selection Section -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-flask mr-2"></i>
+              View Individual Lab Chart
+            </h3>
+          </div>
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <label for="labSelect" class="form-label">Select Individual Lab:</label>
+                <select id="labSelect" class="form-control">
+                  <option value="">Choose a lab test...</option>
+                  {% for panel in grouped_labs %}
+                  <optgroup label="{{ panel.name }}">
+                    {% for lab in panel.labs %}
+                    <option value="{{ lab.id }}">{{ lab.name }} ({{ lab.result_count }} results)</option>
+                    {% endfor %}
+                  </optgroup>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-2">
+                <button id="loadIndividualChart" class="btn btn-success" disabled>
+                  <i class="mdi mdi-chart-line mr-1"></i>
+                  Load Chart
+                </button>
+              </div>
+              <div class="col-md-6">
+                <div class="text-muted">
+                  <small>
+                    <i class="mdi mdi-information mr-1"></i>
+                    Select a specific lab test to view its detailed trend chart
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Individual Chart Container -->
+    <div id="individualChartContainer" style="display: none;">
+      <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title" id="individualChartTitle">
+                <i class="mdi mdi-chart-line mr-2"></i>
+                Individual Lab Chart
+              </h3>
+            </div>
+            <div class="card-body">
+              <div style="height: 400px; position: relative;">
+                <canvas id="individualChart" style="width: 100%; height: 100%;"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="row" style="display: none;">
+      <div class="col-12">
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+          </div>
+          <div class="mt-2">Loading charts...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Chart Modal -->
+<div class="modal fade" id="chartModal" tabindex="-1" role="dialog" aria-labelledby="chartModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="chartModalLabel">
+          <i class="mdi mdi-chart-line mr-2"></i>
+          <span id="modalChartTitle">Chart</span>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-12 mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <span class="badge badge-info" id="modalLabUnit">Unit</span>
+                <span class="badge badge-secondary ml-2" id="modalDataPoints">Data Points</span>
+              </div>
+              <button type="button" class="btn btn-primary" id="viewLabPageBtn">
+                <i class="mdi mdi-flask mr-1"></i>
+                View Lab Page
+              </button>
+            </div>
+          </div>
+          <div class="col-12">
+            <div style="height: 500px; position: relative;">
+              <canvas id="modalChart" style="width: 100%; height: 100%;"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="mdi mdi-close mr-1"></i>
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Enable/disable buttons based on selections
+    $('#panelSelect').on('change', function() {
+        $('#loadPanelCharts').prop('disabled', !this.value);
+    });
+    
+    $('#labSelect').on('change', function() {
+        $('#loadIndividualChart').prop('disabled', !this.value);
+    });
+    
+    // Load panel charts
+    $('#loadPanelCharts').on('click', function() {
+        const panelId = $('#panelSelect').val();
+        const panelName = $('#panelSelect option:selected').text().split(' (')[0];
+        
+        if (!panelId) return;
+        
+        loadPanelCharts(panelId, panelName);
+    });
+    
+    // Load individual chart
+    $('#loadIndividualChart').on('click', function() {
+        const labId = $('#labSelect').val();
+        const labName = $('#labSelect option:selected').text().split(' (')[0];
+        
+        if (!labId) return;
+        
+        loadIndividualChart(labId, labName);
+    });
+});
+
+function loadPanelCharts(panelId, panelName) {
+    
+    $('#loadingIndicator').show();
+    $('#panelChartsContainer').hide();
+    
+    // Fetch panel chart data (patient filtering handled by cookie on server side)
+    fetch(`/api/results/charts/panel/${panelId}`)
+        .then(response => response.json())
+        .then(data => {
+            
+            $('#panelChartsTitle').html(`
+                <i class="mdi mdi-chart-multiple mr-2"></i>
+                ${panelName} - Lab Trends
+            `);
+            
+            renderPanelCharts(data.labs);
+            
+            $('#loadingIndicator').hide();
+            $('#panelChartsContainer').show();
+            
+            // Scroll to charts
+            $('html, body').animate({
+                scrollTop: $('#panelChartsContainer').offset().top - 100
+            }, 500);
+        })
+        .catch(error => {
+            console.error('Error loading panel charts:', error);
+            $('#loadingIndicator').hide();
+            alert('Failed to load panel charts. Please try again.');
+        });
+}
+
+function loadIndividualChart(labId, labName) {
+    
+    $('#loadingIndicator').show();
+    $('#individualChartContainer').hide();
+    
+    // Fetch individual chart data (patient filtering handled by cookie on server side)
+    fetch(`/api/results/charts/lab/${labId}`)
+        .then(response => response.json())
+        .then(data => {
+            
+            $('#individualChartTitle').html(`
+                <i class="mdi mdi-chart-line mr-2"></i>
+                ${labName} - Trend Chart
+            `);
+            
+            renderIndividualChart(data);
+            
+            $('#loadingIndicator').hide();
+            $('#individualChartContainer').show();
+            
+            // Scroll to chart
+            $('html, body').animate({
+                scrollTop: $('#individualChartContainer').offset().top - 100
+            }, 500);
+        })
+        .catch(error => {
+            console.error('Error loading individual chart:', error);
+            $('#loadingIndicator').hide();
+            alert('Failed to load individual chart. Please try again.');
+        });
+}
+
+function renderPanelCharts(labs) {
+    const container = $('#panelChartsContent');
+    container.empty();
+    
+    labs.forEach((lab, index) => {
+        const chartId = `panelChart_${lab.id}`;
+        const colClass = labs.length <= 2 ? 'col-md-6' : 'col-md-4';
+        
+        const chartHtml = `
+            <div class="${colClass} mb-4">
+                <div class="card h-100 chart-card" data-lab-id="${lab.id}" ${lab.results.length > 0 ? 'style="cursor: pointer;"' : ''}>
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="mdi mdi-flask mr-1"></i>
+                            ${lab.name}
+                        </h5>
+                        <small class="text-muted">${lab.results.length} results</small>
+                        ${lab.results.length > 0 ? 
+                            `<small class="text-primary ml-2">
+                                <i class="mdi mdi-magnify-plus mr-1"></i>
+                                Click to enlarge
+                            </small>` : ''
+                        }
+                    </div>
+                    <div class="card-body">
+                        ${lab.results.length > 0 ? 
+                            `<div style="height: 250px; position: relative;">
+                                <canvas id="${chartId}" style="width: 100%; height: 100%;"></canvas>
+                            </div>` : 
+                            `<div class="d-flex align-items-center justify-content-center" style="height: 250px;">
+                                <div class="text-center text-muted">
+                                    <i class="mdi mdi-chart-line-variant mb-2" style="font-size: 2rem;"></i>
+                                    <div>No data available</div>
+                                </div>
+                            </div>`
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.append(chartHtml);
+        
+        // Create chart if there's data
+        if (lab.results.length > 0) {
+            createSmallChart(chartId, lab);
+        }
+    });
+    
+    // Add click handlers for charts
+    $('.chart-card').on('click', function() {
+        const labId = $(this).data('lab-id');
+        const labData = labs.find(lab => lab.id === labId);
+        
+        if (labData && labData.results.length > 0) {
+            openChartModal(labData);
+        }
+    });
+}
+
+function renderIndividualChart(labData) {
+    createLabChart('individualChart', labData);
+}
+
+function createSmallChart(canvasId, labData) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart) return;
+    
+    // Filter numeric results
+    const numericResults = labData.results
+        .filter(r => !isNaN(parseFloat(r.value)))
+        .map(r => ({
+            ...r,
+            numeric_value: parseFloat(r.value)
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    if (numericResults.length === 0) return;
+    
+    const ctx = canvas.getContext('2d');
+    const dates = numericResults.map(r => new Date(r.date).toLocaleDateString());
+    const values = numericResults.map(r => r.numeric_value);
+    const refLow = labData.ref_low;
+    const refHigh = labData.ref_high;
+    
+    const datasets = [{
+        label: labData.name,
+        data: values,
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointBackgroundColor: values.map(value => {
+            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
+            }
+            return '#007bff';
+        }),
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+    }];
+    
+    // Add reference lines
+    if (refLow !== null && !isNaN(refLow)) {
+        datasets.push({
+            label: 'Lower Ref',
+            data: Array(dates.length).fill(refLow),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [3, 3],
+            fill: false,
+            pointRadius: 0,
+        });
+    }
+    
+    if (refHigh !== null && !isNaN(refHigh)) {
+        datasets.push({
+            label: 'Upper Ref',
+            data: Array(dates.length).fill(refHigh),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [3, 3],
+            fill: false,
+            pointRadius: 0,
+        });
+    }
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    titleFont: { family: 'IBM Plex Sans', size: 11 },
+                    bodyFont: { family: 'IBM Plex Sans', size: 10 },
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    ticks: {
+                        font: { family: 'IBM Plex Sans', size: 9 },
+                        maxTicksLimit: 5
+                    },
+                    grid: { display: false }
+                },
+                y: {
+                    display: true,
+                    ticks: {
+                        font: { family: 'IBM Plex Sans', size: 9 }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function createLabChart(canvasId, labData) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart) return;
+    
+    // Filter numeric results
+    const numericResults = labData.results
+        .filter(r => !isNaN(parseFloat(r.value)))
+        .map(r => ({
+            ...r,
+            numeric_value: parseFloat(r.value)
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    if (numericResults.length === 0) {
+        const container = canvas.parentElement;
+        container.innerHTML = `
+            <div class="d-flex align-items-center justify-content-center bg-light h-100" style="border-radius: 8px; border: 2px dashed #dee2e6;">
+                <div class="text-center text-muted">
+                    <i class="mdi mdi-information-outline mb-3" style="font-size: 3rem;"></i>
+                    <h5>Chart Not Available</h5>
+                    <p>This lab test contains qualitative results that cannot be charted</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    const dates = numericResults.map(r => new Date(r.date).toLocaleDateString());
+    const values = numericResults.map(r => r.numeric_value);
+    const refLow = labData.ref_low;
+    const refHigh = labData.ref_high;
+    
+    const datasets = [{
+        label: labData.name + (labData.unit ? ` (${labData.unit.name})` : ''),
+        data: values,
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.4,
+        pointBackgroundColor: values.map(value => {
+            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
+            }
+            return '#007bff';
+        }),
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+    }];
+    
+    // Add reference lines
+    if (refLow !== null && !isNaN(refLow)) {
+        datasets.push({
+            label: 'Lower Reference',
+            data: Array(dates.length).fill(refLow),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+        });
+    }
+    
+    if (refHigh !== null && !isNaN(refHigh)) {
+        datasets.push({
+            label: 'Upper Reference',
+            data: Array(dates.length).fill(refHigh),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+        });
+    }
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: labData.name + ' - Trend Over Time',
+                    font: { size: 16, weight: 'bold', family: 'IBM Plex Sans' }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        filter: function(legendItem, data) {
+                            const dataset = data.datasets[legendItem.datasetIndex];
+                            return dataset.label && !dataset.label.includes('Reference');
+                        },
+                        font: { family: 'IBM Plex Sans' }
+                    },
+                    onClick: function() { return false; }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date',
+                        font: { family: 'IBM Plex Sans' }
+                    },
+                    ticks: { font: { family: 'IBM Plex Sans' } }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: labData.unit ? labData.unit.name : 'Value',
+                        font: { family: 'IBM Plex Sans' }
+                    },
+                    ticks: { font: { family: 'IBM Plex Sans' } }
+                }
+            }
+        }
+    });
+}
+
+// Modal functions
+function openChartModal(labData) {
+    
+    // Update modal content
+    $('#modalChartTitle').text(labData.name);
+    $('#modalLabUnit').text(labData.unit ? labData.unit.name : 'No unit');
+    $('#modalDataPoints').text(`${labData.results.length} data points`);
+    
+    // Store lab ID for the "View Lab Page" button
+    $('#viewLabPageBtn').data('lab-id', labData.id);
+    
+    // Show the modal
+    $('#chartModal').modal('show');
+    
+    // Wait for modal to be shown before creating chart
+    $('#chartModal').on('shown.bs.modal', function() {
+        createModalChart(labData);
+    });
+}
+
+function createModalChart(labData) {
+    const canvas = document.getElementById('modalChart');
+    if (!canvas || !window.Chart) return;
+    
+    // Destroy existing chart if it exists
+    if (window.modalChartInstance) {
+        window.modalChartInstance.destroy();
+    }
+    
+    // Filter numeric results
+    const numericResults = labData.results
+        .filter(r => !isNaN(parseFloat(r.value)))
+        .map(r => ({
+            ...r,
+            numeric_value: parseFloat(r.value)
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    if (numericResults.length === 0) return;
+    
+    const ctx = canvas.getContext('2d');
+    const dates = numericResults.map(r => new Date(r.date).toLocaleDateString());
+    const values = numericResults.map(r => r.numeric_value);
+    const refLow = labData.ref_low;
+    const refHigh = labData.ref_high;
+    
+    const datasets = [{
+        label: labData.name + (labData.unit ? ` (${labData.unit.name})` : ''),
+        data: values,
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        borderWidth: 3,
+        fill: false,
+        tension: 0.4,
+        pointBackgroundColor: values.map(value => {
+            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
+            }
+            return '#007bff';
+        }),
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 8,
+    }];
+    
+    // Add reference lines
+    if (refLow !== null && !isNaN(refLow)) {
+        datasets.push({
+            label: 'Lower Reference',
+            data: Array(dates.length).fill(refLow),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+        });
+    }
+    
+    if (refHigh !== null && !isNaN(refHigh)) {
+        datasets.push({
+            label: 'Upper Reference',
+            data: Array(dates.length).fill(refHigh),
+            borderColor: '#28a745',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+        });
+    }
+    
+    window.modalChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: `${labData.name} Trend Over Time`,
+                    font: { size: 18, weight: 'bold', family: 'IBM Plex Sans' }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        filter: function(legendItem, data) {
+                            const dataset = data.datasets[legendItem.datasetIndex];
+                            return dataset.label && !dataset.label.includes('Reference');
+                        },
+                        font: { family: 'IBM Plex Sans', size: 14 }
+                    },
+                    onClick: function() { return false; }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Date',
+                        font: { family: 'IBM Plex Sans', size: 14 }
+                    },
+                    ticks: { font: { family: 'IBM Plex Sans', size: 12 } }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: labData.unit ? labData.unit.name : 'Value',
+                        font: { family: 'IBM Plex Sans', size: 14 }
+                    },
+                    ticks: { font: { family: 'IBM Plex Sans', size: 12 } }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+}
+
+// Handle "View Lab Page" button click
+$(document).on('click', '#viewLabPageBtn', function() {
+    const labId = $(this).data('lab-id');
+    if (labId) {
+        window.location.href = `/lab/${labId}`;
+    }
+});
+</script>
+{% endblock %}

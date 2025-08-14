@@ -1,0 +1,932 @@
+{% extends "layout.html" %}
+
+{% block title %}Lab Results - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-file-document-multiple mr-2"></i>
+          Lab Results
+        </h1>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    <!-- Results Table -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-file-document-multiple mr-2"></i>
+              Lab Results ({{ results|length | number_format }} total)
+            </h3>
+            <div class="card-tools">
+              <a href="/import" class="btn btn-success btn-sm mr-2">
+                <i class="mdi mdi-file-upload mr-1"></i>
+                Import PDFs
+              </a>
+              <button class="btn btn-primary btn-sm" onclick="addResult()">
+                <i class="mdi mdi-plus mr-1"></i>
+                Add Result
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            {% if results %}
+            <table id="resultsTable" class="table table-bordered table-striped" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Lab Test</th>
+                  <th>Result</th>
+                  <th>Provider</th>
+                  <th>Panel</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for result in results %}
+                <tr>
+                  <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                  <td>
+                    {% if result.lab_id %}
+                      <a href="/lab/{{ result.lab_id }}" class="lab-link text-primary font-weight-bold" style="text-decoration: none;">
+                        {{ result.lab.name if result.lab else 'Unknown Lab' }}
+                      </a>
+                    {% else %}
+                      {{ result.lab.name if result.lab else 'Unknown Lab' }}
+                    {% endif %}
+                  </td>
+                  <td>
+                    {{ result.result }} {{ result.lab.unit.name if result.lab and result.lab.unit else '' }}
+                  </td>
+                  <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
+                  <td>{{ result.lab.panel.name if result.lab and result.lab.panel else '—' }}</td>
+                  <td>
+                    {% set status = result.result | get_result_status(result.lab.ref_low if result.lab else none, result.lab.ref_high if result.lab else none) %}
+                    {% if status == 'normal' %}
+                      <span class="badge badge-success">Normal</span>
+                    {% elif status == 'low' %}
+                      <span class="badge badge-warning">Low</span>
+                    {% elif status == 'high' %}
+                      <span class="badge badge-warning">High</span>
+                    {% else %}
+                      <span class="badge badge-secondary">Unknown</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="btn-group btn-group-sm">
+                      <button class="btn btn-info edit-btn" data-id="{{ result.id }}" onclick="editResult('{{ result.id }}')">
+                        <i class="mdi mdi-pencil"></i>
+                      </button>
+                      <button class="btn btn-danger delete-btn" data-id="{{ result.id }}" onclick="deleteResult('{{ result.id }}')">
+                        <i class="mdi mdi-trash-can"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <div class="text-center py-4">
+              <i class="mdi mdi-file-document-multiple text-muted mb-3" style="font-size: 3rem;"></i>
+              <h5 class="text-muted">No Results Found</h5>
+              <p class="text-muted">Add some lab results to get started</p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Add Result Modal -->
+<div class="modal fade" id="addResultModal" tabindex="-1" role="dialog" aria-labelledby="addResultModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addResultModalLabel">
+          <i class="mdi mdi-plus mr-2"></i>
+          Add Lab Result
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addResultForm">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="resultLab">Lab Test <span class="text-danger">*</span></label>
+                <select class="form-control" id="resultLab" name="lab_id" required>
+                  <option value="">Select lab test...</option>
+                  <option value="new_lab">+ Add New Lab Test</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="resultProvider">Provider <span class="text-danger">*</span></label>
+                <select class="form-control" id="resultProvider" name="provider_id" required>
+                  <option value="">Select provider...</option>
+                  <option value="new_provider">+ Add New Provider</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="resultValue">Result Value</label>
+                <input type="number" class="form-control" id="resultValue" name="result" step="0.01" placeholder="Enter numeric result">
+                <small class="form-text text-muted">Leave empty for qualitative results</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="resultText">Result Text</label>
+                <input type="text" class="form-control" id="resultText" name="result_text" placeholder="e.g., Positive, Negative, Normal">
+                <small class="form-text text-muted">For qualitative results or additional notes</small>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="resultDate">Date Collected <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="resultDate" name="date_collected" required>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <!-- Patient ID will be set from cookie -->
+              <input type="hidden" id="resultPatient" name="patient_id" value="">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="resultNotes">Notes</label>
+            <textarea class="form-control" id="resultNotes" name="notes" rows="3" placeholder="Optional notes about this result"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Result
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Lab Test Modal -->
+<div class="modal fade" id="addLabModal" tabindex="-1" role="dialog" aria-labelledby="addLabModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addLabModalLabel">
+          <i class="mdi mdi-test-tube mr-2"></i>
+          Add New Lab Test
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addLabForm">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-8">
+              <div class="form-group">
+                <label for="labName">Lab Test Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="labName" name="name" required placeholder="e.g., Hemoglobin A1c">
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-group">
+                <label for="labPanel">Panel <span class="text-danger">*</span></label>
+                <select class="form-control" id="labPanel" name="panel_id" required>
+                  <option value="">Select panel...</option>
+                  <option value="new_panel">+ Add New Panel</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4">
+              <div class="form-group">
+                <label for="labUnit">Unit</label>
+                <select class="form-control" id="labUnit" name="unit_id">
+                  <option value="">Select unit...</option>
+                  <option value="new_unit">+ Add New Unit</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-group">
+                <label for="labRefType">Reference Range Type</label>
+                <select class="form-control" id="labRefType" name="ref_type">
+                  <option value="range">Range (e.g., 4.0 - 6.0)</option>
+                  <option value="greater">Greater than (e.g., > 10.0)</option>
+                  <option value="less">Less than (e.g., < 5.0)</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-4" id="refValueContainer">
+              <div class="form-group">
+                <label for="labRefValue">Reference Value</label>
+                <input type="number" class="form-control" id="labRefValue" name="ref_value" step="0.01" placeholder="Single value">
+                <small class="form-text text-muted">For greater/less than types</small>
+              </div>
+            </div>
+          </div>
+          <div class="row" id="refRangeContainer">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="labRefLow">Reference Low</label>
+                <input type="number" class="form-control" id="labRefLow" name="ref_low" step="0.01" placeholder="Lower bound">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="labRefHigh">Reference High</label>
+                <input type="number" class="form-control" id="labRefHigh" name="ref_high" step="0.01" placeholder="Upper bound">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Lab Test
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Provider Modal -->
+<div class="modal fade" id="addProviderResultModal" tabindex="-1" role="dialog" aria-labelledby="addProviderResultModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addProviderResultModalLabel">
+          <i class="mdi mdi-plus mr-2"></i>
+          Add New Provider
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addProviderResultForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="providerResultName">Provider Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="providerResultName" placeholder="Enter provider name" required>
+            <small class="form-text text-muted">Enter the full name of the healthcare provider or lab</small>
+          </div>
+          <div class="form-group">
+            <label for="providerResultSpecialty">Specialty (Optional)</label>
+            <input type="text" class="form-control" id="providerResultSpecialty" placeholder="e.g., Cardiology, Laboratory">
+            <small class="form-text text-muted">Provider specialty or department</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="button" class="btn btn-success" id="saveProviderResultBtn">
+            <i class="mdi mdi-check mr-1"></i>
+            Add Provider
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Panel Modal -->
+<div class="modal fade" id="addPanelModal" tabindex="-1" role="dialog" aria-labelledby="addPanelModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addPanelModalLabel">
+          <i class="mdi mdi-folder-plus mr-2"></i>
+          Add New Panel
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addPanelForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="panelName">Panel Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="panelName" name="name" required placeholder="e.g., Basic Metabolic Panel">
+            <small class="form-text text-muted">Enter the name of the lab test panel</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Panel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Unit Modal -->
+<div class="modal fade" id="addUnitModal" tabindex="-1" role="dialog" aria-labelledby="addUnitModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addUnitModalLabel">
+          <i class="mdi mdi-ruler mr-2"></i>
+          Add New Unit
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addUnitForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="unitName">Unit Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="unitName" name="name" required placeholder="e.g., mg/dL, mmol/L, %">
+            <small class="form-text text-muted">Enter the measurement unit (e.g., mg/dL, mmol/L, %, mg, ng/mL)</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Unit
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Initialize DataTable
+    $('#resultsTable').DataTable({
+        responsive: true,
+        pageLength: 25,
+        order: [[0, 'desc']], // Sort by date descending
+        columnDefs: [
+            {
+                targets: [6], // Actions column
+                orderable: false,
+                searchable: false
+            }
+        ],
+        dom: 'Bfrtip',
+        buttons: [
+            'copy', 'csv', 'excel', 'pdf', 'print'
+        ]
+    });
+    
+    // Load lab tests and providers for the add result modal
+    function loadLabsAndProviders() {
+        // Load lab tests grouped by panel
+        // Labs will be automatically filtered by patient cookie on server side
+        $.get('/api/labs/', function(labs) {
+            const labSelect = $('#resultLab');
+            labSelect.empty().append('<option value="">Select lab test...</option>');
+            labSelect.append('<option value="new_lab">+ Add New Lab Test</option>');
+            
+            // Group labs by panel
+            const panelGroups = {};
+            labs.forEach(lab => {
+                const panelName = lab.panel_name || 'Unknown Panel';
+                if (!panelGroups[panelName]) {
+                    panelGroups[panelName] = [];
+                }
+                panelGroups[panelName].push(lab);
+            });
+            
+            // Add grouped options
+            Object.keys(panelGroups).sort().forEach(panelName => {
+                const optgroup = $(`<optgroup label="${panelName}"></optgroup>`);
+                panelGroups[panelName].forEach(lab => {
+                    optgroup.append(`<option value="${lab.id}">${lab.name}</option>`);
+                });
+                labSelect.append(optgroup);
+            });
+        });
+        
+        // Load providers
+        // Providers will be automatically filtered by patient cookie on server side
+        $.get('/api/providers/', function(providers) {
+            const providerSelect = $('#resultProvider');
+            providerSelect.empty().append('<option value="">Select provider...</option>');
+            providerSelect.append('<option value="new_provider">+ Add New Provider</option>');
+            providers.forEach(provider => {
+                providerSelect.append(`<option value="${provider.id}">${provider.name}</option>`);
+            });
+        });
+        
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        $('#resultDate').val(today);
+    }
+    
+    // Load panels for lab modal
+    function loadPanelsForLab() {
+        // Panels will be automatically filtered by patient cookie on server side
+        $.get('/api/panels/', function(panels) {
+            const panelSelect = $('#labPanel');
+            panelSelect.empty().append('<option value="">Select panel...</option>');
+            panelSelect.append('<option value="new_panel">+ Add New Panel</option>');
+            panels.forEach(panel => {
+                panelSelect.append(`<option value="${panel.id}">${panel.name}</option>`);
+            });
+        });
+    }
+    
+    // Load units for lab modal
+    function loadUnitsForLab() {
+        $.get('/api/units/', function(units) {
+            const unitSelect = $('#labUnit');
+            unitSelect.empty().append('<option value="">Select unit...</option>');
+            unitSelect.append('<option value="new_unit">+ Add New Unit</option>');
+            units.forEach(unit => {
+                unitSelect.append(`<option value="${unit.id}">${unit.name}</option>`);
+            });
+        });
+    }
+    
+    // Cookie helper function (matches layout.html)
+    function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    }
+    
+    // Load data when modal is shown
+    $('#addResultModal').on('show.bs.modal', function() {
+        loadLabsAndProviders();
+        
+        // Set patient ID from cookie
+        const selectedPatientId = getCookie('selectedPatientId') || '1';
+        $('#resultPatient').val(selectedPatientId);
+    });
+    
+    // Handle add result form submission
+    $('#addResultForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            lab_id: parseInt($('#resultLab').val()),
+            provider_id: parseInt($('#resultProvider').val()),
+            patient_id: parseInt($('#resultPatient').val()) || 1,
+            result: $('#resultValue').val() ? parseFloat($('#resultValue').val()) : null,
+            result_text: $('#resultText').val().trim() || null,
+            date_collected: $('#resultDate').val(),
+            notes: $('#resultNotes').val().trim() || null
+        };
+        
+        // Validation
+        if (!formData.lab_id || !formData.provider_id || !formData.date_collected) {
+            alert('Please fill in all required fields');
+            return;
+        }
+        
+        if (!formData.result && !formData.result_text) {
+            alert('Please provide either a numeric result or result text');
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = $('#addResultForm button[type="submit"]');
+        submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i> Adding...');
+        
+        $.ajax({
+            url: '/api/results/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addResultModal').modal('hide');
+                $('#addResultForm')[0].reset();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Lab result has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+                
+                // Reload page to show new result
+                setTimeout(() => window.location.reload(), 1000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add lab result';
+                alert('Error: ' + error);
+            },
+            complete: function() {
+                submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Add Result');
+            }
+        });
+    });
+    
+    // Reset form when modal is hidden
+    $('#addResultModal').on('hidden.bs.modal', function() {
+        $('#addResultForm')[0].reset();
+    });
+    
+    // Handle lab test selection change
+    $(document).on('change', '#resultLab', function() {
+        if ($(this).val() === 'new_lab') {
+            loadPanelsForLab();
+            loadUnitsForLab();
+            $('#addLabModal').modal('show');
+            $(this).val('');
+        }
+    });
+    
+    // Handle provider selection change
+    $(document).on('change', '#resultProvider', function() {
+        if ($(this).val() === 'new_provider') {
+            $('#addProviderResultForm')[0].reset();
+            $('#addProviderResultModal').modal('show');
+            $(this).val('');
+        }
+    });
+    
+    // Handle panel selection change
+    $(document).on('change', '#labPanel', function() {
+        if ($(this).val() === 'new_panel') {
+            $('#addPanelForm')[0].reset();
+            $('#addPanelModal').modal('show');
+            $(this).val('');
+        }
+    });
+    
+    // Handle unit selection change
+    $(document).on('change', '#labUnit', function() {
+        if ($(this).val() === 'new_unit') {
+            $('#addUnitForm')[0].reset();
+            $('#addUnitModal').modal('show');
+            $(this).val('');
+        }
+    });
+    
+    // Handle reference range type change
+    $('#labRefType').on('change', function() {
+        const refType = $(this).val();
+        if (refType === 'range') {
+            $('#refRangeContainer').show();
+            $('#refValueContainer').hide();
+        } else {
+            $('#refRangeContainer').hide();
+            $('#refValueContainer').show();
+        }
+    });
+    
+    // Add panel form submission
+    $('#addPanelForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const panelName = $('#panelName').val().trim();
+        
+        if (!panelName) {
+            alert('Panel name is required');
+            $('#panelName').focus();
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = $('#addPanelForm button[type="submit"]');
+        submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i> Adding...');
+        
+        $.ajax({
+            url: '/api/panels/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ name: panelName }),
+            success: function(response) {
+                $('#addPanelModal').modal('hide');
+                $('#addPanelForm')[0].reset();
+                
+                // Reload panels and select the new one
+                loadPanelsForLab();
+                
+                setTimeout(function() {
+                    if (response.success && response.data && response.data.id) {
+                        $('#labPanel').val(response.data.id);
+                    }
+                }, 200);
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Panel "${panelName}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add panel';
+                alert('Error: ' + error);
+            },
+            complete: function() {
+                submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Add Panel');
+            }
+        });
+    });
+    
+    // Add unit form submission
+    $('#addUnitForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const unitName = $('#unitName').val().trim();
+        
+        if (!unitName) {
+            alert('Unit name is required');
+            $('#unitName').focus();
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = $('#addUnitForm button[type="submit"]');
+        submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i> Adding...');
+        
+        $.ajax({
+            url: '/api/units/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ name: unitName }),
+            success: function(response) {
+                $('#addUnitModal').modal('hide');
+                $('#addUnitForm')[0].reset();
+                
+                // Reload units and select the new one
+                loadUnitsForLab();
+                
+                setTimeout(function() {
+                    if (response.success && response.data && response.data.id) {
+                        $('#labUnit').val(response.data.id);
+                    }
+                }, 200);
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Unit "${unitName}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add unit';
+                alert('Error: ' + error);
+            },
+            complete: function() {
+                submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Add Unit');
+            }
+        });
+    });
+    
+    // Add lab test form submission
+    $('#addLabForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const refType = $('#labRefType').val();
+        const formData = {
+            name: $('#labName').val().trim(),
+            panel_id: parseInt($('#labPanel').val()),
+            unit_id: $('#labUnit').val() ? parseInt($('#labUnit').val()) : null,
+            ref_type: refType
+        };
+        
+        if (refType === 'range') {
+            formData.ref_low = $('#labRefLow').val() ? parseFloat($('#labRefLow').val()) : null;
+            formData.ref_high = $('#labRefHigh').val() ? parseFloat($('#labRefHigh').val()) : null;
+            formData.ref_value = null;
+        } else {
+            formData.ref_value = $('#labRefValue').val() ? parseFloat($('#labRefValue').val()) : null;
+            formData.ref_low = null;
+            formData.ref_high = null;
+        }
+        
+        // Validation
+        if (!formData.name || !formData.panel_id) {
+            alert('Please fill in all required fields');
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = $('#addLabForm button[type="submit"]');
+        submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i> Adding...');
+        
+        $.ajax({
+            url: '/api/labs/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addLabModal').modal('hide');
+                $('#addLabForm')[0].reset();
+                
+                // Reload lab tests and select the new one
+                loadLabsAndProviders();
+                
+                setTimeout(function() {
+                    if (response.success && response.data && response.data.id) {
+                        $('#resultLab').val(response.data.id);
+                    }
+                }, 200);
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Lab test "${formData.name}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add lab test';
+                alert('Error: ' + error);
+            },
+            complete: function() {
+                submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Add Lab Test');
+            }
+        });
+    });
+    
+    // Save new provider from results page
+    $('#saveProviderResultBtn').on('click', function() {
+        const providerName = $('#providerResultName').val().trim();
+        const providerSpecialty = $('#providerResultSpecialty').val().trim();
+        
+        if (!providerName) {
+            alert('Provider name is required');
+            $('#providerResultName').focus();
+            return;
+        }
+        
+        // Show loading state
+        $(this).prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i> Adding...');
+        
+        $.ajax({
+            url: '/api/providers/',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                name: providerName,
+                specialty: providerSpecialty || null
+            }),
+            success: function(response) {
+                if (response && response.success) {
+                    $('#addProviderResultModal').modal('hide');
+                    
+                    // Reload providers and select the new one
+                    loadLabsAndProviders();
+                    
+                    setTimeout(function() {
+                        if (response.data && response.data.id) {
+                            $('#resultProvider').val(response.data.id);
+                        }
+                    }, 200);
+                    
+                    // Show success message
+                    const alert = `
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="mdi mdi-check mr-2"></i>
+                            Provider "${providerName}" has been added successfully.
+                            <button type="button" class="close" data-dismiss="alert">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    `;
+                    $('.content-header .container-fluid').after(alert);
+                    setTimeout(() => $('.alert').fadeOut(), 5000);
+                } else {
+                    throw new Error(response && response.message ? response.message : 'Failed to create provider');
+                }
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to create provider';
+                alert('Error: ' + error);
+            },
+            complete: function() {
+                $('#saveProviderResultBtn').prop('disabled', false).html('<i class="mdi mdi-check mr-1"></i> Add Provider');
+            }
+        });
+    });
+    
+    // Initialize reference range visibility
+    $('#labRefType').trigger('change');
+});
+
+function addResult() {
+    $('#addResultModal').modal('show');
+}
+
+function editResult(id) {
+    
+    // Fetch the result data
+    fetch(`/api/results/${id}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch result');
+            }
+            return response.json();
+        })
+        .then(result => {
+            // For now, redirect to the individual lab result page where editing would be handled
+            // This follows the existing pattern in the codebase
+            window.location.href = `/result/${id}`;
+        })
+        .catch(error => {
+            console.error('Error fetching result:', error);
+            alert('Failed to load result for editing. Please try again.');
+        });
+}
+
+function deleteResult(id) {
+    if (confirm('Are you sure you want to delete this result?')) {
+        fetch(`/api/results/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                // Reload the page to refresh the data
+                window.location.reload();
+            } else {
+                alert('Failed to delete result. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting result:', error);
+            alert('Failed to delete result. Please try again.');
+        });
+    }
+}
+</script>
+{% endblock %}

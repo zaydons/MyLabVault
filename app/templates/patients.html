@@ -1,0 +1,476 @@
+{% extends "layout.html" %}
+{% from 'components/delete_confirmation_modal.html' import delete_confirmation_modal %}
+
+{% block title %}Patients - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-account-multiple mr-2"></i>
+          Patient Management
+        </h1>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#addPatientModal">
+          <i class="mdi mdi-account-plus mr-1"></i>
+          Add New Patient
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- Patients List -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-view-list mr-2"></i>
+              All Patients
+            </h3>
+            <div class="card-tools">
+              <div class="input-group input-group-sm" style="width: 250px;">
+                <input type="text" id="searchPatients" class="form-control float-right" placeholder="Search patients...">
+                <div class="input-group-append">
+                  <button type="button" class="btn btn-default">
+                    <i class="mdi mdi-magnify"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <table id="patientsTable" class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Age</th>
+                  <th>Gender</th>
+                  <th>Lab Results</th>
+                  <th>Recent Results</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be loaded via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Add Patient Modal -->
+<div class="modal fade" id="addPatientModal" tabindex="-1" role="dialog" aria-labelledby="addPatientModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addPatientModalLabel">
+          <i class="mdi mdi-account-plus mr-2"></i>
+          Add New Patient
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="addPatientForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="patientName">Patient Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="patientName" name="name" required placeholder="Enter patient's full name">
+            <small class="form-text text-muted">Enter the patient's full name</small>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="patientDOB">Date of Birth</label>
+                <input type="date" class="form-control" id="patientDOB" name="date_of_birth">
+                <small class="form-text text-muted">Optional - used to calculate age</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="patientGender">Gender</label>
+                <select class="form-control" id="patientGender" name="gender">
+                  <option value="">Select gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Add Patient
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Patient Modal -->
+<div class="modal fade" id="editPatientModal" tabindex="-1" role="dialog" aria-labelledby="editPatientModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editPatientModalLabel">
+          <i class="mdi mdi-account-edit mr-2"></i>
+          Edit Patient
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="editPatientForm">
+        <input type="hidden" id="editPatientId" name="id">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="editPatientName">Patient Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="editPatientName" name="name" required>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editPatientDOB">Date of Birth</label>
+                <input type="date" class="form-control" id="editPatientDOB" name="date_of_birth">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label for="editPatientGender">Gender</label>
+                <select class="form-control" id="editPatientGender" name="gender">
+                  <option value="">Select gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Update Patient
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+{{ delete_confirmation_modal(
+    modal_id='deletePatientModal',
+    entity_name='Patient',
+    entity_type='patient',
+    warning_message='This action cannot be undone. The patient will only be deleted if they have no associated lab results.',
+    deletion_endpoint='/api/patients'
+) }}
+
+<!-- Patient Details Modal -->
+<div class="modal fade" id="patientDetailsModal" tabindex="-1" role="dialog" aria-labelledby="patientDetailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="patientDetailsModalLabel">
+          <i class="mdi mdi-account mr-2"></i>
+          <span id="patientDetailsTitle">Patient Details</span>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="patientDetailsContent">
+          <!-- Content will be loaded dynamically -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="mdi mdi-close mr-1"></i>
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    let patientsTable;
+    
+    // Initialize DataTable
+    function initializeTable() {
+        patientsTable = $('#patientsTable').DataTable({
+            ajax: {
+                url: '/api/patients',
+                dataSrc: ''
+            },
+            columns: [
+                { data: 'name' },
+                { 
+                    data: 'age',
+                    render: function(data, type, row) {
+                        return data !== null ? data : 'N/A';
+                    }
+                },
+                { 
+                    data: 'gender',
+                    render: function(data, type, row) {
+                        return data || 'Not specified';
+                    }
+                },
+                { data: 'result_count', defaultContent: '0' },
+                { data: 'recent_results_count', defaultContent: '0' },
+                {
+                    data: 'id',
+                    orderable: false,
+                    render: function(data, type, row) {
+                        const hasResults = row.result_count && row.result_count > 0;
+                        const deleteDisabled = hasResults ? 'disabled' : '';
+                        const deleteTitle = hasResults ? 'Cannot delete - has associated lab results' : 'Delete';
+                        
+                        return `
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-info view-patient" data-id="${data}" title="View Details">
+                                    <i class="mdi mdi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary edit-patient" data-id="${data}" title="Edit">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger delete-patient ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+            ],
+            responsive: true,
+            order: [[0, 'asc']],
+            pageLength: 25
+        });
+    }
+
+    // Initialize table on load
+    initializeTable();
+
+    // Search functionality
+    $('#searchPatients').on('keyup', function() {
+        patientsTable.search(this.value).draw();
+    });
+
+    // Add Patient Form
+    $('#addPatientForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            name: $('#patientName').val().trim(),
+            date_of_birth: $('#patientDOB').val() || null,
+            gender: $('#patientGender').val() || null
+        };
+
+        $.ajax({
+            url: '/api/patients',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#addPatientModal').modal('hide');
+                $('#addPatientForm')[0].reset();
+                patientsTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Patient "${formData.name}" has been added successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to add patient';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // View Patient Details
+    $(document).on('click', '.view-patient', function() {
+        const patientId = $(this).data('id');
+        
+        $.get(`/api/patients/${patientId}/summary`, function(data) {
+            $('#patientDetailsTitle').text(data.patient.name);
+            
+            let content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><strong>Patient Information</strong></h6>
+                        <p><strong>Name:</strong> ${data.patient.name}</p>
+                        <p><strong>Age:</strong> ${data.patient.age !== null ? data.patient.age : 'N/A'}</p>
+                        <p><strong>Gender:</strong> ${data.patient.gender || 'Not specified'}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><strong>Lab Results Summary</strong></h6>
+                        <p><strong>Total Results:</strong> ${data.statistics.total_results}</p>
+                        <p><strong>Recent Results:</strong> ${data.statistics.recent_results}</p>
+                        <p><strong>Abnormal Results:</strong> ${data.statistics.abnormal_results}</p>
+                        <p><strong>Unique Tests:</strong> ${data.statistics.unique_tests}</p>
+                    </div>
+                </div>
+            `;
+            
+            if (data.recent_abnormal && data.recent_abnormal.length > 0) {
+                content += `
+                    <hr>
+                    <h6><strong>Recent Abnormal Results</strong></h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Lab Test</th>
+                                    <th>Result</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.recent_abnormal.forEach(function(result) {
+                    content += `
+                        <tr>
+                            <td>${result.lab_name}</td>
+                            <td>${result.result || result.result_text || 'N/A'}</td>
+                            <td><span class="badge badge-warning">${result.status}</span></td>
+                            <td>${new Date(result.date_collected).toLocaleDateString()}</td>
+                        </tr>
+                    `;
+                });
+                
+                content += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            if (data.statistics.total_results === 0) {
+                content += `
+                    <hr>
+                    <div class="alert alert-info">
+                        <i class="mdi mdi-information mr-2"></i>
+                        No lab results found for this patient.
+                    </div>
+                `;
+            }
+            
+            $('#patientDetailsContent').html(content);
+            $('#patientDetailsModal').modal('show');
+        });
+    });
+
+    // Edit Patient
+    $(document).on('click', '.edit-patient', function() {
+        const patientId = $(this).data('id');
+        
+        $.get(`/api/patients/${patientId}`, function(patient) {
+            $('#editPatientId').val(patient.id);
+            $('#editPatientName').val(patient.name);
+            $('#editPatientDOB').val(patient.date_of_birth ? patient.date_of_birth.split('T')[0] : '');
+            $('#editPatientGender').val(patient.gender || '');
+            $('#editPatientModal').modal('show');
+        });
+    });
+
+    // Update Patient Form
+    $('#editPatientForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const patientId = $('#editPatientId').val();
+        const formData = {
+            name: $('#editPatientName').val().trim(),
+            date_of_birth: $('#editPatientDOB').val() || null,
+            gender: $('#editPatientGender').val() || null
+        };
+
+        $.ajax({
+            url: `/api/patients/${patientId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#editPatientModal').modal('hide');
+                patientsTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Patient "${formData.name}" has been updated successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update patient';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Delete Patient
+    $(document).on('click', '.delete-patient', function() {
+        if ($(this).hasClass('disabled')) {
+            return false;
+        }
+        const patientId = $(this).data('id');
+        const patientName = $(this).data('name');
+        showPatientDeleteModal(patientId, patientName);
+    });
+
+    // Reset forms when modals are hidden
+    $('#addPatientModal').on('hidden.bs.modal', function() {
+        $('#addPatientForm')[0].reset();
+    });
+});
+</script>
+{% endblock %}

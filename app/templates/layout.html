@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}MyLabVault{% endblock %}</title>
+
+    <!-- Google Font: IBM Plex Sans -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap">
+    <!-- Material Design Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+    <!-- AdminLTE -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.3.2/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/3.0.5/css/responsive.bootstrap5.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Custom CSS for IBM Plex Sans -->
+    <style>
+        body, 
+        .wrapper,
+        .main-header,
+        .main-sidebar,
+        .content-wrapper,
+        .main-footer,
+        .card,
+        .navbar,
+        .sidebar,
+        .btn,
+        .form-control,
+        .table,
+        .badge,
+        .small-box,
+        .alert,
+        .nav-link,
+        .brand-text,
+        .card-title,
+        .card-text,
+        h1, h2, h3, h4, h5, h6,
+        p, span, div, a, td, th, li, ul, ol {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+        }
+        
+        /* Ensure consistent font weight */
+        .font-weight-bold, strong, b {
+            font-weight: 600 !important;
+        }
+        
+        /* Improve readability */
+        body {
+            font-weight: 400;
+            line-height: 1.6;
+        }
+        
+        /* Chart titles and labels */
+        .chart-title {
+            font-family: 'IBM Plex Sans', sans-serif !important;
+        }
+        
+        /* Fix info box icon styles */
+        .info-box-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .info-box-icon > i {
+            font-size: 2rem;
+        }
+        
+        /* Dark mode enhancements to match AdminLTE */
+        .dark-mode .card {
+            background-color: #343a40;
+            border-color: #6c757d;
+        }
+        
+        .dark-mode .card-header {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-bottom-color: #6c757d;
+        }
+        
+        .dark-mode .table {
+            color: #ffffff;
+        }
+        
+        .dark-mode .table td,
+        .dark-mode .table th {
+            border-color: #6c757d;
+        }
+        
+        .dark-mode .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        /* Chart card hover effects */
+        .chart-card {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .chart-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+        }
+        
+        .chart-card[style*="cursor: pointer"]:hover {
+            border-color: #007bff !important;
+        }
+        
+        .chart-card[style*="cursor: pointer"]:hover .card-header {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+        
+        /* Enhanced submenu item styling */
+        .nav-treeview .nav-link {
+            padding-left: 1rem !important;
+            margin-left: 0.5rem !important;
+        }
+        
+        .nav-treeview .nav-link:hover {
+            border-left-color: rgba(255, 255, 255, 0.3) !important;
+        }
+        
+        .nav-treeview .nav-link.active {
+            border-left-color: #007bff !important;
+        }
+
+        /* Standardized Content Header Styling */
+        .content-header h1 {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .dark-mode .content-header h1 {
+            color: #ffffff;
+        }
+
+        /* Enhanced Card Header Styling */
+        .card-header {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .dark-mode .card-header {
+            background: linear-gradient(135deg, #454d55 0%, #3a424a 100%);
+            border-bottom-color: #6c757d;
+        }
+
+        .card-header .card-title {
+            font-weight: 600;
+            margin-bottom: 0;
+        }
+
+        .card-header .card-title i {
+            color: #007bff;
+        }
+
+        .dark-mode .card-header .card-title i {
+            color: #17a2b8;
+        }
+
+        /* Enhanced Button Styling */
+        .btn {
+            font-weight: 500;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border-color: #28a745;
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #218838 0%, #1e9e7c 100%);
+            border-color: #1e7e34;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+            border-color: #17a2b8;
+        }
+
+        .btn-info:hover {
+            background: linear-gradient(135deg, #138496 0%, #1e9e7c 100%);
+            border-color: #117a8b;
+        }
+
+        /* Enhanced Info Box Styling */
+        .info-box {
+            border-radius: 0.5rem;
+            transition: all 0.2s ease-in-out;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .info-box-icon {
+            border-radius: 0.5rem 0 0 0.5rem;
+        }
+
+        /* Enhanced Table Styling */
+        .table {
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .table thead th {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+            letter-spacing: 0.025em;
+        }
+
+        .dark-mode .table thead th {
+            background: linear-gradient(135deg, #454d55 0%, #3a424a 100%);
+            border-bottom-color: #6c757d;
+            color: #ffffff;
+        }
+
+        .table tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .dark-mode .table tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Enhanced Badge Styling */
+        .badge {
+            font-weight: 500;
+            border-radius: 0.375rem;
+            padding: 0.375rem 0.75rem;
+        }
+
+        /* Upload Zone Styling */
+        .upload-zone {
+            border: 3px dashed #007bff;
+            border-radius: 0.75rem;
+            background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.02) 100%);
+            transition: all 0.3s ease-in-out;
+            cursor: pointer;
+        }
+
+        .upload-zone:hover {
+            border-color: #0056b3;
+            background: linear-gradient(135deg, rgba(0, 123, 255, 0.1) 0%, rgba(0, 123, 255, 0.05) 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+        }
+
+        .dark-mode .upload-zone {
+            border-color: #17a2b8;
+            background: linear-gradient(135deg, rgba(23, 162, 184, 0.1) 0%, rgba(23, 162, 184, 0.05) 100%);
+        }
+
+        .dark-mode .upload-zone:hover {
+            border-color: #138496;
+            background: linear-gradient(135deg, rgba(23, 162, 184, 0.15) 0%, rgba(23, 162, 184, 0.1) 100%);
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="hold-transition sidebar-mini {{ 'dark-mode' if user_settings.dark_mode }} {{ 'sidebar-collapse' if not user_settings.sidebar_open }}">
+<div class="wrapper">
+
+  <!-- Navbar -->
+  <nav class="main-header navbar navbar-expand {{ 'navbar-dark' if user_settings.dark_mode else 'navbar-white navbar-light' }}">
+    <!-- Left navbar links -->
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="mdi mdi-menu"></i></a>
+      </li>
+    </ul>
+
+    <!-- Right navbar links -->
+    <ul class="navbar-nav ml-auto">
+      <!-- Patient Switcher -->
+      <li class="nav-item dropdown" id="patientSwitcher" style="display: none;">
+        <a class="nav-link dropdown-toggle" href="#" id="patientDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+          <i class="mdi mdi-account-circle mr-1"></i>
+          <span id="currentPatientName">Select Patient</span>
+        </a>
+        <div class="dropdown-menu dropdown-menu-right" aria-labelledby="patientDropdown" id="patientDropdownMenu">
+          <div class="dropdown-header">Switch Patient</div>
+          <div class="dropdown-divider"></div>
+          <div id="patientList">
+            <!-- Patient options will be loaded here -->
+          </div>
+          <div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="#" onclick="showPatientSelection()">
+            <i class="mdi mdi-refresh mr-2"></i>
+            Reset to Default
+          </a>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="toggleDarkMode()">
+          <i class="mdi mdi-{{ 'white-balance-sunny' if user_settings.dark_mode else 'moon-waxing-crescent' }}"></i>
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Sidebar Container -->
+  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+    <!-- Brand Logo -->
+    <a href="/" class="brand-link">
+      <i class="mdi mdi-flask brand-image img-circle elevation-3" style="margin-left: .8rem; margin-right: .5rem; font-size: 1.8rem;"></i>
+      <span class="brand-text font-weight-light">MyLabVault</span>
+    </a>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <!-- Sidebar Menu -->
+      <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="/" class="nav-link {{ 'active' if request.url.path == '/' }}">
+              <i class="nav-icon mdi mdi-view-dashboard"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="/results" class="nav-link {{ 'active' if request.url.path == '/results' }}">
+              <i class="nav-icon mdi mdi-file-document-multiple"></i>
+              <p>All Results</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="/charts" class="nav-link {{ 'active' if request.url.path == '/charts' }}">
+              <i class="nav-icon mdi mdi-chart-line"></i>
+              <p>Charts</p>
+            </a>
+          </li>
+          {% set manage_data_paths = ['/labs', '/panels', '/units', '/providers', '/import', '/patients'] %}
+          {% set is_manage_data_page = request.url.path in manage_data_paths or request.url.path.startswith('/lab/') %}
+          <li class="nav-item {{ 'menu-open' if is_manage_data_page }}">
+            <a href="#" class="nav-link {{ 'active' if is_manage_data_page }}">
+              <i class="nav-icon mdi mdi-database-cog"></i>
+              <p>Manage Data <i class="mdi mdi-chevron-left right"></i></p>
+            </a>
+            <ul class="nav nav-treeview">
+              <li class="nav-item">
+                <a href="/patients" class="nav-link {{ 'active' if request.url.path == '/patients' }}">
+                  <i class="mdi mdi-account-multiple nav-icon"></i>
+                  <p>Patients</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="/labs" class="nav-link {{ 'active' if request.url.path == '/labs' }}">
+                  <i class="mdi mdi-test-tube nav-icon"></i>
+                  <p>Lab Tests</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="/panels" class="nav-link {{ 'active' if request.url.path == '/panels' }}">
+                  <i class="mdi mdi-view-grid nav-icon"></i>
+                  <p>Panels</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="/units" class="nav-link {{ 'active' if request.url.path == '/units' }}">
+                  <i class="mdi mdi-scale-balance nav-icon"></i>
+                  <p>Units</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="/providers" class="nav-link {{ 'active' if request.url.path == '/providers' }}">
+                  <i class="mdi mdi-hospital-building nav-icon"></i>
+                  <p>Providers</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="/import" class="nav-link {{ 'active' if request.url.path == '/import' }}">
+                  <i class="mdi mdi-file-import nav-icon"></i>
+                  <p>
+                    PDF Import
+                    {% if pending_imports_count > 0 %}
+                    <span class="badge badge-warning right">{{ pending_imports_count }}</span>
+                    {% endif %}
+                  </p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a href="/settings" class="nav-link {{ 'active' if request.url.path == '/settings' }}">
+              <i class="nav-icon mdi mdi-cog"></i>
+              <p>Settings</p>
+            </a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- Content Wrapper -->
+  <div class="content-wrapper">
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Footer -->
+  <footer class="main-footer">
+    <strong>Copyright &copy; 2025 MyLabVault.</strong> All rights reserved.
+  </footer>
+</div>
+
+<!-- Bootstrap 4 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- AdminLTE App -->
+<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/2.3.2/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/2.3.2/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/3.0.5/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/3.0.5/js/responsive.bootstrap5.min.js"></script>
+
+<script>
+function toggleDarkMode() {
+    fetch('/api/settings/user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dark_mode: "{% if user_settings.dark_mode %}false{% else %}true{% endif %}" })
+    }).then(() => location.reload());
+}
+
+// Patient switching functionality
+$(document).ready(function() {
+    // Set default patient cookie if none exists
+    if (!getCookie('selectedPatientId')) {
+        setCookie('selectedPatientId', '1', 365);
+    }
+    
+    initializePatientSwitcher();
+});
+
+// Cookie helper functions
+function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
+}
+
+// Initialize sidebar state persistence via database
+$(document).ready(function() {
+    // Ensure AdminLTE sidebar state persistence works
+    if (typeof $.AdminLTE !== 'undefined' && $.AdminLTE.options) {
+        $.AdminLTE.options.animationSpeed = 300;
+        $.AdminLTE.options.sidebarExpandOnHover = false;
+        $.AdminLTE.options.enableBrowserTabTitle = false;
+    }
+    
+    // Listen for sidebar toggle events and save to database
+    $(document).on('click', '[data-widget="pushmenu"]', function() {
+        // Use setTimeout to capture state after AdminLTE processes the click
+        setTimeout(function() {
+            const isOpen = !$('body').hasClass('sidebar-collapse');
+            updateSidebarState(isOpen);
+        }, 100);
+    });
+});
+
+// Function to update sidebar state in database
+function updateSidebarState(isOpen) {
+    fetch('/api/settings/user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sidebar_open: isOpen })
+    }).catch(error => {
+        console.error('Error updating sidebar state:', error);
+    });
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for(let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+function initializePatientSwitcher() {
+    // Get selected patient from cookie
+    const selectedPatientId = getCookie('selectedPatientId') || '1';
+    
+    // Always load the patient switcher
+    loadPatientSwitcher(selectedPatientId);
+}
+
+function loadPatientSwitcher(selectedPatientId) {
+    // Fetch all patients
+    fetch('/api/patients')
+        .then(response => response.json())
+        .then(patients => {
+            // Always show the patient switcher (no longer hide for single patient)
+            $('#patientSwitcher').show();
+            
+            // Find the selected patient
+            const selectedPatient = patients.find(p => p.id == selectedPatientId);
+            if (selectedPatient) {
+                $('#currentPatientName').text(selectedPatient.name);
+                
+                // Populate patient list
+                let patientListHtml = '';
+                patients.forEach(patient => {
+                    const isSelected = patient.id == selectedPatientId;
+                    patientListHtml += `
+                        <a class="dropdown-item ${isSelected ? 'active' : ''}" href="#" onclick="switchToPatient(${patient.id}, '${patient.name}')">
+                            <i class="mdi mdi-account mr-2"></i>
+                            ${patient.name}
+                            ${isSelected ? '<i class="mdi mdi-check float-right"></i>' : ''}
+                        </a>
+                    `;
+                });
+                
+                $('#patientList').html(patientListHtml);
+            }
+        })
+        .catch(error => {
+            console.error('Failed to load patients:', error);
+        });
+}
+
+function switchToPatient(patientId, patientName) {
+    
+    // Store the selected patient in cookie
+    setCookie('selectedPatientId', patientId, 365);
+    
+    // Update the current patient display
+    $('#currentPatientName').text(patientName);
+    
+    // Simply reload the page - no URL parameters needed
+    window.location.reload();
+}
+
+function showPatientSelection() {
+    // Reset to default patient
+    setCookie('selectedPatientId', '1', 365);
+    
+    // Redirect to dashboard
+    window.location.href = '/dashboard';
+}
+</script>
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

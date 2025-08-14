@@ -1,0 +1,227 @@
+{% extends "layout.html" %}
+{% from 'components/simple_add_modal.html' import simple_add_modal %}
+{% from 'components/delete_confirmation_modal.html' import delete_confirmation_modal %}
+{% from 'components/edit_modal.html' import edit_modal %}
+
+{% block title %}Units - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-scale-balance mr-2"></i>
+          Measurement Units
+        </h1>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#addUnitModal">
+          <i class="mdi mdi-plus mr-1"></i>
+          Add New Unit
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    
+    <!-- Units List -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-view-list mr-2"></i>
+              All Measurement Units
+            </h3>
+            <div class="card-tools">
+              <div class="input-group input-group-sm" style="width: 250px;">
+                <input type="text" id="searchUnits" class="form-control float-right" placeholder="Search units...">
+                <div class="input-group-append">
+                  <button type="button" class="btn btn-default">
+                    <i class="mdi mdi-magnify"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <table id="unitsTable" class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>Unit Name</th>
+                  <th>Lab Tests Using</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Data will be loaded via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Add Unit Modal -->
+{{ simple_add_modal(
+    modal_id='addUnitModal',
+    entity_name='Unit',
+    field_name='unit',
+    field_label='Unit Name',
+    placeholder='e.g., mg/dL, mmol/L, %, IU/mL',
+    help_text='Enter the measurement unit (e.g., mg/dL, mmol/L, %, IU/mL)',
+    examples='mg/dL, mmol/L, g/dL, %, IU/mL, mIU/L, ng/mL, pg/mL, µg/dL, cells/µL',
+    api_endpoint='/api/units',
+    icon_class='mdi-ruler',
+    success_callback='reloadUnitsTable'
+) }}
+
+<!-- Edit Unit Modal -->
+{{ edit_modal(
+    modal_id='editUnitModal',
+    entity_name='Unit',
+    fields=[
+        {'id': 'editUnitName', 'name': 'name', 'label': 'Unit Name', 'type': 'text', 'required': true, 'placeholder': 'e.g., mg/dL, mmol/L'}
+    ],
+    api_endpoint='/api/units',
+    success_callback='reloadUnitsTable'
+) }}
+
+<!-- Delete Confirmation Modal -->
+{{ delete_confirmation_modal(
+    modal_id='deleteUnitModal',
+    entity_name='Unit',
+    entity_type='unit',
+    warning_message='This action cannot be undone. Deleting units that are currently used by lab tests may cause data integrity issues.',
+    deletion_endpoint='/api/units'
+) }}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    let unitsTable;
+    
+    // Initialize DataTable
+    function initializeTable() {
+        unitsTable = $('#unitsTable').DataTable({
+            ajax: {
+                url: '/api/units',
+                dataSrc: ''
+            },
+            columns: [
+                { data: 'name' },
+                { data: 'lab_count', defaultContent: '0' },
+                {
+                    data: 'id',
+                    orderable: false,
+                    render: function(data, type, row) {
+                        const hasLabs = row.lab_count && row.lab_count > 0;
+                        const deleteDisabled = hasLabs ? 'disabled' : '';
+                        const deleteTitle = hasLabs ? 'Cannot delete - has associated lab tests' : 'Delete';
+                        
+                        return `
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-primary edit-unit" data-id="${data}" title="Edit">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger delete-unit ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </div>
+                        `;
+                    }
+                }
+            ],
+            responsive: true,
+            order: [[0, 'asc']],
+            pageLength: 25
+        });
+    }
+
+    // Initialize table on load
+    initializeTable();
+
+    // Search functionality
+    $('#searchUnits').on('keyup', function() {
+        unitsTable.search(this.value).draw();
+    });
+
+    // Success callback for unit creation
+    function reloadUnitsTable(data) {
+        unitsTable.ajax.reload();
+    }
+
+    // Edit Unit
+    $(document).on('click', '.edit-unit', function() {
+        const unitId = $(this).data('id');
+        
+        $.get(`/api/units/${unitId}`, function(unit) {
+            $('#editUnitId').val(unit.id);
+            $('#editUnitName').val(unit.name);
+            $('#editUnitModal').modal('show');
+        });
+    });
+
+    // Update Unit Form
+    $('#editUnitForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const unitId = $('#editUnitId').val();
+        const formData = {
+            name: $('#editUnitName').val().trim()
+        };
+
+        $.ajax({
+            url: `/api/units/${unitId}`,
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                $('#editUnitModal').modal('hide');
+                unitsTable.ajax.reload();
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Unit "${formData.name}" has been updated successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 5000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update unit';
+                alert('Error: ' + error);
+            }
+        });
+    });
+
+    // Delete Unit
+    $(document).on('click', '.delete-unit', function() {
+        if ($(this).hasClass('disabled')) {
+            return false;
+        }
+        const unitId = $(this).data('id');
+        const unitName = $(this).data('name');
+        showUnitDeleteModal(unitId, unitName);
+    });
+
+});
+</script>
+{% endblock %}

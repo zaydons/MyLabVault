@@ -1,0 +1,118 @@
+<!-- Standard Simple Add Modal Component (for single-field entities like Panels, Units) -->
+{% macro simple_add_modal(modal_id, entity_name, field_name, field_label, placeholder="", help_text="", examples="", api_endpoint="/api/", icon_class="mdi-plus", form_id="", name_field_id="", success_callback="null") %}
+{% set form_id = form_id or (modal_id.replace('Modal', 'Form')) %}
+{% set name_field_id = name_field_id or (field_name + 'Name') %}
+
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi {{ icon_class }} mr-2"></i>
+          Add New {{ entity_name }}
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="{{ form_id }}">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="{{ name_field_id }}">{{ field_label }} <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="{{ name_field_id }}" name="name" required placeholder="{{ placeholder }}">
+            {% if help_text %}
+            <small class="form-text text-muted">{{ help_text }}</small>
+            {% endif %}
+          </div>
+          {% if examples %}
+          <div class="alert alert-info">
+            <i class="mdi mdi-information mr-2"></i>
+            <strong>Common {{ entity_name }}s:</strong> {{ examples }}
+          </div>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-success">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Save {{ entity_name }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Standard simple add function for {{ entity_name }}
+async function create{{ entity_name.replace(' ', '') }}{{ modal_id.replace('Modal', '').title() }}() {
+    const name = document.getElementById('{{ name_field_id }}').value.trim();
+    
+    if (!name) {
+        alert('{{ field_label }} is required');
+        return;
+    }
+    
+    try {
+        const response = await fetch('{{ api_endpoint }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: name
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            $('#{{ modal_id }}').modal('hide');
+            $('#{{ form_id }}')[0].reset();
+            
+            // Show success message
+            const alertHtml = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-check mr-2"></i>
+                    {{ entity_name }} "${name}" has been added successfully.
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alertHtml);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+            
+            // Execute success callback if provided
+            if ({{ success_callback }} && typeof {{ success_callback }} === 'function') {
+                {{ success_callback }}(data.data);
+            }
+            
+            // Reload page/table if no callback provided
+            if (!{{ success_callback }}) {
+                setTimeout(() => window.location.reload(), 1000);
+            }
+        } else {
+            throw new Error(data.detail || data.message || 'Failed to create {{ entity_name.lower() }}');
+        }
+    } catch (error) {
+        console.error('{{ entity_name }} creation error:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+// Bind form submission
+$('#{{ form_id }}').on('submit', function(e) {
+    e.preventDefault();
+    create{{ entity_name.replace(' ', '') }}{{ modal_id.replace('Modal', '').title() }}();
+});
+
+// Reset form when modal is hidden
+$('#{{ modal_id }}').on('hidden.bs.modal', function() {
+    $('#{{ form_id }}')[0].reset();
+});
+</script>
+{% endmacro %}

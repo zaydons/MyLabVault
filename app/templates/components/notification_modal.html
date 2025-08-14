@@ -1,0 +1,171 @@
+<!-- Standard Notification Modal Component -->
+{% macro notification_modal(modal_id="notificationModal") %}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header" id="{{ modal_id }}Header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi mdi-information mr-2" id="{{ modal_id }}Icon"></i>
+          <span id="{{ modal_id }}Title">Notification</span>
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="{{ modal_id }}Message">Notification message will appear here.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="{{ modal_id }}Btn" data-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Standard notification function
+function showNotification(message, type = 'info', title = null, autoHide = false, duration = 5000) {
+    const modal = document.getElementById('{{ modal_id }}');
+    const header = modal.querySelector('.modal-header');
+    const icon = document.getElementById('{{ modal_id }}Icon');
+    const titleElement = document.getElementById('{{ modal_id }}Title');
+    const messageElement = document.getElementById('{{ modal_id }}Message');
+    const button = document.getElementById('{{ modal_id }}Btn');
+    
+    // Set title
+    titleElement.textContent = title || (type.charAt(0).toUpperCase() + type.slice(1));
+    
+    // Set message
+    messageElement.textContent = message;
+    
+    // Configure based on type
+    const settings = {
+        success: {
+            headerClass: 'modal-header bg-success text-white',
+            iconClass: 'mdi mdi-check-circle',
+            buttonClass: 'btn btn-success'
+        },
+        error: {
+            headerClass: 'modal-header bg-danger text-white',
+            iconClass: 'mdi mdi-alert-circle',
+            buttonClass: 'btn btn-danger'
+        },
+        warning: {
+            headerClass: 'modal-header bg-warning text-white',
+            iconClass: 'mdi mdi-alert',
+            buttonClass: 'btn btn-warning'
+        },
+        info: {
+            headerClass: 'modal-header bg-info text-white',
+            iconClass: 'mdi mdi-information',
+            buttonClass: 'btn btn-info'
+        }
+    };
+    
+    const config = settings[type] || settings.info;
+    
+    // Apply styling
+    header.className = config.headerClass;
+    icon.className = config.iconClass + ' mr-2';
+    button.className = config.buttonClass;
+    
+    // Show modal
+    $('#{{ modal_id }}').modal('show');
+    
+    // Auto-hide if requested
+    if (autoHide) {
+        setTimeout(() => {
+            $('#{{ modal_id }}').modal('hide');
+        }, duration);
+    }
+}
+</script>
+{% endmacro %}
+
+<!-- Standard Confirmation Modal Component -->
+{% macro confirmation_modal(modal_id="confirmationModal") %}
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white" id="{{ modal_id }}Header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi mdi-help-circle mr-2" id="{{ modal_id }}Icon"></i>
+          <span id="{{ modal_id }}Title">Confirm Action</span>
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="{{ modal_id }}Message">Are you sure you want to perform this action?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="{{ modal_id }}ConfirmBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Standard confirmation function
+function showConfirmation(message, type = 'primary', title = null) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('{{ modal_id }}');
+        const header = modal.querySelector('.modal-header');
+        const icon = document.getElementById('{{ modal_id }}Icon');
+        const titleElement = document.getElementById('{{ modal_id }}Title');
+        const messageElement = document.getElementById('{{ modal_id }}Message');
+        const confirmBtn = document.getElementById('{{ modal_id }}ConfirmBtn');
+        
+        // Set title and message
+        titleElement.textContent = title || 'Confirm Action';
+        messageElement.textContent = message;
+        
+        // Configure styling based on type
+        const typeSettings = {
+            danger: {
+                headerClass: 'modal-header bg-danger text-white',
+                iconClass: 'mdi mdi-alert-circle',
+                buttonClass: 'btn btn-danger'
+            },
+            success: {
+                headerClass: 'modal-header bg-success text-white',
+                iconClass: 'mdi mdi-check-circle',
+                buttonClass: 'btn btn-success'
+            },
+            primary: {
+                headerClass: 'modal-header bg-primary text-white',
+                iconClass: 'mdi mdi-help-circle',
+                buttonClass: 'btn btn-primary'
+            }
+        };
+        
+        const config = typeSettings[type] || typeSettings.primary;
+        header.className = config.headerClass;
+        icon.className = config.iconClass + ' mr-2';
+        confirmBtn.className = config.buttonClass;
+        
+        // Handle confirmation
+        const handleConfirm = () => {
+            $('#{{ modal_id }}').modal('hide');
+            $('#{{ modal_id }}').off('hidden.bs.modal', handleCancel);
+            resolve(true);
+        };
+        
+        // Handle cancellation (including modal close)
+        const handleCancel = () => {
+            $('#{{ modal_id }}').off('hidden.bs.modal', handleCancel);
+            resolve(false);
+        };
+        
+        // Bind events
+        confirmBtn.onclick = handleConfirm;
+        $('#{{ modal_id }}').on('hidden.bs.modal', handleCancel);
+        
+        // Show modal
+        $('#{{ modal_id }}').modal('show');
+    });
+}
+</script>
+{% endmacro %}

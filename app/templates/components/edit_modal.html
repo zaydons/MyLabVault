@@ -1,0 +1,154 @@
+<!-- Standard Edit Modal Component (for editing existing entities) -->
+{% macro edit_modal(modal_id, entity_name, fields=[], api_endpoint="", icon_class="mdi-pencil", form_id="", save_button_id="", success_callback="null") %}
+{% set form_id = form_id or (modal_id.replace('Modal', 'Form')) %}
+{% set save_button_id = save_button_id or ("save" + entity_name.replace(' ', '') + "Btn") %}
+
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" role="dialog" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="{{ modal_id }}Label">
+          <i class="mdi {{ icon_class }} mr-2"></i>
+          Edit {{ entity_name }}
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="{{ form_id }}">
+        <div class="modal-body">
+          {% for field in fields %}
+          <div class="form-group">
+            <label for="{{ field.id }}">{{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}</label>
+            {% if field.type == 'select' %}
+            <select class="form-control" id="{{ field.id }}" name="{{ field.name }}"{% if field.required %} required{% endif %}>
+              {% for option in field.options %}
+              <option value="{{ option.value }}">{{ option.text }}</option>
+              {% endfor %}
+            </select>
+            {% elif field.type == 'textarea' %}
+            <textarea class="form-control" id="{{ field.id }}" name="{{ field.name }}"{% if field.required %} required{% endif %} placeholder="{{ field.placeholder or '' }}" rows="{{ field.rows or 3 }}"></textarea>
+            {% else %}
+            <input type="{{ field.type or 'text' }}" class="form-control" id="{{ field.id }}" name="{{ field.name }}"{% if field.required %} required{% endif %} placeholder="{{ field.placeholder or '' }}">
+            {% endif %}
+            {% if field.help_text %}
+            <small class="form-text text-muted">{{ field.help_text }}</small>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">
+            <i class="mdi mdi-close mr-1"></i>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" id="{{ save_button_id }}">
+            <i class="mdi mdi-content-save mr-1"></i>
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Standard edit function for {{ entity_name }}
+let current{{ entity_name.replace(' ', '') }}EditId = null;
+
+// Show edit modal with data
+function show{{ entity_name.replace(' ', '') }}EditModal(id, data) {
+    current{{ entity_name.replace(' ', '') }}EditId = id;
+    
+    // Populate form fields
+    {% for field in fields %}
+    const {{ field.id }}Field = document.getElementById('{{ field.id }}');
+    if ({{ field.id }}Field && data.{{ field.name }}) {
+        {{ field.id }}Field.value = data.{{ field.name }};
+    }
+    {% endfor %}
+    
+    $('#{{ modal_id }}').modal('show');
+}
+
+// Save changes
+async function save{{ entity_name.replace(' ', '') }}Changes() {
+    if (!current{{ entity_name.replace(' ', '') }}EditId) return;
+    
+    const formData = {};
+    {% for field in fields %}
+    const {{ field.id }}Value = document.getElementById('{{ field.id }}').value.trim();
+    {% if field.required %}
+    if (!{{ field.id }}Value) {
+        alert('{{ field.label }} is required');
+        return;
+    }
+    {% endif %}
+    formData.{{ field.name }} = {{ field.id }}Value || null;
+    {% endfor %}
+    
+    try {
+        const response = await fetch(`{{ api_endpoint }}/${current{{ entity_name.replace(' ', '') }}EditId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            $('#{{ modal_id }}').modal('hide');
+            $('#{{ form_id }}')[0].reset();
+            current{{ entity_name.replace(' ', '') }}EditId = null;
+            
+            // Show success message
+            const alertHtml = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-check mr-2"></i>
+                    {{ entity_name }} has been updated successfully.
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alertHtml);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+            
+            // Execute success callback if provided
+            if ({{ success_callback }} && typeof {{ success_callback }} === 'function') {
+                {{ success_callback }}(data.data);
+            }
+            
+            // Reload table if it exists
+            if (typeof {{ entity_name.lower().replace(' ', '') }}sTable !== 'undefined') {
+                {{ entity_name.lower().replace(' ', '') }}sTable.ajax.reload();
+            } else if (typeof table !== 'undefined') {
+                table.ajax.reload();
+            } else {
+                // Fallback to page reload
+                setTimeout(() => window.location.reload(), 1000);
+            }
+        } else {
+            throw new Error(data.detail || data.message || 'Failed to update {{ entity_name.lower() }}');
+        }
+    } catch (error) {
+        console.error('{{ entity_name }} update error:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+// Bind form submission
+$('#{{ form_id }}').on('submit', function(e) {
+    e.preventDefault();
+    save{{ entity_name.replace(' ', '') }}Changes();
+});
+
+// Reset form when modal is hidden
+$('#{{ modal_id }}').on('hidden.bs.modal', function() {
+    $('#{{ form_id }}')[0].reset();
+    current{{ entity_name.replace(' ', '') }}EditId = null;
+});
+</script>
+{% endmacro %}
