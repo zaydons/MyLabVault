@@ -1,13 +1,13 @@
-# Ultra-minimal secure Python image
 FROM python:3.11-alpine3.19
 
 # Install minimal runtime dependencies
 RUN apk add --no-cache \
     curl \
     sqlite \
+    su-exec \
     && rm -rf /var/cache/apk/*
 
-# Create non-root user
+# Create non-root user (optional, for when user specifies --user)
 RUN addgroup -g 1001 -S appuser && \
     adduser -u 1001 -S appuser -G appuser
 
@@ -27,15 +27,13 @@ RUN apk add --no-cache --virtual .build-deps \
     && apk del .build-deps
 
 # Copy application code
-COPY --chown=appuser:appuser . .
+COPY . .
 
 # Create data directory
-RUN mkdir -p /app/data && \
-    chown appuser:appuser /app/data
+RUN mkdir -p /app/data
 
-# Switch to non-root user
-USER appuser
-
+# Run as root by default - this eliminates permission issues with mounted volumes
+# Users can still specify --user flag if they want to run as non-root
 # Environment variables
 ENV PYTHONPATH=/app \
     DATABASE_URL=sqlite:///./data/mylabvault.db \

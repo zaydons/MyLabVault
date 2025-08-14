@@ -52,10 +52,43 @@ MyLabVault is a comprehensive personal health data management system designed to
 
 ### Installation
 
+#### Option 1: Using Pre-built Image (Recommended)
+
+1. **Create docker-compose.yml**
+   ```yaml
+   version: '3.8'
+   services:
+     mylabvault:
+       image: ghcr.io/zaydons/mylabvault:latest
+       ports:
+         - "8000:8000"
+       volumes:
+         - ./data:/app/data
+       restart: unless-stopped
+   ```
+   
+   *Optional: Add health monitoring for production deployments*
+   ```yaml
+   # Add these lines under mylabvault service for health monitoring:
+       healthcheck:
+         test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+         interval: 30s
+         timeout: 10s
+         retries: 3
+         start_period: 40s
+   ```
+
+2. **Start the application**
+   ```bash
+   docker-compose up -d mylabvault
+   ```
+
+#### Option 2: Build from Source
+
 1. **Clone the repository**
    ```bash
-   git clone [<repository-url>](https://github.com/zaydons/MyLabVault.git)
-   cd lablog
+   git clone https://github.com/zaydons/MyLabVault.git
+   cd MyLabVault
    ```
 
 2. **Start the application**
