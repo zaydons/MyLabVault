@@ -751,8 +751,10 @@ def validate_file_path(file_path: Path, allowed_dir: Path) -> Path:
         resolved_file_path = file_path.resolve()
         resolved_allowed_dir = allowed_dir.resolve()
 
-        # Check if the file path is within the allowed directory
-        if not str(resolved_file_path).startswith(str(resolved_allowed_dir)):
+        # Check if the file path is within the allowed directory using Path.relative_to()
+        try:
+            resolved_file_path.relative_to(resolved_allowed_dir)
+        except ValueError:
             raise HTTPException(status_code=403, detail="Access denied: file outside allowed directory")
 
         return resolved_file_path
