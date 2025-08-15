@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Form, R
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 import pypdf
-
+from werkzeug.utils import secure_filename
 from ..database import get_db
 from ..models import PDFImportLog, LabResult, Lab, Provider, Patient, Panel, Unit, ImportTemplate
 from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
@@ -714,12 +714,8 @@ def validate_filename(filename: str) -> str:
     if not filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
 
-    # Remove any path separators and dangerous characters
-    safe_filename = Path(filename).name
-
-    # Check for path traversal attempts
-    if '..' in filename or '/' in filename or '\\' in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename: path traversal not allowed")
+    # Use werkzeug's secure_filename to sanitize the filename
+    safe_filename = secure_filename(filename)
 
     # Ensure filename ends with .pdf
     if not safe_filename.lower().endswith('.pdf'):
@@ -728,6 +724,9 @@ def validate_filename(filename: str) -> str:
     # Check for reasonable filename length
     if len(safe_filename) > 255:
         raise HTTPException(status_code=400, detail="Filename too long")
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid filename after sanitization")
+
 
     return safe_filename
 
