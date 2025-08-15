@@ -454,11 +454,29 @@ $(document).ready(function() {
     initializePatientSwitcher();
 });
 
-// Cookie helper functions
+// Cookie helper functions with enhanced security
 function setCookie(name, value, days) {
+    // Validate inputs
+    if (!name || typeof name !== 'string') {
+        console.error('Invalid cookie name');
+        return;
+    }
+    
     const expires = new Date();
     expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-    document.cookie = name + '=' + value + ';expires=' + expires.toUTCString() + ';path=/';
+    
+    // Use secure cookie settings
+    let cookieString = name + '=' + encodeURIComponent(value) + 
+                      ';expires=' + expires.toUTCString() + 
+                      ';path=/' + 
+                      ';SameSite=Strict';
+    
+    // Add Secure flag if using HTTPS
+    if (location.protocol === 'https:') {
+        cookieString += ';Secure';
+    }
+    
+    document.cookie = cookieString;
 }
 
 // Initialize sidebar state persistence via database
@@ -545,11 +563,22 @@ function loadPatientSwitcher(selectedPatientId) {
 }
 
 function switchToPatient(patientId, patientName) {
+    // Validate patient ID before storing
+    if (!patientId || isNaN(patientId) || patientId <= 0) {
+        console.error('Invalid patient ID provided to switchToPatient');
+        return;
+    }
+    
+    // Validate patient name
+    if (!patientName || typeof patientName !== 'string') {
+        console.error('Invalid patient name provided to switchToPatient');
+        return;
+    }
     
     // Store the selected patient in cookie
     setCookie('selectedPatientId', patientId, 365);
     
-    // Update the current patient display
+    // Update the current patient display with escaped text to prevent XSS
     $('#currentPatientName').text(patientName);
     
     // Simply reload the page - no URL parameters needed

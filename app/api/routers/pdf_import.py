@@ -698,6 +698,68 @@ async def confirm_pdf_import(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error importing results: {str(e)}")
 
+def validate_filename(filename: str) -> str:
+    """
+    Validate and sanitize filename to prevent path injection attacks.
+    
+    Args:
+        filename: The filename to validate
+        
+    Returns:
+        str: Sanitized filename
+        
+    Raises:
+        HTTPException: If filename is invalid or contains dangerous characters
+    """
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename cannot be empty")
+
+    # Remove any path separators and dangerous characters
+    safe_filename = Path(filename).name
+
+    # Check for path traversal attempts
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename: path traversal not allowed")
+
+    # Ensure filename ends with .pdf
+    if not safe_filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+    # Check for reasonable filename length
+    if len(safe_filename) > 255:
+        raise HTTPException(status_code=400, detail="Filename too long")
+
+    return safe_filename
+
+
+def validate_file_path(file_path: Path, allowed_dir: Path) -> Path:
+    """
+    Validate that a file path is within the allowed directory.
+    
+    Args:
+        file_path: The file path to validate
+        allowed_dir: The allowed base directory
+        
+    Returns:
+        Path: Resolved file path if valid
+        
+    Raises:
+        HTTPException: If path is outside allowed directory
+    """
+    try:
+        # Resolve both paths to handle symlinks and relative paths
+        resolved_file_path = file_path.resolve()
+        resolved_allowed_dir = allowed_dir.resolve()
+
+        # Check if the file path is within the allowed directory
+        if not str(resolved_file_path).startswith(str(resolved_allowed_dir)):
+            raise HTTPException(status_code=403, detail="Access denied: file outside allowed directory")
+
+        return resolved_file_path
+    except (OSError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid file path: {str(e)}")
+
+
 @router.get("/file/{filename}")
 async def get_pdf_file(filename: str, download: bool = False, db: Session = Depends(get_db)):
     """
@@ -712,30 +774,43 @@ async def get_pdf_file(filename: str, download: bool = False, db: Session = Depe
         FileResponse: PDF file with appropriate headers
 
     Raises:
-        HTTPException: 404 if file not found
+        HTTPException: 404 if file not found, 400/403 for security violations
 
     Features:
+        - Validates filename to prevent path injection attacks
+        - Ensures file access is restricted to allowed directories
         - Handles both direct file access and database lookup
         - Works with Docker container path differences
         - Sets proper MIME type and disposition for PDF viewing or downloading
         - Supports both inline PDF viewing and forced downloads
     """
+    # Validate and sanitize the filename
+    safe_filename = validate_filename(filename)
+
     # First try to find the file directly
-    file_path = UPLOADS_DIR / filename
+    file_path = UPLOADS_DIR / safe_filename
+
+    # Validate the file path is within allowed directory
+    file_path = validate_file_path(file_path, UPLOADS_DIR)
 
     if not file_path.exists():
         # If not found, look up the actual file path from the database
-        import_log = db.query(PDFImportLog).filter(PDFImportLog.filename == filename).first()
+        import_log = db.query(PDFImportLog).filter(PDFImportLog.filename == safe_filename).first()
         if import_log and import_log.file_path:
             # Convert relative path to absolute path (handles Docker working directory differences)
             actual_file_path = Path("/app") / import_log.file_path
+
+            # Validate the database file path is also within allowed directories
+            app_data_dir = Path("/app/data")
+            actual_file_path = validate_file_path(actual_file_path, app_data_dir)
+
             if actual_file_path.exists():
                 disposition = "attachment" if download else "inline"
                 return FileResponse(
                     path=str(actual_file_path),
                     media_type='application/pdf',
-                    filename=filename,
-                    headers={"Content-Disposition": f'{disposition}; filename="{filename}"'}
+                    filename=safe_filename,
+                    headers={"Content-Disposition": f'{disposition}; filename="{safe_filename}"'}
                 )
 
         raise HTTPException(status_code=404, detail="PDF file not found")
@@ -744,8 +819,8 @@ async def get_pdf_file(filename: str, download: bool = False, db: Session = Depe
     return FileResponse(
         path=str(file_path),
         media_type='application/pdf',
-        filename=filename,
-        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'}
+        filename=safe_filename,
+        headers={"Content-Disposition": f'{disposition}; filename="{safe_filename}"'}
     )
 
 
