@@ -515,3 +515,8 @@ class UserSettings(Base):
         if db:
             db.commit()
             db.refresh(self)
+
+    @property
+    def date_format(self) -> str:
+        """Get the user's preferred date format."""
+        return self.get_option('date_format', 'MM/DD/YYYY')

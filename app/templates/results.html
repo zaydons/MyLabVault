@@ -56,8 +56,8 @@
               </thead>
               <tbody>
                 {% for result in results %}
-                <tr>
-                  <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                <tr data-date="{{ result.date_collected.isoformat() }}">
+                  <td class="format-date">{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
                   <td>
                     {% if result.lab_id %}
                       <a href="/lab/{{ result.lab_id }}" class="lab-link text-primary font-weight-bold" style="text-decoration: none;">
@@ -402,6 +402,11 @@
 {% block extra_scripts %}
 <script>
 $(document).ready(function() {
+    // Initialize date formatting
+    initializeDateFormatting().then(() => {
+        formatAllDates();
+    });
+    
     // Initialize DataTable
     $('#resultsTable').DataTable({
         responsive: true,
@@ -926,6 +931,28 @@ function deleteResult(id) {
             console.error('Error deleting result:', error);
             alert('Failed to delete result. Please try again.');
         });
+    }
+}
+
+/**
+ * Format all dates on the page according to user preference
+ */
+async function formatAllDates() {
+    try {
+        const dateElements = document.querySelectorAll('.format-date');
+        const userFormat = await getUserDateFormat();
+        
+        for (const element of dateElements) {
+            const row = element.closest('tr');
+            const isoDate = row ? row.dataset.date : null;
+            
+            if (isoDate) {
+                const formattedDate = formatDateSync(isoDate, userFormat);
+                element.textContent = formattedDate;
+            }
+        }
+    } catch (error) {
+        console.error('Error formatting dates:', error);
     }
 }
 </script>

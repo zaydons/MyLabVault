@@ -298,3 +298,183 @@ $(document).ready(function() {
         $(this).find('*').blur();
     });
 });
+
+/**
+ * Date Formatting Utilities
+ * Provides user-configurable date formatting based on user preferences
+ */
+
+// Global variable to cache user's date format preference
+let userDateFormat = null;
+
+/**
+ * Get user's preferred date format from API or use default
+ * @returns {Promise<string>} The user's preferred date format
+ */
+async function getUserDateFormat() {
+    if (userDateFormat) {
+        return userDateFormat;
+    }
+    
+    try {
+        const response = await fetch('/api/settings/user');
+        if (response.ok) {
+            const settings = await response.json();
+            userDateFormat = settings.date_format || 'MM/DD/YYYY';
+            return userDateFormat;
+        }
+    } catch (error) {
+        console.warn('Could not fetch user date format:', error);
+    }
+    
+    // Fallback to default US format
+    userDateFormat = 'MM/DD/YYYY';
+    return userDateFormat;
+}
+
+/**
+ * Format a date according to user's preferred format
+ * @param {string|Date} dateInput - The date to format (ISO string, Date object, or other parseable format)
+ * @param {string} format - Optional format override (if not provided, uses user preference)
+ * @returns {Promise<string>} The formatted date string
+ */
+async function formatUserDate(dateInput, format = null) {
+    if (!dateInput) {
+        return 'Not available';
+    }
+    
+    try {
+        // Parse the input date
+        let date;
+        if (dateInput instanceof Date) {
+            date = dateInput;
+        } else {
+            // Handle ISO strings and other formats
+            date = new Date(dateInput);
+        }
+        
+        if (isNaN(date.getTime())) {
+            return 'Invalid date';
+        }
+        
+        // Get format preference if not provided
+        const dateFormat = format || await getUserDateFormat();
+        
+        // Extract date components
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        
+        // Month abbreviations array
+        const monthAbbreviations = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        const monthAbbr = monthAbbreviations[date.getMonth()];
+        
+        // Format according to preference
+        switch (dateFormat) {
+            case 'MM/DD/YYYY':
+                return `${month}/${day}/${year}`;
+            case 'DD/MM/YYYY':
+                return `${day}/${month}/${year}`;
+            case 'YYYY-MM-DD':
+                return `${year}-${month}-${day}`;
+            case 'MM-DD-YYYY':
+                return `${month}-${day}-${year}`;
+            case 'DD-MM-YYYY':
+                return `${day}-${month}-${year}`;
+            case 'DD-MMM-YYYY':
+                return `${day}-${monthAbbr}-${year}`;
+            case 'YYYY-MMM-DD':
+                return `${year}-${monthAbbr}-${day}`;
+            default:
+                return `${month}/${day}/${year}`; // Fallback to US format
+        }
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return 'Invalid date';
+    }
+}
+
+/**
+ * Format a date synchronously using a cached format preference
+ * Use this when you already know the format or for better performance
+ * @param {string|Date} dateInput - The date to format
+ * @param {string} format - The format to use (defaults to MM/DD/YYYY)
+ * @returns {string} The formatted date string
+ */
+function formatDateSync(dateInput, format = 'MM/DD/YYYY') {
+    if (!dateInput) {
+        return 'Not available';
+    }
+    
+    try {
+        // Parse the input date
+        let date;
+        if (dateInput instanceof Date) {
+            date = dateInput;
+        } else {
+            date = new Date(dateInput);
+        }
+        
+        if (isNaN(date.getTime())) {
+            return 'Invalid date';
+        }
+        
+        // Extract date components
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        
+        // Month abbreviations array
+        const monthAbbreviations = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        ];
+        const monthAbbr = monthAbbreviations[date.getMonth()];
+        
+        // Format according to preference
+        switch (format) {
+            case 'MM/DD/YYYY':
+                return `${month}/${day}/${year}`;
+            case 'DD/MM/YYYY':
+                return `${day}/${month}/${year}`;
+            case 'YYYY-MM-DD':
+                return `${year}-${month}-${day}`;
+            case 'MM-DD-YYYY':
+                return `${month}-${day}-${year}`;
+            case 'DD-MM-YYYY':
+                return `${day}-${month}-${year}`;
+            case 'DD-MMM-YYYY':
+                return `${day}-${monthAbbr}-${year}`;
+            case 'YYYY-MMM-DD':
+                return `${year}-${monthAbbr}-${day}`;
+            default:
+                return `${month}/${day}/${year}`;
+        }
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return 'Invalid date';
+    }
+}
+
+/**
+ * Clear cached date format to force refresh from server
+ * Call this after updating user date format preferences
+ */
+function clearDateFormatCache() {
+    userDateFormat = null;
+}
+
+/**
+ * Initialize date formatting by loading user preferences
+ * Call this on page load to cache the user's format preference
+ */
+async function initializeDateFormatting() {
+    try {
+        await getUserDateFormat();
+    } catch (error) {
+        console.warn('Could not initialize date formatting:', error);
+    }
+}

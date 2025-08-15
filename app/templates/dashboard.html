@@ -101,8 +101,8 @@
                 </thead>
                 <tbody>
                   {% for result in dashboard_data.recent_results[:10] %}
-                  <tr>
-                    <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                  <tr data-date="{{ result.date_collected.isoformat() }}">
+                    <td class="format-date">{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
                     <td>
                       {% if result.lab_id %}
                         <a href="/lab/{{ result.lab_id }}" class="lab-link text-primary font-weight-bold" style="text-decoration: none;">
@@ -139,4 +139,37 @@
     </div>
   </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Initialize date formatting
+    initializeDateFormatting().then(() => {
+        formatAllDates();
+    });
+});
+
+/**
+ * Format all dates on the page according to user preference
+ */
+async function formatAllDates() {
+    try {
+        const dateElements = document.querySelectorAll('.format-date');
+        const userFormat = await getUserDateFormat();
+        
+        for (const element of dateElements) {
+            const row = element.closest('tr');
+            const isoDate = row ? row.dataset.date : null;
+            
+            if (isoDate) {
+                const formattedDate = formatDateSync(isoDate, userFormat);
+                element.textContent = formattedDate;
+            }
+        }
+    } catch (error) {
+        console.error('Error formatting dates:', error);
+    }
+}
+</script>
 {% endblock %}

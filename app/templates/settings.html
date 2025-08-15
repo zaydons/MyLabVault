@@ -43,6 +43,29 @@
               </div>
               <small class="form-text text-muted">Toggle between light and dark theme</small>
             </div>
+            
+            <div class="form-group">
+              <label for="dateFormatSelect">
+                <i class="mdi mdi-calendar mr-1"></i>
+                Date Display Format
+              </label>
+              <select class="form-control" id="dateFormatSelect">
+                <option value="MM/DD/YYYY" {{ 'selected' if user_settings.date_format == 'MM/DD/YYYY' or not user_settings.date_format }}></option>
+                <option value="DD/MM/YYYY" {{ 'selected' if user_settings.date_format == 'DD/MM/YYYY' }}></option>
+                <option value="YYYY-MM-DD" {{ 'selected' if user_settings.date_format == 'YYYY-MM-DD' }}></option>
+                <option value="MM-DD-YYYY" {{ 'selected' if user_settings.date_format == 'MM-DD-YYYY' }}></option>
+                <option value="DD-MM-YYYY" {{ 'selected' if user_settings.date_format == 'DD-MM-YYYY' }}></option>
+                <option value="DD-MMM-YYYY" {{ 'selected' if user_settings.date_format == 'DD-MMM-YYYY' }}></option>
+                <option value="YYYY-MMM-DD" {{ 'selected' if user_settings.date_format == 'YYYY-MMM-DD' }}></option>
+              </select>
+              <small class="form-text text-muted">Choose how dates are displayed throughout the application</small>
+              <div class="mt-2">
+                <small class="text-info">
+                  <i class="mdi mdi-information mr-1"></i>
+                  Preview: <span id="dateFormatPreview">Loading...</span>
+                </small>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -179,6 +202,49 @@
 $(document).ready(function() {
     // Load system information on page load
     loadSystemInfo();
+    
+    // Populate dropdown options with previews
+    populateDropdownPreviews();
+    
+    // Initialize date format preview
+    updateDateFormatPreview();
+    
+    // Date format selection handler
+    $('#dateFormatSelect').on('change', function() {
+        const format = $(this).val();
+        updateDateFormatPreview();
+        
+        // Save the setting
+        $.ajax({
+            url: '/api/settings/user',
+            method: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ date_format: format }),
+            success: function(response) {
+                // Clear the cached date format so it gets refreshed
+                if (typeof clearDateFormatCache === 'function') {
+                    clearDateFormatCache();
+                }
+                
+                // Show success message
+                const alert = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="mdi mdi-check mr-2"></i>
+                        Date format updated successfully.
+                        <button type="button" class="close" data-dismiss="alert">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                `;
+                $('.content-header .container-fluid').after(alert);
+                setTimeout(() => $('.alert').fadeOut(), 3000);
+            },
+            error: function(xhr) {
+                const error = xhr.responseJSON?.detail || 'Failed to update date format';
+                alert('Error: ' + error);
+            }
+        });
+    });
     
     // Dark mode toggle
     $('#darkModeToggle').on('change', function() {
@@ -340,6 +406,86 @@ function executeDataReset() {
             // Reset button state
             $('#confirmResetBtn').prop('disabled', false);
             $('#resetBtnText').text('Reset All Data');
+        }
+    });
+}
+
+function updateDateFormatPreview() {
+    const format = $('#dateFormatSelect').val();
+    const today = new Date();
+    
+    // Create a sample date formatting based on the selected format
+    let preview = '';
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    const year = today.getFullYear();
+    
+    // Month abbreviations array
+    const monthAbbreviations = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const monthAbbr = monthAbbreviations[today.getMonth()];
+    
+    switch(format) {
+        case 'MM/DD/YYYY':
+            preview = `${month}/${day}/${year}`;
+            break;
+        case 'DD/MM/YYYY':
+            preview = `${day}/${month}/${year}`;
+            break;
+        case 'YYYY-MM-DD':
+            preview = `${year}-${month}-${day}`;
+            break;
+        case 'MM-DD-YYYY':
+            preview = `${month}-${day}-${year}`;
+            break;
+        case 'DD-MM-YYYY':
+            preview = `${day}-${month}-${year}`;
+            break;
+        case 'DD-MMM-YYYY':
+            preview = `${day}-${monthAbbr}-${year}`;
+            break;
+        case 'YYYY-MMM-DD':
+            preview = `${year}-${monthAbbr}-${day}`;
+            break;
+        default:
+            preview = `${month}/${day}/${year}`;
+    }
+    
+    $('#dateFormatPreview').text(preview);
+}
+
+function populateDropdownPreviews() {
+    const today = new Date();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    const year = today.getFullYear();
+    
+    // Month abbreviations array
+    const monthAbbreviations = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    const monthAbbr = monthAbbreviations[today.getMonth()];
+    
+    // Create preview text for each format
+    const formats = {
+        'MM/DD/YYYY': `${month}/${day}/${year}`,
+        'DD/MM/YYYY': `${day}/${month}/${year}`,
+        'YYYY-MM-DD': `${year}-${month}-${day}`,
+        'MM-DD-YYYY': `${month}-${day}-${year}`,
+        'DD-MM-YYYY': `${day}-${month}-${year}`,
+        'DD-MMM-YYYY': `${day}-${monthAbbr}-${year}`,
+        'YYYY-MMM-DD': `${year}-${monthAbbr}-${day}`
+    };
+    
+    // Update each option with its preview
+    $('#dateFormatSelect option').each(function() {
+        const format = $(this).val();
+        const preview = formats[format];
+        if (preview) {
+            $(this).text(preview);
         }
     });
 }

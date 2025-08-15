@@ -291,6 +291,9 @@ let currentBatchData = null;
 let uploadQueue = [];
 
 $(document).ready(async function() {
+    // Initialize date formatting
+    await initializeDateFormatting();
+    
     // Initialize DataTable
     initializeHistoryTable();
     
@@ -1019,11 +1022,20 @@ function initializeHistoryTable() {
                     }
                 }
             },
-            { data: 'date_collected' },
+            { 
+                data: 'date_collected',
+                render: function(data) {
+                    if (!data) return 'Not detected';
+                    // Return HTML with data attribute for JavaScript formatting
+                    return `<span class="format-date" data-iso-date="${data}">${new Date(data).toLocaleDateString()}</span>`;
+                }
+            },
             { 
                 data: 'created_at',
                 render: function(data) {
-                    return data ? new Date(data).toLocaleDateString() : '';
+                    if (!data) return '';
+                    // Return HTML with data attribute for JavaScript formatting
+                    return `<span class="format-date" data-iso-date="${data}">${new Date(data).toLocaleDateString()}</span>`;
                 }
             },
             {
@@ -1108,6 +1120,11 @@ async function refreshHistory() {
         table.clear();
         table.rows.add(enrichedData);
         table.draw();
+        
+        // Format dates after table is drawn
+        setTimeout(() => {
+            formatAllDatesOnPage();
+        }, 100);
         
         // Update statistics
         updateStatistics(enrichedData);
@@ -1326,6 +1343,11 @@ async function viewImportDetails(importId) {
         displayImportDetails(data);
         $('#importDetailsModal').modal('show');
         
+        // Format dates after modal is shown
+        setTimeout(() => {
+            formatAllDatesOnPage();
+        }, 100);
+        
     } catch (error) {
         console.error('Error loading import details:', error);
         showNotification('Error loading import details: ' + error.message, 'error', 'Load Failed');
@@ -1379,8 +1401,8 @@ function displayImportDetails(importData) {
                 <p><strong>Status:</strong> ${getStatusBadge(importData.status)}</p>
                 <p><strong>Tests Found:</strong> ${importData.total_tests_found}</p>
                 <p><strong>Tests Imported:</strong> ${importData.imported_test_indices ? importData.imported_test_indices.length : (importData.tests_imported || 0)}</p>
-                <p><strong>Date Collected:</strong> ${importData.date_collected ? new Date(importData.date_collected).toLocaleDateString() : 'Not detected'}</p>
-                <p><strong>Import Date:</strong> ${new Date(importData.created_at).toLocaleString()}</p>
+                <p><strong>Date Collected:</strong> ${importData.date_collected ? `<span class="format-date" data-iso-date="${importData.date_collected}">${new Date(importData.date_collected).toLocaleDateString()}</span>` : 'Not detected'}</p>
+                <p><strong>Import Date:</strong> <span class="format-date" data-iso-date="${importData.created_at}">${new Date(importData.created_at).toLocaleString()}</span></p>
                 ${importData.provider_name ? `<p><strong>Current Provider:</strong> ${importData.provider_name}</p>` : ''}
                 ${importData.error_message ? `<p><strong>Error:</strong> <span class="text-danger">${importData.error_message}</span></p>` : ''}
             </div>
@@ -1940,6 +1962,39 @@ async function deleteImport(importId) {
 
 function showImportHistory() {
     document.getElementById('historySection').scrollIntoView({ behavior: 'smooth' });
+}
+
+/**
+ * Format all dates on the page according to user preference
+ */
+async function formatAllDatesOnPage() {
+    try {
+        const dateElements = document.querySelectorAll('.format-date');
+        const userFormat = await getUserDateFormat();
+        
+        for (const element of dateElements) {
+            let isoDate = null;
+            
+            // Try to get ISO date from data attribute
+            if (element.dataset.isoDate) {
+                isoDate = element.dataset.isoDate;
+            }
+            // Fallback: try to get from parent row data attribute
+            else {
+                const row = element.closest('tr');
+                if (row && row.dataset.date) {
+                    isoDate = row.dataset.date;
+                }
+            }
+            
+            if (isoDate) {
+                const formattedDate = formatDateSync(isoDate, userFormat);
+                element.textContent = formattedDate;
+            }
+        }
+    } catch (error) {
+        console.error('Error formatting dates:', error);
+    }
 }
 </script>
 
