@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
@@ -112,12 +113,48 @@ async def upload_pdf(
         problematic_tests = []
         
         for test in parsed_data.get('tests', []):
-            # Find matching lab test
+            # Find matching lab test with improved matching logic
             lab_test = None
             if test.get('name'):
+                test_name = test['name'].strip()
+                
+                # 1. Try exact match first (case insensitive)
                 lab_test = db.query(Lab).filter(
-                    Lab.name.ilike(f"%{test['name']}%")
+                    Lab.name.ilike(test_name)
                 ).first()
+                
+                # 2. If no exact match, try smart matching to avoid incorrect partial matches
+                # This prevents "Hemoglobin" from matching "Hemoglobin A1C"
+                if not lab_test:
+                    all_labs = db.query(Lab).all()
+                    for lab in all_labs:
+                        # Check if the test name matches the beginning of the lab name followed by space or end
+                        # This allows "TSH" to match "TSH (details)" but prevents "Hemoglobin" from matching "Hemoglobin A1C"
+                        lab_name_lower = lab.name.lower()
+                        test_name_lower = test_name.lower()
+                        
+                        # Match if test name is at start and followed by specific delimiters or end of string
+                        # Allow: parentheses, commas, dashes, but NOT spaces followed by letters
+                        if lab_name_lower.startswith(test_name_lower):
+                            if len(lab_name_lower) == len(test_name_lower):
+                                # Exact match
+                                lab_test = lab
+                                break
+                            else:
+                                next_char = lab_name_lower[len(test_name_lower)]
+                                # Allow punctuation or space followed by punctuation
+                                if next_char in '(),-':
+                                    lab_test = lab
+                                    break
+                                elif (next_char == ' ' and 
+                                      len(lab_name_lower) > len(test_name_lower) + 1 and
+                                      lab_name_lower[len(test_name_lower) + 1] in '(),-'):
+                                    lab_test = lab
+                                    break
+                
+                # 3. NO fallback partial matching - if exact and smart matching fail,
+                # it's better to create a new lab test than to incorrectly match
+                # This prevents "Hemoglobin" from matching "Hemoglobin A1c"
 
             test_data = {
                 'name': test.get('name', 'Unknown Test'),
@@ -465,17 +502,46 @@ async def confirm_pdf_import(
 
             test = parsed_data['tests'][test_index]
 
-            # Find or create lab test - use exact match first, then partial
+            # Find or create lab test with improved matching logic
             test_name = test.get('name', '').strip()
+            
+            # 1. Try exact match first (case insensitive)
             lab_test = db.query(Lab).filter(
                 Lab.name.ilike(test_name)
             ).first()
             
+            # 2. If no exact match, try smart matching to avoid incorrect partial matches
+            # This prevents "Hemoglobin" from matching "Hemoglobin A1C"
             if not lab_test:
-                # Try partial match only if exact match fails
-                lab_test = db.query(Lab).filter(
-                    Lab.name.ilike(f"%{test_name}%")
-                ).first()
+                all_labs = db.query(Lab).all()
+                for lab in all_labs:
+                    # Check if the test name matches the beginning of the lab name followed by space or end
+                    # This allows "TSH" to match "TSH (details)" but prevents "Hemoglobin" from matching "Hemoglobin A1C"
+                    lab_name_lower = lab.name.lower()
+                    test_name_lower = test_name.lower()
+                    
+                    # Match if test name is at start and followed by specific delimiters or end of string
+                    # Allow: parentheses, commas, dashes, but NOT spaces followed by letters
+                    if lab_name_lower.startswith(test_name_lower):
+                        if len(lab_name_lower) == len(test_name_lower):
+                            # Exact match
+                            lab_test = lab
+                            break
+                        else:
+                            next_char = lab_name_lower[len(test_name_lower)]
+                            # Allow punctuation or space followed by punctuation
+                            if next_char in '(),-':
+                                lab_test = lab
+                                break
+                            elif (next_char == ' ' and 
+                                  len(lab_name_lower) > len(test_name_lower) + 1 and
+                                  lab_name_lower[len(test_name_lower) + 1] in '(),-'):
+                                lab_test = lab
+                                break
+            
+            # 3. NO fallback partial matching - if exact and smart matching fail,
+            # it's better to create a new lab test than to incorrectly match
+            # This prevents "Hemoglobin" from matching "Hemoglobin A1c"
 
             if not lab_test:
                 # Create a basic lab test if not found - use panel from PDF or default
