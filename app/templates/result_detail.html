@@ -1,0 +1,291 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ result.lab.name if result and result.lab else 'Result Details' }} - MyLabVault{% endblock %}
+
+{% block content %}
+<!-- Content Header -->
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        {% if result %}
+        <h1 class="m-0">
+          <i class="mdi mdi-file-document mr-2"></i>
+          Edit Lab Result: {{ result.lab.name }}
+        </h1>
+        {% else %}
+        <h1 class="m-0">
+          <i class="mdi mdi-file-document mr-2"></i>
+          Result Details
+        </h1>
+        {% endif %}
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <a href="/results" class="btn btn-outline-secondary">
+          <i class="mdi mdi-arrow-left mr-1"></i>
+          Back to Results
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    {% if not result %}
+    <!-- Error State -->
+    <div class="alert alert-danger" role="alert">
+      <h4 class="alert-heading">Error!</h4>
+      <p>Unable to load result details. The lab result may not exist or there might be a connection issue.</p>
+      <a href="/results" class="btn btn-outline-danger">
+        <i class="mdi mdi-arrow-left mr-1"></i>
+        Back to Results
+      </a>
+    </div>
+    {% else %}
+    
+    <!-- Edit Result Form -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-pencil mr-2"></i>
+              Edit Lab Result
+            </h3>
+          </div>
+          <form id="editResultForm">
+            <div class="card-body">
+              <!-- Lab Test Info (Read-only) -->
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label>Lab Test</label>
+                    <input type="text" class="form-control" value="{{ result.lab.name }}" readonly>
+                    <small class="form-text text-muted">Panel: {{ result.lab.panel.name if result.lab.panel else 'Unknown' }}</small>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="resultUnit">Unit</label>
+                    <select class="form-control" id="resultUnit" name="unit_id">
+                      <option value="">Select unit...</option>
+                    </select>
+                    <small class="form-text text-warning">
+                      <i class="mdi mdi-alert mr-1"></i>
+                      Changing the unit will affect all results for this lab test
+                    </small>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Editable Fields -->
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="resultValue">Result Value</label>
+                    <input type="number" class="form-control" id="resultValue" name="result" step="0.01" 
+                           value="{{ result.result if result.result is not none else '' }}" 
+                           placeholder="Enter numeric result">
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="resultText">Result Text</label>
+                    <input type="text" class="form-control" id="resultText" name="result_text" 
+                           value="{{ result.result_text if result.result_text else '' }}" 
+                           placeholder="e.g., Positive, Negative, Normal">
+                  </div>
+                </div>
+              </div>
+              
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="resultDate">Date Collected <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="resultDate" name="date_collected" 
+                           value="{{ result.date_collected.strftime('%Y-%m-%d') }}" required>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="resultProvider">Provider <span class="text-danger">*</span></label>
+                    <select class="form-control" id="resultProvider" name="provider_id" required>
+                      <option value="">Select provider...</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="resultNotes">Notes</label>
+                <textarea class="form-control" id="resultNotes" name="notes" rows="3" 
+                          placeholder="Optional notes about this result">{{ result.notes if result.notes else '' }}</textarea>
+              </div>
+              
+              <!-- Reference Range Info -->
+              <div class="alert alert-info">
+                <h6><i class="mdi mdi-information mr-1"></i> Reference Range</h6>
+                {% if result.lab.ref_low is not none and result.lab.ref_high is not none %}
+                  <p class="mb-0">Normal range: {{ result.lab.ref_low }} - {{ result.lab.ref_high }} {{ result.lab.unit.name if result.lab.unit else '' }}</p>
+                {% elif result.lab.ref_type == 'greater' and result.lab.ref_value is not none %}
+                  <p class="mb-0">Normal: > {{ result.lab.ref_value }} {{ result.lab.unit.name if result.lab.unit else '' }}</p>
+                {% elif result.lab.ref_type == 'less' and result.lab.ref_value is not none %}
+                  <p class="mb-0">Normal: < {{ result.lab.ref_value }} {{ result.lab.unit.name if result.lab.unit else '' }}</p>
+                {% else %}
+                  <p class="mb-0">No reference range defined</p>
+                {% endif %}
+              </div>
+            </div>
+            <div class="card-footer">
+              <button type="submit" class="btn btn-success">
+                <i class="mdi mdi-content-save mr-1"></i>
+                Update Result
+              </button>
+              <a href="/results" class="btn btn-secondary ml-2">
+                <i class="mdi mdi-close mr-1"></i>
+                Cancel
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Load providers for the dropdown
+    function loadProviders() {
+        $.get('/api/providers/', function(providers) {
+            const providerSelect = $('#resultProvider');
+            providerSelect.empty().append('<option value="">Select provider...</option>');
+            providers.forEach(provider => {
+                const selected = provider.id === {{ result.provider.id if result.provider else 'null' }} ? 'selected' : '';
+                providerSelect.append(`<option value="${provider.id}" ${selected}>${provider.name}</option>`);
+            });
+        });
+    }
+    
+    // Load units for the dropdown
+    function loadUnits() {
+        $.get('/api/units/', function(units) {
+            const unitSelect = $('#resultUnit');
+            unitSelect.empty().append('<option value="">Select unit...</option>');
+            units.forEach(unit => {
+                const selected = unit.id === {{ result.lab.unit.id if result.lab.unit else 'null' }} ? 'selected' : '';
+                unitSelect.append(`<option value="${unit.id}" ${selected}>${unit.name}</option>`);
+            });
+        });
+    }
+    
+    // Load providers and units on page load
+    loadProviders();
+    loadUnits();
+    
+    // Handle form submission
+    $('#editResultForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            lab_id: {{ result.lab.id }},
+            provider_id: parseInt($('#resultProvider').val()),
+            patient_id: {{ result.patient.id }},
+            result: $('#resultValue').val() ? parseFloat($('#resultValue').val()) : null,
+            result_text: $('#resultText').val().trim() || null,
+            date_collected: $('#resultDate').val(),
+            notes: $('#resultNotes').val().trim() || null
+        };
+        
+        const selectedUnitId = parseInt($('#resultUnit').val()) || null;
+        const originalUnitId = {{ result.lab.unit.id if result.lab.unit else 'null' }};
+        
+        // Validation
+        if (!formData.provider_id || !formData.date_collected) {
+            showNotification('Please fill in all required fields', 'warning', 'Validation Error');
+            return;
+        }
+        
+        if (!formData.result && !formData.result_text) {
+            showNotification('Please provide either a numeric result or result text', 'warning', 'Validation Error');
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = $('#editResultForm button[type="submit"]');
+        submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i> Updating...');
+        
+        // Function to update the result
+        function updateResult() {
+            $.ajax({
+                url: '/api/results/{{ result.id }}',
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    // Show success message using global notification system
+                    showNotification('Lab result has been updated successfully.', 'success', 'Update Successful');
+                    
+                    // Redirect back to results page after a short delay
+                    setTimeout(() => window.location.href = '/results', 1500);
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.detail || 'Failed to update lab result';
+                    showNotification(error, 'error', 'Update Failed');
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Update Result');
+                }
+            });
+        }
+        
+        // Check if unit needs to be updated
+        if (selectedUnitId !== originalUnitId) {
+            // First get the current lab data
+            $.get('/api/labs/{{ result.lab.id }}', function(labData) {
+                // Update lab with new unit
+                const updatedLabData = {
+                    name: labData.name,
+                    panel_id: labData.panel_id,
+                    unit_id: selectedUnitId,
+                    ref_low: labData.ref_low,
+                    ref_high: labData.ref_high,
+                    ref_type: labData.ref_type,
+                    ref_value: labData.ref_value
+                };
+                
+                $.ajax({
+                    url: '/api/labs/{{ result.lab.id }}',
+                    method: 'PUT',
+                    contentType: 'application/json',
+                    data: JSON.stringify(updatedLabData),
+                    success: function() {
+                        // After lab is updated, update the result
+                        updateResult();
+                    },
+                    error: function(xhr) {
+                        const error = xhr.responseJSON?.detail || 'Failed to update lab unit';
+                        showNotification('Error updating lab unit: ' + error, 'error', 'Update Failed');
+                        submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Update Result');
+                    }
+                });
+            }).fail(function() {
+                showNotification('Failed to fetch lab data', 'error', 'Update Failed');
+                submitBtn.prop('disabled', false).html('<i class="mdi mdi-content-save mr-1"></i> Update Result');
+            });
+        } else {
+            // No unit change, just update the result
+            updateResult();
+        }
+    });
+});
+</script>
+{% endblock %}

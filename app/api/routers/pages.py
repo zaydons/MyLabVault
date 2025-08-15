@@ -2,8 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models import (
@@ -19,7 +18,6 @@ from ..models import (
 from sqlalchemy import func
 
 router = APIRouter()
-import os
 from pathlib import Path
 
 # Get the correct path to templates directory
@@ -39,7 +37,7 @@ def get_result_status(result_value, ref_low, ref_high):
     """Determine the status of a lab result based on reference ranges."""
     if ref_low is None or ref_high is None:
         return 'normal'
-    
+
     try:
         numeric_value = float(result_value)
         if numeric_value < ref_low:
@@ -103,10 +101,10 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
     """Dashboard page with server-side rendering."""
     # Get user settings
     user_settings = UserSettingsModel.get_settings(db)
-    
+
     # Get selected patient from cookie
     patient_id = get_selected_patient_id(request)
-    
+
     # Build base queries
     results_query = db.query(LabResultModel)
     recent_results_query = (
@@ -117,24 +115,24 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
             joinedload(LabResultModel.patient)
         )
     )
-    
+
     # Filter by patient
     results_query = results_query.filter(LabResultModel.patient_id == patient_id)
     recent_results_query = recent_results_query.filter(LabResultModel.patient_id == patient_id)
-    
+
     # Get dashboard statistics
     total_results = results_query.count()
     recent_results_count = results_query.count()  # Could add date filtering
     total_labs = db.query(LabModel).count()  # Labs are shared across patients
     total_providers = db.query(ProviderModel).count()  # Providers are shared across patients
-    
+
     # Get recent results
     recent_results = (
         recent_results_query.order_by(LabResultModel.date_collected.desc())
         .limit(10)
         .all()
     )
-    
+
     dashboard_data = {
         "stats": {
             "total_results": total_results,
@@ -144,7 +142,7 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
         },
         "recent_results": recent_results
     }
-    
+
     return templates.TemplateResponse(
         "dashboard.html", 
         {
@@ -160,10 +158,10 @@ def results_page(request: Request, db: Session = Depends(get_db)):
     """Results page with server-side rendering and DataTables."""
     # Get user settings
     user_settings = UserSettingsModel.get_settings(db)
-    
+
     # Get selected patient from cookie
     patient_id = get_selected_patient_id(request)
-    
+
     # Build query for results with relationships
     query = (
         db.query(LabResultModel)
@@ -174,17 +172,17 @@ def results_page(request: Request, db: Session = Depends(get_db)):
             joinedload(LabResultModel.patient)
         )
     )
-    
+
     # Filter by patient
     query = query.filter(LabResultModel.patient_id == patient_id)
-    
+
     # Get results with ordering and limit
     results = (
         query.order_by(LabResultModel.date_collected.desc())
         .limit(1000)  # Reasonable limit for DataTables performance
         .all()
     )
-    
+
     return templates.TemplateResponse(
         "results.html",
         {
@@ -200,10 +198,10 @@ def lab_detail_page(request: Request, lab_id: int, db: Session = Depends(get_db)
     """Individual lab detail page with results history and chart."""
     # Get user settings
     user_settings = UserSettingsModel.get_settings(db)
-    
+
     # Get selected patient from cookie
     patient_id = get_selected_patient_id(request)
-    
+
     # Get the lab information
     lab_info = (
         db.query(LabModel)
@@ -214,7 +212,7 @@ def lab_detail_page(request: Request, lab_id: int, db: Session = Depends(get_db)
         .filter(LabModel.id == lab_id)
         .first()
     )
-    
+
     if not lab_info:
         # Lab not found, render with error state
         return templates.TemplateResponse(
@@ -227,7 +225,7 @@ def lab_detail_page(request: Request, lab_id: int, db: Session = Depends(get_db)
                 "pending_imports_count": get_pending_imports_count(db)
             }
         )
-    
+
     # Build query for results for this specific lab
     query = (
         db.query(LabResultModel)
@@ -237,14 +235,14 @@ def lab_detail_page(request: Request, lab_id: int, db: Session = Depends(get_db)
         )
         .filter(LabResultModel.lab_id == lab_id)
     )
-    
+
     # Filter by patient if specified
     if patient_id:
         query = query.filter(LabResultModel.patient_id == patient_id)
-    
+
     # Get lab results
     lab_results = query.order_by(LabResultModel.date_collected.desc()).all()
-    
+
     return templates.TemplateResponse(
         "lab.html",
         {
@@ -261,30 +259,30 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
     """Charts page with panel and individual lab dropdowns."""
     # Get user settings
     user_settings = UserSettingsModel.get_settings(db)
-    
+
     # Get selected patient from cookie
     patient_id = get_selected_patient_id(request)
-    
+
     # Get panels with lab counts, optionally filtered by patient
     panels_query = (
         db.query(PanelModel)
         .join(LabModel, PanelModel.id == LabModel.panel_id)
     )
-    
+
     if patient_id:
         # Only show panels that have labs with results for the specified patient
         panels_query = (
             panels_query.join(LabResultModel, LabModel.id == LabResultModel.lab_id)
             .filter(LabResultModel.patient_id == patient_id)
         )
-    
+
     panels = (
         panels_query.add_columns(func.count(LabModel.id.distinct()).label('lab_count'))
         .group_by(PanelModel.id)
         .having(func.count(LabModel.id.distinct()) > 0)
         .all()
     )
-    
+
     # Format panels with lab counts
     panels_data = []
     for panel, lab_count in panels:
@@ -293,7 +291,7 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
             'name': panel.name,
             'lab_count': lab_count
         })
-    
+
     # Get grouped labs for individual dropdown
     grouped_labs = []
     for panel, lab_count in panels:
@@ -307,17 +305,17 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
             )
             .outerjoin(LabResultModel, LabModel.id == LabResultModel.lab_id)
         )
-        
+
         # Filter by patient if specified
         if patient_id:
             result_count_query = result_count_query.filter(LabResultModel.patient_id == patient_id)
-        
+
         labs = (
             result_count_query.group_by(LabModel.id)
             .order_by(LabModel.name)
             .all()
         )
-        
+
         lab_list = []
         for lab, result_count in labs:
             lab_list.append({
@@ -325,13 +323,13 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
                 'name': lab.name,
                 'result_count': result_count or 0
             })
-        
+
         if lab_list:  # Only include panels that have labs
             grouped_labs.append({
                 'name': panel.name,
                 'labs': lab_list
             })
-    
+
     return templates.TemplateResponse(
         "charts.html",
         {
@@ -377,3 +375,44 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 def patients_page(request: Request, db: Session = Depends(get_db)):
     """Patient management page."""
     return _render_simple_page("patients.html", request, db)
+
+@router.get("/result/{result_id}")
+def result_detail_page(request: Request, result_id: int, db: Session = Depends(get_db)):
+    """Individual result detail page for editing."""
+    # Get user settings
+    user_settings = UserSettingsModel.get_settings(db)
+
+    # Get the specific result with all relationships
+    result = (
+        db.query(LabResultModel)
+        .options(
+            joinedload(LabResultModel.lab).joinedload(LabModel.unit),
+            joinedload(LabResultModel.lab).joinedload(LabModel.panel),
+            joinedload(LabResultModel.provider),
+            joinedload(LabResultModel.patient)
+        )
+        .filter(LabResultModel.id == result_id)
+        .first()
+    )
+
+    if not result:
+        # Result not found, render with error state
+        return templates.TemplateResponse(
+            "result_detail.html",
+            {
+                "request": request,
+                "result": None,
+                "user_settings": user_settings.to_dict(),
+                "pending_imports_count": get_pending_imports_count(db)
+            }
+        )
+
+    return templates.TemplateResponse(
+        "result_detail.html",
+        {
+            "request": request,
+            "result": result,
+            "user_settings": user_settings.to_dict(),
+            "pending_imports_count": get_pending_imports_count(db)
+        }
+    )

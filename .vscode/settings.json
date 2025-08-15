@@ -1,0 +1,22 @@
+{
+    "files.associations": {
+        "*.html": "jinja-html"
+    },
+    "emmet.includeLanguages": {
+        "jinja-html": "html"
+    },
+    "javascript.validate.enable": false,
+    "typescript.validate.enable": false,
+    "html.validate.scripts": false,
+    "html.validate.styles": false,
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true
+    },
+    "python.defaultInterpreterPath": "/usr/local/bin/python3",
+    "editor.formatOnSave": false,
+    "html.format.enable": false,
+    "css.validate": false,
+    "scss.validate": false,
+    "less.validate": false
+}

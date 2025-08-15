@@ -1,12 +1,13 @@
 """MyLabVault API"""
 
-import os
+import logging
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-import logging
+from fastapi.staticfiles import StaticFiles
+
 
 from . import __version__, __author__, __description__
 # Import database components with error handling
@@ -54,6 +55,9 @@ app.add_middleware(
 	allow_methods=["GET", "POST", "PUT", "DELETE"],
 	allow_headers=["*"],
 )
+
+# Mount static files
+app.mount("/static", StaticFiles(directory=Path(__file__).parent.parent / "static"), name="static")
 
 @app.on_event("startup")
 async def startup_event():

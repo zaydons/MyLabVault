@@ -28,6 +28,9 @@
 </div>
 
 <script>
+// @ts-nocheck
+// eslint-disable
+/* jshint ignore:start */
 // Standard details modal function
 function show{{ entity_name.replace(' ', '') }}Details(id, data = null, title = null) {
     const modal = document.getElementById('{{ modal_id }}');
@@ -109,6 +112,7 @@ async function fetch{{ entity_name.replace(' ', '') }}Details(id) {
         `;
     }
 }
+/* jshint ignore:end */
 </script>
 {% endmacro %}
 
@@ -143,84 +147,14 @@ async function fetch{{ entity_name.replace(' ', '') }}Details(id) {
         </div>
       </div>
       <div class="modal-footer">
-        <a id="{{ modal_id }}DownloadBtn" href="#" class="btn btn-outline-primary" target="_blank" style="display: none;">
+        <button id="{{ modal_id }}DownloadBtn" type="button" class="btn btn-outline-primary" style="display: none;" onclick="downloadCurrentPDF()">
           <i class="mdi mdi-download mr-1"></i>
           Download PDF
-        </a>
+        </button>
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
 </div>
 
-<script>
-// Standard PDF modal function
-function showPDF(filename, title = null) {
-    const modal = document.getElementById('{{ modal_id }}');
-    const titleElement = document.getElementById('{{ modal_id }}Title');
-    const iframe = document.getElementById('{{ modal_id }}Iframe');
-    const loadingMessage = document.getElementById('{{ modal_id }}LoadingMessage');
-    const errorMessage = document.getElementById('{{ modal_id }}ErrorMessage');
-    const downloadBtn = document.getElementById('{{ modal_id }}DownloadBtn');
-    
-    try {
-        // Set title
-        titleElement.textContent = title || filename || 'PDF Viewer';
-        
-        // Reset modal state
-        iframe.style.display = 'none';
-        loadingMessage.style.display = 'block';
-        errorMessage.style.display = 'none';
-        downloadBtn.style.display = 'none';
-        iframe.src = '';
-        
-        // Show modal
-        $('#{{ modal_id }}').modal('show');
-        
-        // Set iframe source after modal is shown
-        $('#{{ modal_id }}').on('shown.bs.modal', function() {
-            const pdfUrl = `/api/pdf/file/${encodeURIComponent(filename)}`;
-            iframe.src = pdfUrl;
-            downloadBtn.href = pdfUrl;
-            downloadBtn.style.display = 'inline-block';
-            
-            // Handle iframe load
-            iframe.onload = function() {
-                loadingMessage.style.display = 'none';
-                iframe.style.display = 'block';
-            };
-            
-            iframe.onerror = function() {
-                loadingMessage.style.display = 'none';
-                errorMessage.style.display = 'block';
-            };
-            
-            // Remove event handler after first use
-            $('#{{ modal_id }}').off('shown.bs.modal');
-        });
-        
-    } catch (error) {
-        console.error('Error showing PDF modal:', error);
-        showNotification('Unable to display PDF: ' + error.message, 'error', 'PDF Viewer Error');
-    }
-}
-
-// Clear PDF iframe when modal closes to save memory
-$(document).ready(function() {
-    $('#{{ modal_id }}').on('hidden.bs.modal', function() {
-        document.getElementById('{{ modal_id }}Iframe').src = '';
-    });
-    
-    // Improve accessibility by managing focus when modal is shown/hidden
-    $('#{{ modal_id }}').on('shown.bs.modal', function() {
-        // Remove aria-hidden after modal is fully shown
-        $(this).removeAttr('aria-hidden');
-    });
-    
-    $('#{{ modal_id }}').on('hide.bs.modal', function() {
-        // Clear focus from any elements inside the modal before hiding
-        $(this).find('*').blur();
-    });
-});
-</script>
 {% endmacro %}

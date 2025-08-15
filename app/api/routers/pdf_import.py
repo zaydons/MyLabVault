@@ -633,16 +633,17 @@ async def confirm_pdf_import(
         raise HTTPException(status_code=500, detail=f"Error importing results: {str(e)}")
 
 @router.get("/file/{filename}")
-async def get_pdf_file(filename: str, db: Session = Depends(get_db)):
+async def get_pdf_file(filename: str, download: bool = False, db: Session = Depends(get_db)):
     """
-    Serve PDF file for viewing in frontend.
+    Serve PDF file for viewing in frontend or force download.
 
     Args:
         filename: Name of the PDF file to serve
+        download: If True, force download; if False, display inline
         db: Database session dependency
 
     Returns:
-        FileResponse: PDF file with appropriate headers for inline viewing
+        FileResponse: PDF file with appropriate headers
 
     Raises:
         HTTPException: 404 if file not found
@@ -650,8 +651,8 @@ async def get_pdf_file(filename: str, db: Session = Depends(get_db)):
     Features:
         - Handles both direct file access and database lookup
         - Works with Docker container path differences
-        - Sets proper MIME type and disposition for PDF viewing
-        - Supports inline PDF viewing in browsers
+        - Sets proper MIME type and disposition for PDF viewing or downloading
+        - Supports both inline PDF viewing and forced downloads
     """
     # First try to find the file directly
     file_path = UPLOADS_DIR / filename
@@ -663,20 +664,22 @@ async def get_pdf_file(filename: str, db: Session = Depends(get_db)):
             # Convert relative path to absolute path (handles Docker working directory differences)
             actual_file_path = Path("/app") / import_log.file_path
             if actual_file_path.exists():
+                disposition = "attachment" if download else "inline"
                 return FileResponse(
                     path=str(actual_file_path),
                     media_type='application/pdf',
                     filename=filename,
-                    headers={"Content-Disposition": f'inline; filename="{filename}"'}
+                    headers={"Content-Disposition": f'{disposition}; filename="{filename}"'}
                 )
 
         raise HTTPException(status_code=404, detail="PDF file not found")
 
+    disposition = "attachment" if download else "inline"
     return FileResponse(
         path=str(file_path),
         media_type='application/pdf',
         filename=filename,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'}
     )
 
 

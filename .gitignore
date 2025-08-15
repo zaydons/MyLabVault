@@ -58,7 +58,11 @@ tmp/
 Thumbs.db
 
 # IDE
-.vscode/
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/c_cpp_properties.json
+.vscode/extensions.json
+# Allow .vscode/settings.json to be committed
 .idea/
 *.swp
 *.swo
@@ -67,3 +71,4 @@ Thumbs.db
 
 # Misc
 docs/
+

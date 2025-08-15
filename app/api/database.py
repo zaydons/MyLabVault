@@ -33,7 +33,6 @@ def get_db():
 def run_migrations():
     """Run Alembic migrations if available."""
     try:
-        from pathlib import Path
         from alembic.config import Config
         from alembic import command
         

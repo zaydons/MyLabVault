@@ -1129,82 +1129,18 @@ function updateStatistics(imports) {
 }
 
 function viewPDF(filename) {
-    
-    // Show PDF in modal
+    // Use the standardized showPDF function from the PDF modal component
     try {
-        const pdfUrl = `/api/pdf/file/${filename}`;
-        
-        // Set modal content
-        document.getElementById('pdfModalTitle').textContent = filename;
-        document.getElementById('pdfDownloadLink').href = pdfUrl;
-        
-        // Reset modal state
-        const iframe = document.getElementById('pdfViewer');
-        const loadingMessage = document.getElementById('pdfLoadingMessage');
-        const fallbackDiv = document.getElementById('pdfFallback');
-        
-        iframe.src = '';
-        iframe.style.display = 'none';
-        loadingMessage.style.display = 'block';
-        fallbackDiv.style.display = 'none';
-        
-        $('#pdfModal').modal('show');
-        
-        // Set iframe source after modal is shown
-        $('#pdfModal').on('shown.bs.modal', function() {
-            // Set up event handlers before setting the source
-            iframe.onload = handlePDFLoad;
-            iframe.onerror = handlePDFError;
-            
-            iframe.src = pdfUrl;
-            // Remove the event listener to prevent multiple bindings
-            $('#pdfModal').off('shown.bs.modal');
-        });
-        
+        showPDF(filename, filename);
     } catch (error) {
         console.error('Error showing PDF modal:', error);
         showNotification('Unable to display PDF in modal: ' + error.message, 'error', 'PDF Viewer Error');
     }
 }
 
-function handlePDFLoad() {
-    document.getElementById('pdfLoadingMessage').style.display = 'none';
-    document.getElementById('pdfViewer').style.display = 'block';
-    document.getElementById('pdfFallback').style.display = 'none';
-}
 
-function handlePDFError() {
-    document.getElementById('pdfLoadingMessage').style.display = 'none';
-    document.getElementById('pdfViewer').style.display = 'none';
-    document.getElementById('pdfFallback').style.display = 'block';
-}
-
-function openPDFInNewTab() {
-    // Get the current PDF URL from the iframe
-    const pdfSrc = document.getElementById('pdfViewer').src;
-    if (pdfSrc) {
-        window.open(pdfSrc, '_blank');
-    }
-}
-
-// Clear PDF iframe when modal closes to save memory
+// Handle PDF view button clicks using event delegation
 $(document).ready(function() {
-    $('#pdfModal').on('hidden.bs.modal', function() {
-        document.getElementById('pdfViewer').src = '';
-    });
-    
-    // Improve accessibility by managing focus when modal is shown/hidden
-    $('#pdfModal').on('shown.bs.modal', function() {
-        // Remove aria-hidden after modal is fully shown
-        $(this).removeAttr('aria-hidden');
-    });
-    
-    $('#pdfModal').on('hide.bs.modal', function() {
-        // Clear focus from any elements inside the modal before hiding
-        $(this).find(':focus').blur();
-    });
-    
-    // Handle PDF view button clicks using event delegation
     $(document).on('click', '.view-pdf-btn', function() {
         const filename = $(this).data('filename');
         if (filename) {
@@ -1400,6 +1336,18 @@ function displayImportDetails(importData) {
     const content = document.getElementById('importDetailsContent');
     const processBtn = document.getElementById('processImportBtn');
     
+    // Determine if there are remaining tests to import
+    let hasRemainingTests = false;
+    let totalTests = 0;
+    let importedTests = 0;
+    
+    if (importData.parsed_data) {
+        const parsedData = typeof importData.parsed_data === 'string' ? JSON.parse(importData.parsed_data) : importData.parsed_data;
+        totalTests = parsedData.tests ? parsedData.tests.length : 0;
+        importedTests = importData.imported_test_indices ? importData.imported_test_indices.length : 0;
+        hasRemainingTests = importedTests < totalTests;
+    }
+    
     // Show process button for pending imports or completed imports with remaining tests
     if (importData.status === 'pending') {
         processBtn.style.display = 'inline-block';
@@ -1409,25 +1357,16 @@ function displayImportDetails(importData) {
         setTimeout(() => {
             updateProcessButtonText();
         }, 100);
-    } else if (importData.status === 'completed') {
-        // For completed imports, check if there are any unimported tests
-        const parsedData = typeof importData.parsed_data === 'string' ? JSON.parse(importData.parsed_data) : importData.parsed_data;
-        const totalTests = parsedData.tests ? parsedData.tests.length : 0;
-        const importedTests = importData.imported_test_indices ? importData.imported_test_indices.length : 0;
+    } else if (importData.status === 'completed' && hasRemainingTests) {
+        // There are remaining tests to import
+        processBtn.style.display = 'inline-block';
+        processBtn.setAttribute('data-import-id', importData.id);
         
-        if (importedTests < totalTests) {
-            // There are remaining tests to import
-            processBtn.style.display = 'inline-block';
-            processBtn.setAttribute('data-import-id', importData.id);
-            
-            // Set up button text after a short delay to ensure checkboxes are rendered
-            setTimeout(() => {
-                updateProcessButtonText();
-                updateSelectAllState();
-            }, 100);
-        } else {
-            processBtn.style.display = 'none';
-        }
+        // Set up button text after a short delay to ensure checkboxes are rendered
+        setTimeout(() => {
+            updateProcessButtonText();
+            updateSelectAllState();
+        }, 100);
     } else {
         processBtn.style.display = 'none';
     }
@@ -1445,8 +1384,11 @@ function displayImportDetails(importData) {
                 ${importData.provider_name ? `<p><strong>Current Provider:</strong> ${importData.provider_name}</p>` : ''}
                 ${importData.error_message ? `<p><strong>Error:</strong> <span class="text-danger">${importData.error_message}</span></p>` : ''}
             </div>
-        </div>
-        
+        </div>`;
+    
+    // Only show Provider Selection section if there are remaining tests to import
+    if (importData.status === 'pending' || hasRemainingTests) {
+        html += `
         <hr>
         <div class="row">
             <div class="col-md-12">
@@ -1482,8 +1424,8 @@ function displayImportDetails(importData) {
                     </div>
                 </div>
             </div>
-        </div>
-    `;
+        </div>`;
+    }
     
     // Add parsed test data if available
     if (importData.parsed_data) {
@@ -1493,13 +1435,20 @@ function displayImportDetails(importData) {
                 html += `
                     <hr>
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="mb-0"><strong>Parsed Test Data</strong></h6>
+                        <h6 class="mb-0"><strong>Parsed Test Data</strong></h6>`;
+                
+                // Only show Select All/Remaining Tests checkbox if there are tests that can be imported
+                if (importData.status === 'pending' || hasRemainingTests) {
+                    html += `
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="selectAllTests" ${importData.status === 'pending' ? 'checked' : ''}>
                             <label class="form-check-label" for="selectAllTests">
                                 ${importData.status === 'completed' ? 'Select Remaining Tests' : 'Select All Tests'}
                             </label>
-                        </div>
+                        </div>`;
+                }
+                
+                html += `
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-striped">
@@ -1683,6 +1632,16 @@ function displayImportDetails(importData) {
                         </table>
                     </div>
                 `;
+                
+                // Add completion notice if all tests are imported
+                if (importData.status === 'completed' && !hasRemainingTests) {
+                    html += `
+                        <div class="alert alert-success mt-3">
+                            <i class="mdi mdi-check-circle mr-2"></i>
+                            <strong>Import Complete!</strong> All ${totalTests} test${totalTests !== 1 ? 's' : ''} from this PDF have been successfully imported.
+                        </div>
+                    `;
+                }
             }
         } catch (e) {
             console.warn('Could not parse test data:', e);
@@ -1691,8 +1650,10 @@ function displayImportDetails(importData) {
     
     content.innerHTML = html;
     
-    // Load providers for the modal dropdown
-    loadModalProviders(importData.provider_id);
+    // Only load providers if the provider selection section is shown
+    if (importData.status === 'pending' || hasRemainingTests) {
+        loadModalProviders(importData.provider_id);
+    }
 }
 
 async function loadModalProviders(selectedProviderId) {
