@@ -18,8 +18,17 @@ depends_on = None
 
 def upgrade():
     """Remove provider_name column since we now use provider relationship."""
-    # Remove the provider_name column from pdf_import_logs table
-    op.drop_column('pdf_import_logs', 'provider_name')
+    # Check if the column exists before trying to drop it
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    columns = [col['name'] for col in inspector.get_columns('pdf_import_logs')]
+    
+    if 'provider_name' in columns:
+        # Remove the provider_name column from pdf_import_logs table
+        op.drop_column('pdf_import_logs', 'provider_name')
+    else:
+        # Column doesn't exist, migration already applied or column was never created
+        pass
 
 
 def downgrade():
