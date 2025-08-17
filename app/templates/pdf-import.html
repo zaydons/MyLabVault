@@ -768,7 +768,7 @@ function showNewProviderModal(fileIndex = null) {
     
     // Store which file this provider is for (if any)
     const modal = document.getElementById('newProviderModal');
-    modal.setAttribute('data-file-index', fileIndex || '');
+    modal.setAttribute('data-file-index', fileIndex !== null ? fileIndex : '');
     
     $('#newProviderModal').modal('show');
 }
@@ -814,7 +814,7 @@ async function createNewProvider() {
             });
             
             // If created for specific file, select it for that file
-            if (fileIndex && fileIndex !== '') {
+            if (fileIndex !== null && fileIndex !== '') {
                 const targetSelect = document.getElementById(`provider-${fileIndex}`);
                 if (targetSelect) {
                     targetSelect.value = provider.id;
