@@ -199,7 +199,7 @@ def get_panel_charts_data(panel_id: int, request: Request, db: Session = Depends
         panel_data.append({
             'id': lab.id,
             'name': lab.name,
-            'unit': lab.unit.name if lab.unit else None,
+            'unit': {'id': lab.unit.id, 'name': lab.unit.name} if lab.unit else None,
             'ref_low': lab.ref_low,
             'ref_high': lab.ref_high,
             'results': formatted_results
