@@ -944,38 +944,30 @@ function initializeHistoryTable() {
             { data: 'filename' },
             { 
                 data: 'status',
+                className: 'text-center',
                 render: function(data, type, row) {
                     const statusConfig = {
                         'pending': {
-                            icon: 'mdi-clock-outline',
-                            class: 'badge-warning-enhanced',
-                            text: 'Ready to Process',
-                            bgClass: 'status-pending'
+                            emoji: '⏳',
+                            title: 'Pending - Ready to Process'
                         },
                         'completed': {
-                            icon: 'mdi-check-circle',
-                            class: 'badge-success-enhanced', 
-                            text: 'Completed',
-                            bgClass: 'status-completed'
+                            emoji: '✅',
+                            title: 'Completed Successfully'
                         },
                         'failed': {
-                            icon: 'mdi-alert-circle',
-                            class: 'badge-danger-enhanced',
-                            text: 'Failed',
-                            bgClass: 'status-failed'
+                            emoji: '❌',
+                            title: 'Failed to Process'
                         }
                     };
                     
                     const config = statusConfig[data] || {
-                        icon: 'mdi-help-circle',
-                        class: 'badge-secondary',
-                        text: data,
-                        bgClass: 'status-unknown'
+                        emoji: '❓',
+                        title: data || 'Unknown Status'
                     };
                     
-                    return `<span class="status-badge ${config.class}" data-status="${data}">
-                              <i class="mdi ${config.icon} mr-1"></i>
-                              ${config.text}
+                    return `<span style="font-size: 1.5rem; cursor: help;" title="${config.title}">
+                              ${config.emoji}
                             </span>`;
                 }
             },
@@ -1041,66 +1033,42 @@ function initializeHistoryTable() {
             {
                 data: null,
                 orderable: false,
+                width: "200px",
                 render: function(data, type, row) {
-                    let actions = '';
+                    // Use simple button group like results page
+                    let actions = '<div class="btn-group btn-group-sm">';
                     
                     // Context-aware primary action based on status
                     if (row.status === 'pending') {
-                        // Large prominent Process button for pending imports
-                        actions += `<button class="btn btn-primary import-action-primary mr-2" onclick="processImport(${row.id})" title="Process ${row.total_tests_found} tests">
-                                      <i class="mdi mdi-play-circle mr-1"></i>Process
+                        actions += `<button class="btn btn-primary" onclick="processImport(${row.id})" title="Process ${row.total_tests_found} tests">
+                                      <i class="mdi mdi-play-circle"></i>
                                     </button>`;
                     } else if (row.status === 'completed') {
-                        // Emphasize View PDF for completed imports
-                        actions += `<button class="btn btn-info import-action-primary mr-2 view-pdf-btn" data-filename="${row.filename}" title="View PDF Report">
-                                      <i class="mdi mdi-file-pdf mr-1"></i>View PDF
+                        actions += `<button class="btn btn-info view-pdf-btn" data-filename="${row.filename}" title="View PDF Report">
+                                      📄
                                     </button>`;
                     } else if (row.status === 'failed') {
-                        // Emphasize Details for failed imports
-                        actions += `<button class="btn btn-warning import-action-primary mr-2" onclick="viewImportDetails(${row.id})" title="View Error Details">
-                                      <i class="mdi mdi-alert-circle mr-1"></i>Details
+                        actions += `<button class="btn btn-warning" onclick="processImport(${row.id})" title="Retry Process">
+                                      <i class="mdi mdi-refresh"></i>
                                     </button>`;
                     }
                     
-                    // Secondary actions (smaller, muted)
-                    const secondaryActions = [];
+                    // Always show details button
+                    actions += `<button class="btn btn-secondary" onclick="viewImportDetails(${row.id})" title="View Details">
+                                  <i class="mdi mdi-information-outline"></i>
+                                </button>`;
                     
-                    // Always show details unless it's the primary action
-                    if (row.status !== 'failed') {
-                        secondaryActions.push(`<button class="btn btn-sm btn-outline-secondary import-action-secondary" onclick="viewImportDetails(${row.id})" title="View Details">
-                                               <i class="mdi mdi-information-outline"></i>
-                                             </button>`);
-                    }
-                    
-                    // Show PDF button if not primary action and file exists
-                    if (row.status !== 'completed' && row.filename) {
-                        secondaryActions.push(`<button class="btn btn-sm btn-outline-info import-action-secondary view-pdf-btn" data-filename="${row.filename}" title="View PDF">
-                                               <i class="mdi mdi-eye"></i>
-                                             </button>`);
-                    }
-                    
-                    // Process button as secondary for non-pending items that can still be processed
-                    if (row.status !== 'pending' && row.status === 'failed') {
-                        secondaryActions.push(`<button class="btn btn-sm btn-outline-success import-action-secondary" onclick="processImport(${row.id})" title="Retry Process">
-                                               <i class="mdi mdi-refresh"></i>
-                                             </button>`);
-                    }
-                    
-                    if (secondaryActions.length > 0) {
-                        actions += `<div class="btn-group import-secondary-group mr-2" role="group">
-                                      ${secondaryActions.join('')}
-                                    </div>`;
-                    }
-                    
-                    // Delete button (minimal styling, right-aligned)
+                    // Delete button
                     const deleteDisabled = row.status === 'completed' && row.tests_imported > 0;
-                    const deleteClass = deleteDisabled ? 'btn-outline-secondary disabled' : 'btn-outline-danger';
+                    const deleteClass = deleteDisabled ? 'btn-outline-secondary disabled' : 'btn-danger';
                     const deleteTitle = deleteDisabled ? 'Cannot delete - has imported results' : 'Delete Import';
-                    actions += `<button class="btn btn-sm ${deleteClass} import-action-destructive" onclick="deleteImport(${row.id})" title="${deleteTitle}" ${deleteDisabled ? 'disabled' : ''}>
+                    actions += `<button class="btn ${deleteClass}" onclick="deleteImport(${row.id})" title="${deleteTitle}" ${deleteDisabled ? 'disabled' : ''}>
                                   <i class="mdi mdi-delete-outline"></i>
                                 </button>`;
                     
-                    return `<div class="import-actions-container">${actions}</div>`;
+                    actions += '</div>';
+                    
+                    return actions;
                 }
             }
         ],
@@ -2110,56 +2078,10 @@ async function formatAllDatesOnPage() {
     border-color: #6c757d;
 }
 
-/* Enhanced Import Table Styling */
-.import-actions-container {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 200px;
-}
-
-/* Primary Action Buttons */
-.import-action-primary {
-    font-weight: 600;
-    min-width: 100px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    transition: all 0.2s ease;
-}
-
-.import-action-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-/* Secondary Action Groups */
-.import-secondary-group .btn {
-    border-radius: 0;
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
-}
-
-.import-secondary-group .btn:first-child {
-    border-top-left-radius: 0.25rem;
-    border-bottom-left-radius: 0.25rem;
-}
-
-.import-secondary-group .btn:last-child {
-    border-top-right-radius: 0.25rem;
-    border-bottom-right-radius: 0.25rem;
-}
-
-.import-secondary-group:hover .btn {
-    opacity: 1;
-}
-
-/* Destructive Actions */
-.import-action-destructive {
-    opacity: 0.5;
-    transition: opacity 0.2s ease;
-}
-
-.import-action-destructive:hover:not(.disabled) {
-    opacity: 1;
+/* Keep actions on one line */
+#historyTable td:last-child {
+    white-space: nowrap;
+    min-width: 150px;
 }
 
 /* Enhanced Status Badges */

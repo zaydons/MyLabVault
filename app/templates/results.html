@@ -185,6 +185,10 @@
             <i class="mdi mdi-close mr-1"></i>
             Cancel
           </button>
+          <button type="button" class="btn btn-info mr-auto" onclick="openBulkImport()">
+            <i class="mdi mdi-table-plus mr-1"></i>
+            Bulk Manual Import
+          </button>
           <button type="submit" class="btn btn-success">
             <i class="mdi mdi-content-save mr-1"></i>
             Add Result
@@ -399,6 +403,9 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+{% endblock %}
+
 {% block extra_scripts %}
 <script>
 $(document).ready(function() {
@@ -410,18 +417,15 @@ $(document).ready(function() {
     // Initialize DataTable
     $('#resultsTable').DataTable({
         responsive: true,
-        pageLength: 25,
-        order: [[0, 'desc']], // Sort by date descending
+        pageLength: 20,
+        lengthMenu: [[10, 20, 50, -1], [10, 20, 50, "All"]],
+        order: [[0, 'desc']],
         columnDefs: [
             {
                 targets: [6], // Actions column
                 orderable: false,
                 searchable: false
             }
-        ],
-        dom: 'Bfrtip',
-        buttons: [
-            'copy', 'csv', 'excel', 'pdf', 'print'
         ]
     });
     
@@ -888,6 +892,11 @@ $(document).ready(function() {
 
 function addResult() {
     $('#addResultModal').modal('show');
+}
+
+function openBulkImport() {
+    $('#addResultModal').modal('hide');
+    window.location.href = '/bulk-import';
 }
 
 function editResult(id) {

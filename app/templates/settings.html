@@ -93,6 +93,130 @@
       </div>
     </div>
 
+    <!-- Data Export Section -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-download mr-2"></i>
+              Data Export
+            </h3>
+          </div>
+          <div class="card-body">
+            <p class="text-muted">Export your lab data for backup, analysis, or migration purposes.</p>
+            
+            <form id="exportForm">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="patientSelection">
+                      <i class="mdi mdi-account-multiple mr-1"></i>
+                      Patient Selection
+                    </label>
+                    <select class="form-control" id="patientSelection">
+                      <option value="all">All Patients</option>
+                      <option value="select">Select Specific Patients...</option>
+                    </select>
+                  </div>
+                  
+                  <div class="form-group" id="specificPatientsGroup" style="display: none;">
+                    <label for="specificPatients">Select Patients</label>
+                    <select class="form-control" id="specificPatients" multiple size="4">
+                      <!-- Patients will be loaded dynamically -->
+                    </select>
+                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple patients</small>
+                  </div>
+                </div>
+                
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="dateRangeSelection">
+                      <i class="mdi mdi-calendar mr-1"></i>
+                      Date Range
+                    </label>
+                    <select class="form-control" id="dateRangeSelection">
+                      <option value="all">All Time</option>
+                      <option value="last-year">Last Year</option>
+                      <option value="last-6-months">Last 6 Months</option>
+                      <option value="last-3-months">Last 3 Months</option>
+                      <option value="custom">Custom Range...</option>
+                    </select>
+                  </div>
+                  
+                  <div class="row" id="customDateRange" style="display: none;">
+                    <div class="col-6">
+                      <div class="form-group">
+                        <label for="startDate">From</label>
+                        <input type="date" class="form-control" id="startDate">
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div class="form-group">
+                        <label for="endDate">To</label>
+                        <input type="date" class="form-control" id="endDate">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <div class="custom-control custom-checkbox">
+                      <input type="checkbox" class="custom-control-input" id="includePdfs" checked>
+                      <label class="custom-control-label" for="includePdfs">
+                        <i class="mdi mdi-file-pdf mr-1"></i>
+                        Include PDF Files
+                      </label>
+                    </div>
+                    <small class="form-text text-muted">Creates a ZIP archive with data and PDF files</small>
+                  </div>
+                </div>
+                
+                <div class="col-md-6">
+                  <div class="form-group">
+                    <label for="exportFormat">
+                      <i class="mdi mdi-file-export mr-1"></i>
+                      Export Format
+                    </label>
+                    <select class="form-control" id="exportFormat">
+                      <option value="json">JSON</option>
+                    </select>
+                    <small class="form-text text-muted">JSON format with complete data structure</small>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="row mt-3">
+                <div class="col-md-8">
+                  <div class="alert alert-info">
+                    <i class="mdi mdi-information mr-2"></i>
+                    <strong>Export Preview:</strong>
+                    <div id="exportPreview">
+                      <span class="text-muted">Configure options above to see preview</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="col-md-4 text-right">
+                  <button type="button" class="btn btn-outline-info mr-2" id="previewBtn">
+                    <i class="mdi mdi-eye mr-1"></i>
+                    Preview
+                  </button>
+                  <button type="submit" class="btn btn-success" id="exportBtn" disabled>
+                    <i class="mdi mdi-download mr-1"></i>
+                    Export Data
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Data Management Section -->
     <div class="row mt-4">
       <div class="col-12">
@@ -208,6 +332,9 @@ $(document).ready(function() {
     
     // Initialize date format preview
     updateDateFormatPreview();
+    
+    // Initialize export functionality
+    initializeExportFeature();
     
     // Date format selection handler
     $('#dateFormatSelect').on('change', function() {
@@ -486,6 +613,257 @@ function populateDropdownPreviews() {
         const preview = formats[format];
         if (preview) {
             $(this).text(preview);
+        }
+    });
+}
+
+// Export Feature Functions
+function initializeExportFeature() {
+    // Load patients for selection
+    loadPatientsForExport();
+    
+    // Set default end date to today
+    const today = new Date().toISOString().split('T')[0];
+    $('#endDate').val(today);
+    
+    // Patient selection change handler
+    $('#patientSelection').on('change', function() {
+        if ($(this).val() === 'select') {
+            $('#specificPatientsGroup').show();
+        } else {
+            $('#specificPatientsGroup').hide();
+        }
+        updateExportPreview();
+    });
+    
+    // Date range selection change handler
+    $('#dateRangeSelection').on('change', function() {
+        const selection = $(this).val();
+        if (selection === 'custom') {
+            $('#customDateRange').show();
+        } else {
+            $('#customDateRange').hide();
+            setPresetDateRange(selection);
+        }
+        updateExportPreview();
+    });
+    
+    // Custom date change handlers
+    $('#startDate, #endDate').on('change', updateExportPreview);
+    
+    // Include PDFs change handler
+    $('#includePdfs').on('change', updateExportPreview);
+    
+    // Specific patients change handler
+    $('#specificPatients').on('change', updateExportPreview);
+    
+    // Preview button handler
+    $('#previewBtn').on('click', function() {
+        generateExportPreview();
+    });
+    
+    // Export form submission
+    $('#exportForm').on('submit', function(e) {
+        e.preventDefault();
+        executeExport();
+    });
+    
+    // Initial preview update
+    updateExportPreview();
+}
+
+function loadPatientsForExport() {
+    $.get('/api/patients', function(patients) {
+        const patientsSelect = $('#specificPatients');
+        patientsSelect.empty();
+        
+        patients.forEach(patient => {
+            patientsSelect.append(`<option value="${patient.id}">${patient.name}</option>`);
+        });
+    }).fail(function() {
+        console.error('Failed to load patients for export');
+    });
+}
+
+function setPresetDateRange(preset) {
+    const today = new Date();
+    const endDate = today.toISOString().split('T')[0];
+    let startDate = '';
+    
+    switch (preset) {
+        case 'last-year':
+            const lastYear = new Date(today);
+            lastYear.setFullYear(today.getFullYear() - 1);
+            startDate = lastYear.toISOString().split('T')[0];
+            break;
+        case 'last-6-months':
+            const sixMonthsAgo = new Date(today);
+            sixMonthsAgo.setMonth(today.getMonth() - 6);
+            startDate = sixMonthsAgo.toISOString().split('T')[0];
+            break;
+        case 'last-3-months':
+            const threeMonthsAgo = new Date(today);
+            threeMonthsAgo.setMonth(today.getMonth() - 3);
+            startDate = threeMonthsAgo.toISOString().split('T')[0];
+            break;
+        default:
+            startDate = '';
+            break;
+    }
+    
+    $('#startDate').val(startDate);
+    $('#endDate').val(endDate);
+}
+
+function updateExportPreview() {
+    const previewDiv = $('#exportPreview');
+    previewDiv.html('<span class="text-muted">Click Preview to see export details</span>');
+    $('#exportBtn').prop('disabled', true);
+}
+
+function generateExportPreview() {
+    const exportConfig = getExportConfiguration();
+    
+    // Show loading state
+    $('#previewBtn').prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i>Loading...');
+    
+    // Make preview request (this will be implemented in backend)
+    $.ajax({
+        url: '/api/settings/export-preview',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(exportConfig),
+        success: function(response) {
+            displayExportPreview(response);
+            $('#exportBtn').prop('disabled', false);
+        },
+        error: function(xhr) {
+            const error = xhr.responseJSON?.detail || 'Failed to generate preview';
+            $('#exportPreview').html(`<span class="text-danger">Error: ${error}</span>`);
+        },
+        complete: function() {
+            $('#previewBtn').prop('disabled', false).html('<i class="mdi mdi-eye mr-1"></i>Preview');
+        }
+    });
+}
+
+function displayExportPreview(preview) {
+    const previewDiv = $('#exportPreview');
+    
+    let previewHtml = '<div class="row">';
+    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${preview.patients_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${preview.lab_results_count}</div>`;
+    previewHtml += '</div><div class="row mt-1">';
+    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${preview.labs_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${preview.providers_count}</div>`;
+    previewHtml += '</div>';
+    
+    if (preview.include_pdfs) {
+        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${preview.pdf_files_count} (ZIP format)</div></div>`;
+    }
+    
+    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Estimated size: ${preview.estimated_size}</small></div></div>`;
+    
+    previewDiv.html(previewHtml);
+}
+
+function getExportConfiguration() {
+    const patientSelection = $('#patientSelection').val();
+    let patients = ['all'];
+    
+    if (patientSelection === 'select') {
+        patients = $('#specificPatients').val() || [];
+    }
+    
+    let dateRange = null;
+    const dateRangeSelection = $('#dateRangeSelection').val();
+    
+    if (dateRangeSelection !== 'all') {
+        const startDate = $('#startDate').val();
+        const endDate = $('#endDate').val();
+        
+        if (startDate || endDate) {
+            dateRange = {
+                start: startDate || null,
+                end: endDate || null
+            };
+        }
+    }
+    
+    return {
+        patients: patients,
+        include_pdfs: $('#includePdfs').is(':checked'),
+        date_range: dateRange,
+        format: $('#exportFormat').val()
+    };
+}
+
+function executeExport() {
+    const exportConfig = getExportConfiguration();
+    
+    // Show loading state
+    $('#exportBtn').prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i>Exporting...');
+    
+    // Use AJAX to download the file
+    $.ajax({
+        url: '/api/settings/export',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(exportConfig),
+        xhrFields: {
+            responseType: 'blob' // Important for file downloads
+        },
+        success: function(blob, status, xhr) {
+            // Create a download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            
+            // Get filename from Content-Disposition header
+            const disposition = xhr.getResponseHeader('Content-Disposition');
+            let filename = 'mylabvault_export.json';
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                filename = disposition.split('filename=')[1].replace(/"/g, '');
+            }
+            
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            // Show success message
+            const alert = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-check mr-2"></i>
+                    Export completed successfully. File downloaded: ${filename}
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alert);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+        },
+        error: function(xhr) {
+            const error = xhr.responseJSON?.detail || 'Failed to export data';
+            
+            // Show error message
+            const alert = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-alert mr-2"></i>
+                    Export failed: ${error}
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alert);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+        },
+        complete: function() {
+            // Reset button state
+            $('#exportBtn').prop('disabled', false).html('<i class="mdi mdi-download mr-1"></i>Export Data');
         }
     });
 }

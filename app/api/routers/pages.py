@@ -376,6 +376,11 @@ def patients_page(request: Request, db: Session = Depends(get_db)):
     """Patient management page."""
     return _render_simple_page("patients.html", request, db)
 
+@router.get("/bulk-import")
+def bulk_import_page(request: Request, db: Session = Depends(get_db)):
+    """Bulk manual import page for entering multiple lab results."""
+    return _render_simple_page("bulk-import.html", request, db)
+
 @router.get("/result/{result_id}")
 def result_detail_page(request: Request, result_id: int, db: Session = Depends(get_db)):
     """Individual result detail page for editing."""
