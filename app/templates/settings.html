@@ -221,16 +221,33 @@
                   <i class="mdi mdi-cog mr-1"></i>
                   Import Options
                 </label>
-                <div class="custom-control custom-checkbox">
-                  <input type="checkbox" class="custom-control-input" id="mergeData" checked>
-                  <label class="custom-control-label" for="mergeData">
-                    <i class="mdi mdi-merge mr-1"></i>
-                    Merge with existing data
-                  </label>
-                </div>
-                <small class="form-text text-muted">If unchecked, will replace all existing data</small>
                 
-                <div class="custom-control custom-checkbox mt-2">
+                <div class="form-group mb-3">
+                  <label class="form-label">Import Mode:</label>
+                  <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" id="importModeMerge" name="importMode" value="merge" checked>
+                    <label class="custom-control-label" for="importModeMerge">
+                      <i class="mdi mdi-merge mr-1"></i>
+                      <strong>Merge with existing data</strong>
+                    </label>
+                  </div>
+                  <small class="form-text text-muted ml-4">Add imported data to existing records</small>
+                  
+                  <div class="custom-control custom-radio mt-2">
+                    <input type="radio" class="custom-control-input" id="importModeReplace" name="importMode" value="replace">
+                    <label class="custom-control-label" for="importModeReplace">
+                      <i class="mdi mdi-database-remove mr-1"></i>
+                      <strong>Start from scratch</strong>
+                      <span class="badge badge-warning ml-2">Destructive</span>
+                    </label>
+                  </div>
+                  <small class="form-text text-muted ml-4">
+                    <i class="mdi mdi-alert-triangle mr-1 text-warning"></i>
+                    Clear all existing data and replace with imported data only
+                  </small>
+                </div>
+                
+                <div class="custom-control custom-checkbox mt-3">
                   <input type="checkbox" class="custom-control-input" id="validateData" checked>
                   <label class="custom-control-label" for="validateData">
                     <i class="mdi mdi-shield-check mr-1"></i>
@@ -366,6 +383,58 @@
         <button type="button" class="btn btn-danger" id="confirmResetBtn" onclick="executeDataReset()">
           <i class="mdi mdi-delete-forever mr-1"></i>
           <span id="resetBtnText">Reset All Data</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Start from Scratch Import Confirmation Modal -->
+<div class="modal fade" id="startFromScratchModal" tabindex="-1" role="dialog" aria-labelledby="startFromScratchModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title" id="startFromScratchModalLabel">
+          <i class="mdi mdi-alert-triangle mr-2"></i>
+          Start from Scratch - Confirm Destructive Operation
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+          <i class="mdi mdi-alert-circle mr-2"></i>
+          <strong>WARNING:</strong> This operation cannot be undone!
+        </div>
+        
+        <p><strong>This will permanently delete ALL existing data including:</strong></p>
+        <ul class="list-unstyled ml-3">
+          <li><i class="mdi mdi-account-multiple text-danger mr-2"></i>All patients</li>
+          <li><i class="mdi mdi-flask text-danger mr-2"></i>All lab results</li>
+          <li><i class="mdi mdi-hospital-building text-danger mr-2"></i>All providers</li>
+          <li><i class="mdi mdi-test-tube text-danger mr-2"></i>All lab tests and panels</li>
+          <li><i class="mdi mdi-file-pdf-box text-danger mr-2"></i>All PDF files</li>
+        </ul>
+        
+        <p class="mt-3"><strong>The imported data will replace everything:</strong></p>
+        <div id="replacePreviewContent" class="bg-light p-3 rounded">
+          <span class="text-muted">Preview will appear here...</span>
+        </div>
+        
+        <div class="form-group mt-3">
+          <label for="confirmText">Type <code>START FROM SCRATCH</code> to confirm:</label>
+          <input type="text" class="form-control" id="confirmText" placeholder="Enter confirmation text">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="mdi mdi-close mr-1"></i>
+          Cancel
+        </button>
+        <button type="button" class="btn btn-danger" id="confirmStartFromScratchBtn" disabled onclick="executeStartFromScratchImport()">
+          <i class="mdi mdi-database-remove mr-1"></i>
+          <span id="startFromScratchBtnText">Start from Scratch</span>
         </button>
       </div>
     </div>
@@ -933,13 +1002,7 @@ function initializeImportFeature() {
         if (file) {
             $('.custom-file-label').text(file.name);
             $('#previewImportBtn').prop('disabled', false);
-            
-            // Show warning if merge is disabled
-            if (!$('#mergeData').is(':checked')) {
-                $('#importWarning').show();
-            } else {
-                $('#importWarning').hide();
-            }
+            updateImportWarning();
         } else {
             $('.custom-file-label').text('Choose file...');
             $('#previewImportBtn').prop('disabled', true);
@@ -949,13 +1012,9 @@ function initializeImportFeature() {
         }
     });
     
-    // Merge data checkbox handler
-    $('#mergeData').on('change', function() {
-        if (!$(this).is(':checked') && $('#importFile')[0].files.length > 0) {
-            $('#importWarning').show();
-        } else {
-            $('#importWarning').hide();
-        }
+    // Import mode radio button handlers
+    $('input[name="importMode"]').on('change', function() {
+        updateImportWarning();
     });
     
     // Preview import button handler
@@ -966,8 +1025,54 @@ function initializeImportFeature() {
     // Import form submission
     $('#importForm').on('submit', function(e) {
         e.preventDefault();
-        executeDataImport();
+        
+        const importMode = $('input[name="importMode"]:checked').val();
+        if (importMode === 'replace') {
+            // Show confirmation modal for start from scratch
+            showStartFromScratchConfirmation();
+        } else {
+            executeDataImport();
+        }
     });
+    
+    // Confirmation text input handler
+    $('#confirmText').on('input', function() {
+        const confirmText = $(this).val().trim();
+        const isCorrect = confirmText === 'START FROM SCRATCH';
+        $('#confirmStartFromScratchBtn').prop('disabled', !isCorrect);
+    });
+}
+
+function updateImportWarning() {
+    const importMode = $('input[name="importMode"]:checked').val();
+    const hasFile = $('#importFile')[0].files.length > 0;
+    
+    if (importMode === 'replace' && hasFile) {
+        $('#importWarning').show();
+    } else {
+        $('#importWarning').hide();
+    }
+}
+
+function showStartFromScratchConfirmation() {
+    // Populate the preview content in the modal
+    const previewContent = $('#importPreviewContent').html();
+    $('#replacePreviewContent').html(previewContent);
+    
+    // Reset confirmation input
+    $('#confirmText').val('');
+    $('#confirmStartFromScratchBtn').prop('disabled', true);
+    
+    // Show the modal
+    $('#startFromScratchModal').modal('show');
+}
+
+function executeStartFromScratchImport() {
+    // Close the modal
+    $('#startFromScratchModal').modal('hide');
+    
+    // Execute the import with replace mode
+    executeDataImport(true);
 }
 
 function previewImportFile() {
@@ -1050,7 +1155,7 @@ function displayImportPreview(preview) {
     previewDiv.html(previewHtml);
 }
 
-function executeDataImport() {
+function executeDataImport(isStartFromScratch = false) {
     const fileInput = $('#importFile')[0];
     const file = fileInput.files[0];
     
@@ -1064,7 +1169,17 @@ function executeDataImport() {
     
     const formData = new FormData();
     formData.append('import_file', file);
-    formData.append('merge_data', $('#mergeData').is(':checked'));
+    
+    // Determine merge mode - if startFromScratch is true, set merge_data to false
+    if (isStartFromScratch) {
+        formData.append('merge_data', 'false');
+        formData.append('start_from_scratch', 'true');
+    } else {
+        const importMode = $('input[name="importMode"]:checked').val();
+        formData.append('merge_data', importMode === 'merge' ? 'true' : 'false');
+        formData.append('start_from_scratch', importMode === 'replace' ? 'true' : 'false');
+    }
+    
     formData.append('validate_data', $('#validateData').is(':checked'));
     
     $.ajax({

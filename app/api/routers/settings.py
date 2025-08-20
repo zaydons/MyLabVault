@@ -1,6 +1,7 @@
 """Settings management routes."""
 
 import json
+import shutil
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -479,6 +480,7 @@ def import_data(
     import_file: UploadFile = File(...),
     merge_data: bool = Form(True),
     validate_data: bool = Form(True),
+    start_from_scratch: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     """Import data from exported file."""
@@ -524,7 +526,7 @@ def import_data(
             _validate_import_data(export_data)
         
         # Perform the import
-        import_result = _perform_data_import(export_data, pdf_files, merge_data, db)
+        import_result = _perform_data_import(export_data, pdf_files, merge_data, start_from_scratch, db)
         
         return ImportResponse(
             success=True,
@@ -772,7 +774,7 @@ def _validate_import_data(export_data: dict):
     if not isinstance(export_data['lab_results'], list):
         raise HTTPException(status_code=400, detail="Invalid lab results data format")
 
-def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, db: Session) -> dict:
+def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, start_from_scratch: bool, db: Session) -> dict:
     """Perform the actual data import operation."""
     imported_records = 0
     imported_pdfs = 0
@@ -780,16 +782,27 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, d
     warnings = []
     
     try:
-        # If not merging, clear existing data (except default patient)
-        if not merge_data:
+        # If not merging, clear existing data
+        if not merge_data or start_from_scratch:
             # Delete all lab results first (foreign key constraints)
             db.query(LabResultModel).delete()
             db.query(LabModel).delete()
             db.query(PanelModel).delete()
             db.query(UnitModel).delete()
             db.query(ProviderModel).delete()
-            # Keep patients but reset them
-            db.query(PatientModel).filter(PatientModel.id != 1).delete()
+            
+            # For start from scratch, delete ALL patients
+            # For regular replace mode, keep default patient
+            if start_from_scratch:
+                db.query(PatientModel).delete()
+                # Also clear PDF files directory
+                pdf_dir = Path("/app/data/uploads/pdfs")
+                if pdf_dir.exists():
+                    shutil.rmtree(pdf_dir)
+                    pdf_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                db.query(PatientModel).filter(PatientModel.id != 1).delete()
+            
             db.commit()
         
         # Create ID mapping for imported entities
