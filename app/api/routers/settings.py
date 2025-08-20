@@ -7,10 +7,9 @@ from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import and_
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
@@ -45,6 +44,27 @@ class ExportPreviewResponse(BaseModel):
     pdf_files_count: int
     estimated_size: str
     include_pdfs: bool
+
+# Import-related models
+class ImportPreviewResponse(BaseModel):
+    file_type: str
+    export_version: Optional[str] = None
+    patients_count: int
+    lab_results_count: int
+    labs_count: int
+    providers_count: int
+    panels_count: int
+    units_count: int
+    pdf_files_count: int
+    file_size: str
+    conflicts: List[str] = []
+
+class ImportResponse(BaseModel):
+    success: bool
+    imported_records: int
+    imported_pdfs: int
+    conflicts_resolved: int
+    warnings: List[str] = []
 
 # Database-backed settings (replaced in-memory storage)
 
@@ -361,6 +381,168 @@ def export_data(
             detail=f'Failed to export data: {str(e)}'
         ) from e
 
+@router.post("/import-preview")
+def preview_import_file(
+    import_file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Preview what will be imported from a file."""
+    try:
+        # Read file content
+        file_content = import_file.file.read()
+        file_size = len(file_content)
+        import_file.file.seek(0)  # Reset file pointer
+        
+        # Determine file type
+        file_type = "unknown"
+        export_data = None
+        pdf_files_count = 0
+        
+        if import_file.filename.lower().endswith('.json'):
+            file_type = "JSON"
+            try:
+                export_data = json.loads(file_content.decode('utf-8'))
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON format")
+                
+        elif import_file.filename.lower().endswith('.zip'):
+            file_type = "ZIP"
+            try:
+                with zipfile.ZipFile(BytesIO(file_content), 'r') as zip_file:
+                    # Look for data.json in the ZIP
+                    if 'data.json' in zip_file.namelist():
+                        json_content = zip_file.read('data.json')
+                        export_data = json.loads(json_content.decode('utf-8'))
+                    else:
+                        raise HTTPException(status_code=400, detail="ZIP file does not contain data.json")
+                    
+                    # Count PDF files
+                    pdf_files = [f for f in zip_file.namelist() if f.startswith('pdfs/') and f.endswith('.pdf')]
+                    pdf_files_count = len(pdf_files)
+                    
+            except zipfile.BadZipFile:
+                raise HTTPException(status_code=400, detail="Invalid ZIP file format")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a JSON or ZIP file.")
+        
+        if not export_data:
+            raise HTTPException(status_code=400, detail="No valid export data found in file")
+        
+        # Validate export data structure
+        if 'export_info' not in export_data:
+            raise HTTPException(status_code=400, detail="Invalid export format: missing export_info")
+        
+        # Extract counts from export data
+        export_info = export_data.get('export_info', {})
+        patients_count = len(export_data.get('patients', []))
+        lab_results_count = len(export_data.get('lab_results', []))
+        labs_count = len(export_data.get('labs', []))
+        providers_count = len(export_data.get('providers', []))
+        panels_count = len(export_data.get('panels', []))
+        units_count = len(export_data.get('units', []))
+        
+        # Check for potential conflicts
+        conflicts = _check_import_conflicts(export_data, db)
+        
+        # Format file size
+        if file_size < 1024:
+            file_size_str = f"{file_size} bytes"
+        elif file_size < 1024 * 1024:
+            file_size_str = f"{file_size / 1024:.1f} KB"
+        else:
+            file_size_str = f"{file_size / (1024 * 1024):.1f} MB"
+        
+        return ImportPreviewResponse(
+            file_type=file_type,
+            export_version=export_info.get('version'),
+            patients_count=patients_count,
+            lab_results_count=lab_results_count,
+            labs_count=labs_count,
+            providers_count=providers_count,
+            panels_count=panels_count,
+            units_count=units_count,
+            pdf_files_count=pdf_files_count,
+            file_size=file_size_str,
+            conflicts=conflicts
+        )
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=500,
+            detail=f'Failed to preview import file: {str(e)}'
+        ) from e
+
+@router.post("/import")
+def import_data(
+    import_file: UploadFile = File(...),
+    merge_data: bool = Form(True),
+    validate_data: bool = Form(True),
+    db: Session = Depends(get_db)
+):
+    """Import data from exported file."""
+    try:
+        # Read and validate file
+        file_content = import_file.file.read()
+        export_data = None
+        pdf_files = {}
+        
+        if import_file.filename.lower().endswith('.json'):
+            try:
+                export_data = json.loads(file_content.decode('utf-8'))
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON format")
+                
+        elif import_file.filename.lower().endswith('.zip'):
+            try:
+                with zipfile.ZipFile(BytesIO(file_content), 'r') as zip_file:
+                    # Extract data.json
+                    if 'data.json' in zip_file.namelist():
+                        json_content = zip_file.read('data.json')
+                        export_data = json.loads(json_content.decode('utf-8'))
+                    else:
+                        raise HTTPException(status_code=400, detail="ZIP file does not contain data.json")
+                    
+                    # Extract PDF files
+                    for file_path in zip_file.namelist():
+                        if file_path.startswith('pdfs/') and file_path.endswith('.pdf'):
+                            pdf_content = zip_file.read(file_path)
+                            pdf_filename = Path(file_path).name
+                            pdf_files[pdf_filename] = pdf_content
+                            
+            except zipfile.BadZipFile:
+                raise HTTPException(status_code=400, detail="Invalid ZIP file format")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file type")
+        
+        if not export_data:
+            raise HTTPException(status_code=400, detail="No valid export data found")
+        
+        # Validate data if requested
+        if validate_data:
+            _validate_import_data(export_data)
+        
+        # Perform the import
+        import_result = _perform_data_import(export_data, pdf_files, merge_data, db)
+        
+        return ImportResponse(
+            success=True,
+            imported_records=import_result['imported_records'],
+            imported_pdfs=import_result['imported_pdfs'],
+            conflicts_resolved=import_result['conflicts_resolved'],
+            warnings=import_result['warnings']
+        )
+        
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=500,
+            detail=f'Failed to import data: {str(e)}'
+        ) from e
+
 def _get_patient_ids(patients: Union[List[str], List[int]], db: Session) -> List[int]:
     """Convert patient selection to list of patient IDs."""
     if 'all' in patients:
@@ -542,3 +724,210 @@ def _lab_result_to_dict(lab_result: LabResultModel) -> dict:
             }
         }
     }
+
+def _check_import_conflicts(export_data: dict, db: Session) -> List[str]:
+    """Check for potential conflicts when importing data."""
+    conflicts = []
+    
+    # Check for existing patients with same names
+    existing_patients = {p.name for p in db.query(PatientModel).all()}
+    import_patients = {p['name'] for p in export_data.get('patients', [])}
+    patient_conflicts = existing_patients.intersection(import_patients)
+    if patient_conflicts:
+        conflicts.extend([f"Patient already exists: {name}" for name in patient_conflicts])
+    
+    # Check for existing providers with same names
+    existing_providers = {p.name for p in db.query(ProviderModel).all()}
+    import_providers = {p['name'] for p in export_data.get('providers', [])}
+    provider_conflicts = existing_providers.intersection(import_providers)
+    if provider_conflicts:
+        conflicts.extend([f"Provider already exists: {name}" for name in provider_conflicts])
+    
+    # Check for existing panels/units/labs
+    existing_panels = {p.name for p in db.query(PanelModel).all()}
+    import_panels = {p['name'] for p in export_data.get('panels', [])}
+    panel_conflicts = existing_panels.intersection(import_panels)
+    if panel_conflicts:
+        conflicts.extend([f"Panel already exists: {name}" for name in panel_conflicts])
+    
+    return conflicts
+
+def _validate_import_data(export_data: dict):
+    """Validate the structure and content of import data."""
+    required_sections = ['export_info', 'patients', 'providers', 'panels', 'units', 'labs', 'lab_results']
+    
+    for section in required_sections:
+        if section not in export_data:
+            raise HTTPException(status_code=400, detail=f"Missing required section: {section}")
+    
+    # Validate export info
+    export_info = export_data['export_info']
+    if 'version' not in export_info:
+        raise HTTPException(status_code=400, detail="Missing export version information")
+    
+    # Basic data structure validation
+    if not isinstance(export_data['patients'], list):
+        raise HTTPException(status_code=400, detail="Invalid patients data format")
+    
+    if not isinstance(export_data['lab_results'], list):
+        raise HTTPException(status_code=400, detail="Invalid lab results data format")
+
+def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, db: Session) -> dict:
+    """Perform the actual data import operation."""
+    imported_records = 0
+    imported_pdfs = 0
+    conflicts_resolved = 0
+    warnings = []
+    
+    try:
+        # If not merging, clear existing data (except default patient)
+        if not merge_data:
+            # Delete all lab results first (foreign key constraints)
+            db.query(LabResultModel).delete()
+            db.query(LabModel).delete()
+            db.query(PanelModel).delete()
+            db.query(UnitModel).delete()
+            db.query(ProviderModel).delete()
+            # Keep patients but reset them
+            db.query(PatientModel).filter(PatientModel.id != 1).delete()
+            db.commit()
+        
+        # Create ID mapping for imported entities
+        patient_id_map = {}
+        provider_id_map = {}
+        panel_id_map = {}
+        unit_id_map = {}
+        lab_id_map = {}
+        
+        # Import patients
+        for patient_data in export_data.get('patients', []):
+            existing_patient = db.query(PatientModel).filter(PatientModel.name == patient_data['name']).first()
+            if existing_patient and merge_data:
+                patient_id_map[patient_data['id']] = existing_patient.id
+                conflicts_resolved += 1
+            else:
+                new_patient = PatientModel(
+                    name=patient_data['name'],
+                    date_of_birth=datetime.fromisoformat(patient_data['date_of_birth']).date() if patient_data.get('date_of_birth') else None,
+                    gender=patient_data.get('gender')
+                )
+                db.add(new_patient)
+                db.flush()
+                patient_id_map[patient_data['id']] = new_patient.id
+                imported_records += 1
+        
+        # Import providers
+        for provider_data in export_data.get('providers', []):
+            existing_provider = db.query(ProviderModel).filter(ProviderModel.name == provider_data['name']).first()
+            if existing_provider and merge_data:
+                provider_id_map[provider_data['id']] = existing_provider.id
+                conflicts_resolved += 1
+            else:
+                new_provider = ProviderModel(
+                    name=provider_data['name'],
+                    specialty=provider_data.get('specialty')
+                )
+                db.add(new_provider)
+                db.flush()
+                provider_id_map[provider_data['id']] = new_provider.id
+                imported_records += 1
+        
+        # Import panels
+        for panel_data in export_data.get('panels', []):
+            existing_panel = db.query(PanelModel).filter(PanelModel.name == panel_data['name']).first()
+            if existing_panel and merge_data:
+                panel_id_map[panel_data['id']] = existing_panel.id
+                conflicts_resolved += 1
+            else:
+                new_panel = PanelModel(name=panel_data['name'])
+                db.add(new_panel)
+                db.flush()
+                panel_id_map[panel_data['id']] = new_panel.id
+                imported_records += 1
+        
+        # Import units
+        for unit_data in export_data.get('units', []):
+            existing_unit = db.query(UnitModel).filter(UnitModel.name == unit_data['name']).first()
+            if existing_unit and merge_data:
+                unit_id_map[unit_data['id']] = existing_unit.id
+                conflicts_resolved += 1
+            else:
+                new_unit = UnitModel(name=unit_data['name'])
+                db.add(new_unit)
+                db.flush()
+                unit_id_map[unit_data['id']] = new_unit.id
+                imported_records += 1
+        
+        # Import labs
+        for lab_data in export_data.get('labs', []):
+            existing_lab = db.query(LabModel).filter(LabModel.name == lab_data['name']).first()
+            if existing_lab and merge_data:
+                lab_id_map[lab_data['id']] = existing_lab.id
+                conflicts_resolved += 1
+            else:
+                new_lab = LabModel(
+                    name=lab_data['name'],
+                    panel_id=panel_id_map.get(lab_data.get('panel_id')),
+                    unit_id=unit_id_map.get(lab_data.get('unit_id')),
+                    ref_low=lab_data.get('ref_low'),
+                    ref_high=lab_data.get('ref_high'),
+                    ref_value=lab_data.get('ref_value'),
+                    ref_type=lab_data.get('ref_type')
+                )
+                db.add(new_lab)
+                db.flush()
+                lab_id_map[lab_data['id']] = new_lab.id
+                imported_records += 1
+        
+        # Import lab results
+        for result_data in export_data.get('lab_results', []):
+            # Skip if we can't map the required IDs
+            if (result_data.get('patient_id') not in patient_id_map or 
+                result_data.get('lab_id') not in lab_id_map):
+                warnings.append(f"Skipped lab result due to missing patient or lab mapping")
+                continue
+                
+            new_result = LabResultModel(
+                patient_id=patient_id_map[result_data['patient_id']],
+                lab_id=lab_id_map[result_data['lab_id']],
+                provider_id=provider_id_map.get(result_data.get('provider_id')),
+                result=result_data.get('result'),
+                result_text=result_data.get('result_text'),
+                date_collected=datetime.fromisoformat(result_data['date_collected']).date() if result_data.get('date_collected') else None,
+                notes=result_data.get('notes')
+            )
+            db.add(new_result)
+            imported_records += 1
+        
+        # Import PDF files
+        if pdf_files:
+            pdf_dir = Path("/app/data/uploads/pdfs")
+            pdf_dir.mkdir(parents=True, exist_ok=True)
+            
+            for filename, content in pdf_files.items():
+                pdf_path = pdf_dir / filename
+                # Only write if file doesn't exist or we're not merging
+                if not pdf_path.exists() or not merge_data:
+                    with open(pdf_path, 'wb') as f:
+                        f.write(content)
+                    imported_pdfs += 1
+                else:
+                    conflicts_resolved += 1
+        
+        # Commit all changes
+        db.commit()
+        
+        # Clear cache after import
+        from ..utils.cache import api_cache
+        api_cache.clear()
+        
+        return {
+            'imported_records': imported_records,
+            'imported_pdfs': imported_pdfs,
+            'conflicts_resolved': conflicts_resolved,
+            'warnings': warnings
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise e

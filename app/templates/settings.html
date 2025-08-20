@@ -93,9 +93,9 @@
       </div>
     </div>
 
-    <!-- Data Export Section -->
+    <!-- Data Export & Import Section -->
     <div class="row mt-4">
-      <div class="col-12">
+      <div class="col-md-6">
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">
@@ -107,109 +107,161 @@
             <p class="text-muted">Export your lab data for backup, analysis, or migration purposes.</p>
             
             <form id="exportForm">
-              <div class="row">
-                <div class="col-md-6">
+              <div class="form-group">
+                <label for="patientSelection">
+                  <i class="mdi mdi-account-multiple mr-1"></i>
+                  Patient Selection
+                </label>
+                <select class="form-control" id="patientSelection">
+                  <option value="all">All Patients</option>
+                  <option value="select">Select Specific Patients...</option>
+                </select>
+              </div>
+              
+              <div class="form-group" id="specificPatientsGroup" style="display: none;">
+                <label for="specificPatients">Select Patients</label>
+                <select class="form-control" id="specificPatients" multiple size="3">
+                  <!-- Patients will be loaded dynamically -->
+                </select>
+                <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple</small>
+              </div>
+              
+              <div class="form-group">
+                <label for="dateRangeSelection">
+                  <i class="mdi mdi-calendar mr-1"></i>
+                  Date Range
+                </label>
+                <select class="form-control" id="dateRangeSelection">
+                  <option value="all">All Time</option>
+                  <option value="last-year">Last Year</option>
+                  <option value="last-6-months">Last 6 Months</option>
+                  <option value="last-3-months">Last 3 Months</option>
+                  <option value="custom">Custom Range...</option>
+                </select>
+              </div>
+              
+              <div class="row" id="customDateRange" style="display: none;">
+                <div class="col-6">
                   <div class="form-group">
-                    <label for="patientSelection">
-                      <i class="mdi mdi-account-multiple mr-1"></i>
-                      Patient Selection
-                    </label>
-                    <select class="form-control" id="patientSelection">
-                      <option value="all">All Patients</option>
-                      <option value="select">Select Specific Patients...</option>
-                    </select>
-                  </div>
-                  
-                  <div class="form-group" id="specificPatientsGroup" style="display: none;">
-                    <label for="specificPatients">Select Patients</label>
-                    <select class="form-control" id="specificPatients" multiple size="4">
-                      <!-- Patients will be loaded dynamically -->
-                    </select>
-                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple patients</small>
+                    <label for="startDate">From</label>
+                    <input type="date" class="form-control" id="startDate">
                   </div>
                 </div>
-                
-                <div class="col-md-6">
+                <div class="col-6">
                   <div class="form-group">
-                    <label for="dateRangeSelection">
-                      <i class="mdi mdi-calendar mr-1"></i>
-                      Date Range
-                    </label>
-                    <select class="form-control" id="dateRangeSelection">
-                      <option value="all">All Time</option>
-                      <option value="last-year">Last Year</option>
-                      <option value="last-6-months">Last 6 Months</option>
-                      <option value="last-3-months">Last 3 Months</option>
-                      <option value="custom">Custom Range...</option>
-                    </select>
-                  </div>
-                  
-                  <div class="row" id="customDateRange" style="display: none;">
-                    <div class="col-6">
-                      <div class="form-group">
-                        <label for="startDate">From</label>
-                        <input type="date" class="form-control" id="startDate">
-                      </div>
-                    </div>
-                    <div class="col-6">
-                      <div class="form-group">
-                        <label for="endDate">To</label>
-                        <input type="date" class="form-control" id="endDate">
-                      </div>
-                    </div>
+                    <label for="endDate">To</label>
+                    <input type="date" class="form-control" id="endDate">
                   </div>
                 </div>
               </div>
               
-              <div class="row">
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <div class="custom-control custom-checkbox">
-                      <input type="checkbox" class="custom-control-input" id="includePdfs" checked>
-                      <label class="custom-control-label" for="includePdfs">
-                        <i class="mdi mdi-file-pdf mr-1"></i>
-                        Include PDF Files
-                      </label>
-                    </div>
-                    <small class="form-text text-muted">Creates a ZIP archive with data and PDF files</small>
-                  </div>
+              <div class="form-group">
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" id="includePdfs" checked>
+                  <label class="custom-control-label" for="includePdfs">
+                    <i class="mdi mdi-file-pdf mr-1"></i>
+                    Include PDF Files
+                  </label>
                 </div>
-                
-                <div class="col-md-6">
-                  <div class="form-group">
-                    <label for="exportFormat">
-                      <i class="mdi mdi-file-export mr-1"></i>
-                      Export Format
-                    </label>
-                    <select class="form-control" id="exportFormat">
-                      <option value="json">JSON</option>
-                    </select>
-                    <small class="form-text text-muted">JSON format with complete data structure</small>
-                  </div>
+                <small class="form-text text-muted">Creates a ZIP archive with data and PDF files</small>
+              </div>
+              
+              <div class="alert alert-info">
+                <i class="mdi mdi-information mr-2"></i>
+                <strong>Export Preview:</strong>
+                <div id="exportPreview">
+                  <span class="text-muted">Configure options above to see preview</span>
                 </div>
               </div>
               
-              <div class="row mt-3">
-                <div class="col-md-8">
-                  <div class="alert alert-info">
-                    <i class="mdi mdi-information mr-2"></i>
-                    <strong>Export Preview:</strong>
-                    <div id="exportPreview">
-                      <span class="text-muted">Configure options above to see preview</span>
-                    </div>
-                  </div>
+              <div class="text-center">
+                <button type="button" class="btn btn-outline-info mr-2" id="previewBtn">
+                  <i class="mdi mdi-eye mr-1"></i>
+                  Preview
+                </button>
+                <button type="submit" class="btn btn-success" id="exportBtn" disabled>
+                  <i class="mdi mdi-download mr-1"></i>
+                  Export Data
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="mdi mdi-upload mr-2"></i>
+              Data Import
+            </h3>
+          </div>
+          <div class="card-body">
+            <p class="text-muted">Import previously exported MyLabVault data including JSON data and PDF files.</p>
+            
+            <form id="importForm" enctype="multipart/form-data">
+              <div class="form-group">
+                <label for="importFile">
+                  <i class="mdi mdi-file-import mr-1"></i>
+                  Select Import File
+                </label>
+                <div class="custom-file">
+                  <input type="file" class="custom-file-input" id="importFile" name="import_file" 
+                         accept=".json,.zip" required>
+                  <label class="custom-file-label" for="importFile">Choose file...</label>
                 </div>
+                <small class="form-text text-muted">
+                  Upload a JSON file (data only) or ZIP file (data + PDFs) from a previous export
+                </small>
+              </div>
+              
+              <div class="form-group">
+                <label for="importOptions">
+                  <i class="mdi mdi-cog mr-1"></i>
+                  Import Options
+                </label>
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox" class="custom-control-input" id="mergeData" checked>
+                  <label class="custom-control-label" for="mergeData">
+                    <i class="mdi mdi-merge mr-1"></i>
+                    Merge with existing data
+                  </label>
+                </div>
+                <small class="form-text text-muted">If unchecked, will replace all existing data</small>
                 
-                <div class="col-md-4 text-right">
-                  <button type="button" class="btn btn-outline-info mr-2" id="previewBtn">
-                    <i class="mdi mdi-eye mr-1"></i>
-                    Preview
-                  </button>
-                  <button type="submit" class="btn btn-success" id="exportBtn" disabled>
-                    <i class="mdi mdi-download mr-1"></i>
-                    Export Data
-                  </button>
+                <div class="custom-control custom-checkbox mt-2">
+                  <input type="checkbox" class="custom-control-input" id="validateData" checked>
+                  <label class="custom-control-label" for="validateData">
+                    <i class="mdi mdi-shield-check mr-1"></i>
+                    Validate data integrity
+                  </label>
                 </div>
+                <small class="form-text text-muted">Verify data format and consistency before importing</small>
+              </div>
+              
+              <div class="alert alert-info" id="importPreview" style="display: none;">
+                <i class="mdi mdi-information mr-2"></i>
+                <strong>Import Preview:</strong>
+                <div id="importPreviewContent">
+                  <span class="text-muted">Upload a file to see import preview</span>
+                </div>
+              </div>
+              
+              <div class="alert alert-warning" style="display: none;" id="importWarning">
+                <i class="mdi mdi-alert-triangle mr-2"></i>
+                <strong>Warning:</strong> This will modify your existing data. Please ensure you have a backup before proceeding.
+              </div>
+              
+              <div class="text-center">
+                <button type="button" class="btn btn-outline-info mr-2" id="previewImportBtn" disabled>
+                  <i class="mdi mdi-eye mr-1"></i>
+                  Preview Import
+                </button>
+                <button type="submit" class="btn btn-primary" id="importBtn" disabled>
+                  <i class="mdi mdi-upload mr-1"></i>
+                  Import Data
+                </button>
               </div>
             </form>
           </div>
@@ -864,6 +916,208 @@ function executeExport() {
         complete: function() {
             // Reset button state
             $('#exportBtn').prop('disabled', false).html('<i class="mdi mdi-download mr-1"></i>Export Data');
+        }
+    });
+}
+
+// Data Import Feature Functions
+$(document).ready(function() {
+    // Initialize import functionality
+    initializeImportFeature();
+});
+
+function initializeImportFeature() {
+    // File input change handler
+    $('#importFile').on('change', function() {
+        const file = this.files[0];
+        if (file) {
+            $('.custom-file-label').text(file.name);
+            $('#previewImportBtn').prop('disabled', false);
+            
+            // Show warning if merge is disabled
+            if (!$('#mergeData').is(':checked')) {
+                $('#importWarning').show();
+            } else {
+                $('#importWarning').hide();
+            }
+        } else {
+            $('.custom-file-label').text('Choose file...');
+            $('#previewImportBtn').prop('disabled', true);
+            $('#importBtn').prop('disabled', true);
+            $('#importPreview').hide();
+            $('#importWarning').hide();
+        }
+    });
+    
+    // Merge data checkbox handler
+    $('#mergeData').on('change', function() {
+        if (!$(this).is(':checked') && $('#importFile')[0].files.length > 0) {
+            $('#importWarning').show();
+        } else {
+            $('#importWarning').hide();
+        }
+    });
+    
+    // Preview import button handler
+    $('#previewImportBtn').on('click', function() {
+        previewImportFile();
+    });
+    
+    // Import form submission
+    $('#importForm').on('submit', function(e) {
+        e.preventDefault();
+        executeDataImport();
+    });
+}
+
+function previewImportFile() {
+    const fileInput = $('#importFile')[0];
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file to preview');
+        return;
+    }
+    
+    // Show loading state
+    $('#previewImportBtn').prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i>Loading...');
+    
+    const formData = new FormData();
+    formData.append('import_file', file);
+    formData.append('preview_only', 'true');
+    
+    $.ajax({
+        url: '/api/settings/import-preview',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            displayImportPreview(response);
+            $('#importBtn').prop('disabled', false);
+            $('#importPreview').show();
+        },
+        error: function(xhr) {
+            const error = xhr.responseJSON?.detail || 'Failed to preview import file';
+            
+            const alert = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-alert mr-2"></i>
+                    Import preview failed: ${error}
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alert);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+        },
+        complete: function() {
+            $('#previewImportBtn').prop('disabled', false).html('<i class="mdi mdi-eye mr-1"></i>Preview Import');
+        }
+    });
+}
+
+function displayImportPreview(preview) {
+    const previewDiv = $('#importPreviewContent');
+    
+    let previewHtml = '<div class="row">';
+    previewHtml += `<div class="col-6"><strong>File Type:</strong> ${preview.file_type}</div>`;
+    previewHtml += `<div class="col-6"><strong>Export Version:</strong> ${preview.export_version || 'N/A'}</div>`;
+    previewHtml += '</div><div class="row mt-1">';
+    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${preview.patients_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${preview.lab_results_count}</div>`;
+    previewHtml += '</div><div class="row mt-1">';
+    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${preview.providers_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${preview.labs_count}</div>`;
+    previewHtml += '</div>';
+    
+    if (preview.pdf_files_count > 0) {
+        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${preview.pdf_files_count}</div></div>`;
+    }
+    
+    if (preview.conflicts && preview.conflicts.length > 0) {
+        previewHtml += '<div class="row mt-2"><div class="col-12">';
+        previewHtml += '<small class="text-warning"><strong>Potential Conflicts:</strong></small><br>';
+        preview.conflicts.forEach(conflict => {
+            previewHtml += `<small class="text-muted">• ${conflict}</small><br>`;
+        });
+        previewHtml += '</div></div>';
+    }
+    
+    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Total file size: ${preview.file_size}</small></div></div>`;
+    
+    previewDiv.html(previewHtml);
+}
+
+function executeDataImport() {
+    const fileInput = $('#importFile')[0];
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file to import');
+        return;
+    }
+    
+    // Show loading state
+    $('#importBtn').prop('disabled', true).html('<i class="spinner-border spinner-border-sm mr-1"></i>Importing...');
+    
+    const formData = new FormData();
+    formData.append('import_file', file);
+    formData.append('merge_data', $('#mergeData').is(':checked'));
+    formData.append('validate_data', $('#validateData').is(':checked'));
+    
+    $.ajax({
+        url: '/api/settings/import',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+            // Show success message
+            const alert = `
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-check mr-2"></i>
+                    Data import completed successfully! Imported: ${response.imported_records} records, ${response.imported_pdfs || 0} PDF files.
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alert);
+            
+            // Reset form
+            $('#importForm')[0].reset();
+            $('.custom-file-label').text('Choose file...');
+            $('#previewImportBtn').prop('disabled', true);
+            $('#importBtn').prop('disabled', true);
+            $('#importPreview').hide();
+            $('#importWarning').hide();
+            
+            // Refresh page data if needed
+            setTimeout(() => {
+                $('.alert').fadeOut();
+                // Optionally reload the page to show updated data
+                // location.reload();
+            }, 5000);
+        },
+        error: function(xhr) {
+            const error = xhr.responseJSON?.detail || 'Failed to import data';
+            
+            const alert = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="mdi mdi-alert mr-2"></i>
+                    Import failed: ${error}
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            `;
+            $('.content-header .container-fluid').after(alert);
+            setTimeout(() => $('.alert').fadeOut(), 5000);
+        },
+        complete: function() {
+            $('#importBtn').prop('disabled', false).html('<i class="mdi mdi-upload mr-1"></i>Import Data');
         }
     });
 }
