@@ -158,6 +158,7 @@ class PDFImportPreview(BaseModel):
     matched_provider: Optional[Provider] = None
     import_id: Optional[str] = None
     duplicate_warning: Optional[Dict[str, Any]] = None
+    parser: Optional[str] = None  # "standard" or "ai"
 
 
 class PDFImportConfirm(BaseModel):
