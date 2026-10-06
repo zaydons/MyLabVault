@@ -546,15 +546,19 @@ function loadPatientSwitcher(selectedPatientId) {
                 patients.forEach(patient => {
                     const isSelected = patient.id == selectedPatientId;
                     patientListHtml += `
-                        <a class="dropdown-item ${isSelected ? 'active' : ''}" href="#" onclick="switchToPatient(${patient.id}, '${patient.name}')">
+                        <a class="dropdown-item patient-switch-item ${isSelected ? 'active' : ''}" href="#" data-patient-id="${Number(patient.id)}" data-patient-name="${escapeHtml(patient.name)}">
                             <i class="mdi mdi-account mr-2"></i>
-                            ${patient.name}
+                            ${escapeHtml(patient.name)}
                             ${isSelected ? '<i class="mdi mdi-check float-right"></i>' : ''}
                         </a>
                     `;
                 });
                 
                 $('#patientList').html(patientListHtml);
+                $('#patientList .patient-switch-item').on('click', function(e) {
+                    e.preventDefault();
+                    switchToPatient($(this).data('patient-id'), String($(this).data('patient-name')));
+                });
             }
         })
         .catch(error => {

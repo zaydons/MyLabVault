@@ -178,8 +178,8 @@ $(document).ready(function() {
                 dataSrc: ''
             },
             columns: [
-                { data: 'name' },
-                { data: 'specialty', defaultContent: '<span class="text-muted">Not specified</span>' },
+                { data: 'name', render: $.fn.dataTable.render.text() },
+                { data: 'specialty', render: $.fn.dataTable.render.text(), defaultContent: '<span class="text-muted">Not specified</span>' },
                 { data: 'result_count', defaultContent: '0' },
                 { data: 'patient_count', defaultContent: '0' },
                 {
@@ -188,7 +188,7 @@ $(document).ready(function() {
                     render: function(data, type, row) {
                         const hasResults = row.result_count > 0;
                         const deleteButtonClass = hasResults ? 'btn-secondary disabled' : 'btn-danger delete-provider';
-                        const deleteButtonAttrs = hasResults ? 'disabled' : `data-id="${data}" data-name="${row.name}"`;
+                        const deleteButtonAttrs = hasResults ? 'disabled' : `data-id="${data}" data-name="${escapeHtml(row.name)}"`;
                         const deleteTitle = hasResults ? 'Cannot delete provider with associated lab results' : 'Delete';
                         
                         return `

@@ -313,16 +313,16 @@ function renderPanelCharts(labs) {
     container.empty();
     
     labs.forEach((lab, index) => {
-        const chartId = `panelChart_${lab.id}`;
+        const chartId = `panelChart_${Number(lab.id)}`;
         const colClass = labs.length <= 2 ? 'col-md-6' : 'col-md-4';
         
         const chartHtml = `
             <div class="${colClass} mb-4">
-                <div class="card h-100 chart-card" data-lab-id="${lab.id}" ${lab.results.length > 0 ? 'style="cursor: pointer;"' : ''}>
+                <div class="card h-100 chart-card" data-lab-id="${escapeHtml(lab.id)}" ${lab.results.length > 0 ? 'style="cursor: pointer;"' : ''}>
                     <div class="card-header">
                         <h5 class="card-title mb-0">
                             <i class="mdi mdi-flask mr-1"></i>
-                            ${lab.name}
+                            ${escapeHtml(lab.name)}
                         </h5>
                         <small class="text-muted">${lab.results.length} results</small>
                         ${lab.results.length > 0 ? 

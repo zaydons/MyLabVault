@@ -405,7 +405,7 @@ $(document).ready(function() {
         $.get('/api/panels', function(data) {
             panels = data;
             const panelOptions = panels.map(panel => 
-                `<option value="${panel.id}">${panel.name}</option>`
+                `<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`
             ).join('');
             
             $('#labPanel, #editLabPanel').html('<option value="">Select a panel</option>' + panelOptions);
@@ -416,7 +416,7 @@ $(document).ready(function() {
         $.get('/api/units', function(data) {
             units = data;
             const unitOptions = units.map(unit => 
-                `<option value="${unit.id}">${unit.name}</option>`
+                `<option value="${escapeHtml(unit.id)}">${escapeHtml(unit.name)}</option>`
             ).join('');
             
             $('#labUnit, #editLabUnit').html('<option value="">Select a unit</option>' + unitOptions);
@@ -432,23 +432,23 @@ $(document).ready(function() {
                 dataSrc: ''
             },
             columns: [
-                { data: 'name' },
-                { data: 'panel_name', defaultContent: 'N/A' },
-                { data: 'unit_name', defaultContent: 'N/A' },
+                { data: 'name', render: $.fn.dataTable.render.text() },
+                { data: 'panel_name', render: $.fn.dataTable.render.text(), defaultContent: 'N/A' },
+                { data: 'unit_name', render: $.fn.dataTable.render.text(), defaultContent: 'N/A' },
                 { 
                     data: null,
                     render: function(data, type, row) {
                         if (row.ref_type === 'greater' && row.ref_value !== null) {
-                            return `> ${row.ref_value}`;
+                            return `> ${escapeHtml(row.ref_value)}`;
                         } else if (row.ref_type === 'less' && row.ref_value !== null) {
-                            return `< ${row.ref_value}`;
+                            return `< ${escapeHtml(row.ref_value)}`;
                         } else if (row.ref_type === 'range' || !row.ref_type) {
                             if (row.ref_low !== null && row.ref_high !== null) {
-                                return `${row.ref_low} - ${row.ref_high}`;
+                                return `${escapeHtml(row.ref_low)} - ${escapeHtml(row.ref_high)}`;
                             } else if (row.ref_low !== null) {
-                                return `> ${row.ref_low}`;
+                                return `> ${escapeHtml(row.ref_low)}`;
                             } else if (row.ref_high !== null) {
-                                return `< ${row.ref_high}`;
+                                return `< ${escapeHtml(row.ref_high)}`;
                             }
                         }
                         return 'Not set';
@@ -471,7 +471,7 @@ $(document).ready(function() {
                                 <button type="button" class="btn btn-sm btn-primary edit-lab" data-id="${data}" title="Edit">
                                     <i class="mdi mdi-pencil"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-danger delete-lab ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                <button type="button" class="btn btn-sm btn-danger delete-lab ${deleteDisabled}" data-id="${data}" data-name="${escapeHtml(row.name)}" title="${deleteTitle}" ${deleteDisabled}>
                                     <i class="mdi mdi-delete"></i>
                                 </button>
                             </div>

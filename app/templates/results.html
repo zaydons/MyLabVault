@@ -450,9 +450,9 @@ $(document).ready(function() {
             
             // Add grouped options
             Object.keys(panelGroups).sort().forEach(panelName => {
-                const optgroup = $(`<optgroup label="${panelName}"></optgroup>`);
+                const optgroup = $(`<optgroup label="${escapeHtml(panelName)}"></optgroup>`);
                 panelGroups[panelName].forEach(lab => {
-                    optgroup.append(`<option value="${lab.id}">${lab.name}</option>`);
+                    optgroup.append(`<option value="${escapeHtml(lab.id)}">${escapeHtml(lab.name)}</option>`);
                 });
                 labSelect.append(optgroup);
             });
@@ -465,7 +465,7 @@ $(document).ready(function() {
             providerSelect.empty().append('<option value="">Select provider...</option>');
             providerSelect.append('<option value="new_provider">+ Add New Provider</option>');
             providers.forEach(provider => {
-                providerSelect.append(`<option value="${provider.id}">${provider.name}</option>`);
+                providerSelect.append(`<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.name)}</option>`);
             });
         });
         
@@ -482,7 +482,7 @@ $(document).ready(function() {
             panelSelect.empty().append('<option value="">Select panel...</option>');
             panelSelect.append('<option value="new_panel">+ Add New Panel</option>');
             panels.forEach(panel => {
-                panelSelect.append(`<option value="${panel.id}">${panel.name}</option>`);
+                panelSelect.append(`<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`);
             });
         });
     }
@@ -494,7 +494,7 @@ $(document).ready(function() {
             unitSelect.empty().append('<option value="">Select unit...</option>');
             unitSelect.append('<option value="new_unit">+ Add New Unit</option>');
             units.forEach(unit => {
-                unitSelect.append(`<option value="${unit.id}">${unit.name}</option>`);
+                unitSelect.append(`<option value="${escapeHtml(unit.id)}">${escapeHtml(unit.name)}</option>`);
             });
         });
     }
@@ -806,7 +806,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Lab test "${formData.name}" has been added successfully.
+                        Lab test "${escapeHtml(formData.name)}" has been added successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>

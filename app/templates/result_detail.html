@@ -170,7 +170,7 @@ $(document).ready(function() {
             providerSelect.empty().append('<option value="">Select provider...</option>');
             providers.forEach(provider => {
                 const selected = provider.id === {{ result.provider.id if result.provider else 'null' }} ? 'selected' : '';
-                providerSelect.append(`<option value="${provider.id}" ${selected}>${provider.name}</option>`);
+                providerSelect.append(`<option value="${escapeHtml(provider.id)}" ${selected}>${escapeHtml(provider.name)}</option>`);
             });
         });
     }
@@ -182,7 +182,7 @@ $(document).ready(function() {
             unitSelect.empty().append('<option value="">Select unit...</option>');
             units.forEach(unit => {
                 const selected = unit.id === {{ result.lab.unit.id if result.lab.unit else 'null' }} ? 'selected' : '';
-                unitSelect.append(`<option value="${unit.id}" ${selected}>${unit.name}</option>`);
+                unitSelect.append(`<option value="${escapeHtml(unit.id)}" ${selected}>${escapeHtml(unit.name)}</option>`);
             });
         });
     }
