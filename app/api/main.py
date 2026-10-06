@@ -1,6 +1,7 @@
 """MyLabVault API"""
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,13 +22,49 @@ except Exception as e:
 
 from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients
 
+def initialize_database():
+    """Create tables, run migrations and seed essential data."""
+    if DB_IMPORTS_SUCCESS:
+        try:
+            print("🔧 Initializing database...")
+            Base.metadata.create_all(bind=engine)
+            init_essential_data()
+            print("✅ Database initialized successfully")
+        except Exception as e:
+            print(f"❌ Database initialization failed: {e}")
+            # Ensure data directory and database file exist
+            
+            data_dir = Path(__file__).parent.parent / "data"
+            data_dir.mkdir(exist_ok=True)
+            
+            db_file = data_dir / "mylabvault.db"
+            if not db_file.exists():
+                print("🔧 Creating database file...")
+                db_file.touch()
+            try:
+                Base.metadata.create_all(bind=engine)
+                init_essential_data()
+                print("✅ Database initialized successfully on retry")
+            except Exception as retry_error:
+                print(f"❌ Database initialization failed on retry: {retry_error}")
+    else:
+        print("⚠️  Database imports failed, running without database functionality")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize the database before the application starts serving."""
+    initialize_database()
+    yield
+
 # Initialize FastAPI application
 app = FastAPI(
 	title="MyLabVault API",
 	description=__description__,
 	version=__version__,
 	docs_url="/api/docs",
-	redoc_url="/api/redoc"
+	redoc_url="/api/redoc",
+	lifespan=lifespan
 )
 
 # Configure logging
@@ -58,35 +95,6 @@ app.add_middleware(
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=Path(__file__).parent.parent / "static"), name="static")
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on application startup."""
-    if DB_IMPORTS_SUCCESS:
-        try:
-            print("🔧 Initializing database...")
-            Base.metadata.create_all(bind=engine)
-            init_essential_data()
-            print("✅ Database initialized successfully")
-        except Exception as e:
-            print(f"❌ Database initialization failed: {e}")
-            # Ensure data directory and database file exist
-            
-            data_dir = Path(__file__).parent.parent / "data"
-            data_dir.mkdir(exist_ok=True)
-            
-            db_file = data_dir / "mylabvault.db"
-            if not db_file.exists():
-                print("🔧 Creating database file...")
-                db_file.touch()
-            try:
-                Base.metadata.create_all(bind=engine)
-                init_essential_data()
-                print("✅ Database initialized successfully on retry")
-            except Exception as retry_error:
-                print(f"❌ Database initialization failed on retry: {retry_error}")
-    else:
-        print("⚠️  Database imports failed, running without database functionality")
 
 # Page routes
 app.include_router(pages.router, tags=["pages"])
