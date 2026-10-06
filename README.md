@@ -83,7 +83,11 @@ MyLabVault is a comprehensive personal health data management system designed to
    docker-compose up -d mylabvault
    ```
 
-#### Option 2: Build from Source
+#### Option 2: TrueNAS SCALE
+
+Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/README.md](deploy/truenas/README.md).
+
+#### Option 3: Build from Source
 
 1. **Clone the repository**
    ```bash

@@ -9,6 +9,11 @@ on:
       - '.gitignore'
   workflow_dispatch:
 
+# A newer push to main cancels an in-progress build, so :latest always ends up on the newest commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/mylabvault
