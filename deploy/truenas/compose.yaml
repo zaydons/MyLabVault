@@ -1,0 +1,18 @@
+# MyLabVault custom app for TrueNAS SCALE 24.10+ (Apps -> Discover Apps -> ⋮ -> Install via YAML).
+# Before pasting, replace /mnt/POOL/apps/mylabvault with the path of the dataset that will hold
+# the database and uploaded PDFs. See deploy/truenas/README.md for the full steps.
+services:
+  mylabvault:
+    image: ghcr.io/zaydons/mylabvault:latest
+    container_name: mylabvault
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - /mnt/POOL/apps/mylabvault:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
