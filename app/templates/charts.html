@@ -213,6 +213,10 @@
 
 {% block extra_scripts %}
 <script>
+function chartNumber(value) {
+    return (value === null || value === undefined || isNaN(parseFloat(value))) ? null : parseFloat(value);
+}
+
 $(document).ready(function() {
     // Enable/disable buttons based on selections
     $('#panelSelect').on('change', function() {
@@ -392,6 +396,11 @@ function createSmallChart(canvasId, labData) {
     const values = numericResults.map(r => r.numeric_value);
     const refLow = labData.ref_low;
     const refHigh = labData.ref_high;
+    // Each point carries the reference range that applies to it (its report's, else the lab test's)
+    const lows = numericResults.map(r => chartNumber(r.ref_low !== undefined ? r.ref_low : refLow));
+    const highs = numericResults.map(r => chartNumber(r.ref_high !== undefined ? r.ref_high : refHigh));
+    const hasLow = lows.some(v => v !== null);
+    const hasHigh = highs.some(v => v !== null);
     
     const datasets = [{
         label: labData.name,
@@ -401,12 +410,7 @@ function createSmallChart(canvasId, labData) {
         borderWidth: 2,
         fill: false,
         tension: 0.4,
-        pointBackgroundColor: values.map(value => {
-            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
-                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
-            }
-            return '#007bff';
-        }),
+        pointBackgroundColor: numericResults.map(r => ['high', 'low', 'abnormal'].includes(r.status) ? '#dc3545' : '#007bff'),
         pointBorderColor: '#ffffff',
         pointBorderWidth: 1,
         pointRadius: 3,
@@ -414,10 +418,10 @@ function createSmallChart(canvasId, labData) {
     }];
     
     // Add reference lines
-    if (refLow !== null && !isNaN(refLow)) {
+    if (hasLow) {
         datasets.push({
             label: 'Lower Ref',
-            data: Array(dates.length).fill(refLow),
+            data: lows,
             borderColor: '#28a745',
             backgroundColor: 'transparent',
             borderWidth: 1,
@@ -427,10 +431,10 @@ function createSmallChart(canvasId, labData) {
         });
     }
     
-    if (refHigh !== null && !isNaN(refHigh)) {
+    if (hasHigh) {
         datasets.push({
             label: 'Upper Ref',
-            data: Array(dates.length).fill(refHigh),
+            data: highs,
             borderColor: '#28a745',
             backgroundColor: 'transparent',
             borderWidth: 1,
@@ -510,6 +514,11 @@ function createLabChart(canvasId, labData) {
     const values = numericResults.map(r => r.numeric_value);
     const refLow = labData.ref_low;
     const refHigh = labData.ref_high;
+    // Each point carries the reference range that applies to it (its report's, else the lab test's)
+    const lows = numericResults.map(r => chartNumber(r.ref_low !== undefined ? r.ref_low : refLow));
+    const highs = numericResults.map(r => chartNumber(r.ref_high !== undefined ? r.ref_high : refHigh));
+    const hasLow = lows.some(v => v !== null);
+    const hasHigh = highs.some(v => v !== null);
     
     const datasets = [{
         label: labData.name + (labData.unit ? ` (${labData.unit.name})` : ''),
@@ -519,12 +528,7 @@ function createLabChart(canvasId, labData) {
         borderWidth: 2,
         fill: false,
         tension: 0.4,
-        pointBackgroundColor: values.map(value => {
-            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
-                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
-            }
-            return '#007bff';
-        }),
+        pointBackgroundColor: numericResults.map(r => ['high', 'low', 'abnormal'].includes(r.status) ? '#dc3545' : '#007bff'),
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2,
         pointRadius: 6,
@@ -532,10 +536,10 @@ function createLabChart(canvasId, labData) {
     }];
     
     // Add reference lines
-    if (refLow !== null && !isNaN(refLow)) {
+    if (hasLow) {
         datasets.push({
             label: 'Lower Reference',
-            data: Array(dates.length).fill(refLow),
+            data: lows,
             borderColor: '#28a745',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -545,10 +549,10 @@ function createLabChart(canvasId, labData) {
         });
     }
     
-    if (refHigh !== null && !isNaN(refHigh)) {
+    if (hasHigh) {
         datasets.push({
             label: 'Upper Reference',
-            data: Array(dates.length).fill(refHigh),
+            data: highs,
             borderColor: '#28a745',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -655,6 +659,11 @@ function createModalChart(labData) {
     const values = numericResults.map(r => r.numeric_value);
     const refLow = labData.ref_low;
     const refHigh = labData.ref_high;
+    // Each point carries the reference range that applies to it (its report's, else the lab test's)
+    const lows = numericResults.map(r => chartNumber(r.ref_low !== undefined ? r.ref_low : refLow));
+    const highs = numericResults.map(r => chartNumber(r.ref_high !== undefined ? r.ref_high : refHigh));
+    const hasLow = lows.some(v => v !== null);
+    const hasHigh = highs.some(v => v !== null);
     
     const datasets = [{
         label: labData.name + (labData.unit ? ` (${labData.unit.name})` : ''),
@@ -664,12 +673,7 @@ function createModalChart(labData) {
         borderWidth: 3,
         fill: false,
         tension: 0.4,
-        pointBackgroundColor: values.map(value => {
-            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
-                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
-            }
-            return '#007bff';
-        }),
+        pointBackgroundColor: numericResults.map(r => ['high', 'low', 'abnormal'].includes(r.status) ? '#dc3545' : '#007bff'),
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2,
         pointRadius: 5,
@@ -677,10 +681,10 @@ function createModalChart(labData) {
     }];
     
     // Add reference lines
-    if (refLow !== null && !isNaN(refLow)) {
+    if (hasLow) {
         datasets.push({
             label: 'Lower Reference',
-            data: Array(dates.length).fill(refLow),
+            data: lows,
             borderColor: '#28a745',
             backgroundColor: 'transparent',
             borderWidth: 2,
@@ -692,10 +696,10 @@ function createModalChart(labData) {
         });
     }
     
-    if (refHigh !== null && !isNaN(refHigh)) {
+    if (hasHigh) {
         datasets.push({
             label: 'Upper Reference',
-            data: Array(dates.length).fill(refHigh),
+            data: highs,
             borderColor: '#28a745',
             backgroundColor: 'transparent',
             borderWidth: 2,

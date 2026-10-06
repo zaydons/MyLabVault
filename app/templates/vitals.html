@@ -1,0 +1,403 @@
+{% extends "layout.html" %}
+
+{% block title %}Vitals - MyLabVault{% endblock %}
+
+{% block content %}
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-8">
+        <h1 class="m-0">
+          <i class="mdi mdi-heart-pulse mr-2"></i>
+          Vitals
+        </h1>
+        <p class="text-muted mb-0">Weight, blood pressure and other measurements for the selected patient</p>
+      </div>
+      <div class="col-sm-4 text-right">
+        <button class="btn btn-primary" type="button" onclick="openVitalModal()">
+          <i class="mdi mdi-plus mr-1"></i> Record Measurement
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="row" id="latestCards"></div>
+
+    <div class="row" id="vitalsEmpty" style="display: none;">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body text-center py-5 text-muted">
+            <i class="mdi mdi-heart-pulse mb-3" style="font-size: 3rem;"></i>
+            <h5>No measurements yet</h5>
+            <p>Record weight, blood pressure, heart rate and more to track them over time.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" id="vitalsContent" style="display: none;">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header d-flex align-items-center">
+            <h3 class="card-title mb-0"><i class="mdi mdi-chart-line mr-2"></i>Trend</h3>
+            <div class="ml-auto">
+              <select class="form-control form-control-sm" id="chartType" onchange="renderChart()"></select>
+            </div>
+          </div>
+          <div class="card-body">
+            <div style="height: 320px;"><canvas id="vitalChart"></canvas></div>
+            <small class="text-muted" id="normalHint"></small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><i class="mdi mdi-table mr-2"></i>History</h3>
+          </div>
+          <div class="card-body table-responsive p-0">
+            <table class="table table-striped table-sm mb-0">
+              <thead>
+                <tr><th>Date</th><th>Measurement</th><th>Reading</th><th>Notes</th><th style="width: 90px;"></th></tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Add / edit measurement -->
+<div class="modal fade" id="vitalModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form id="vitalForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="vitalModalTitle">Record Measurement</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="vitalId">
+          <div class="form-group">
+            <label for="vitalType">Measurement</label>
+            <select class="form-control" id="vitalType" required onchange="updateFormForType()"></select>
+          </div>
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="vitalValue" id="vitalValueLabel">Value</label>
+              <input type="number" class="form-control" id="vitalValue" step="any" min="0" required>
+            </div>
+            <div class="form-group col" id="vitalValue2Group" style="display: none;">
+              <label for="vitalValue2" id="vitalValue2Label">Value 2</label>
+              <input type="number" class="form-control" id="vitalValue2" step="any" min="0">
+            </div>
+            <div class="form-group col-4">
+              <label for="vitalUnit">Unit</label>
+              <select class="form-control" id="vitalUnit"></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="vitalMeasuredAt">Date &amp; time</label>
+            <input type="datetime-local" class="form-control" id="vitalMeasuredAt" required>
+          </div>
+          <div class="form-group mb-0">
+            <label for="vitalNotes">Notes</label>
+            <textarea class="form-control" id="vitalNotes" rows="2" maxlength="2000" placeholder="Optional, e.g. after exercise, left arm"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="vitalSaveBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let vitalTypes = {};
+let vitals = [];
+let vitalChart = null;
+
+function currentPatientId() {
+    return parseInt(getCookie('selectedPatientId') || '1', 10) || 1;
+}
+
+// Convert between a unit and the type's base unit: base = value * factor + offset
+function toBase(type, value, unit) {
+    const u = vitalTypes[type].units[unit] || { factor: 1, offset: 0 };
+    return value * u.factor + u.offset;
+}
+function fromBase(type, value, unit) {
+    const u = vitalTypes[type].units[unit] || { factor: 1, offset: 0 };
+    return (value - u.offset) / u.factor;
+}
+function roundValue(value) {
+    return Math.round(value * 10) / 10;
+}
+function isPaired(type) {
+    return !!vitalTypes[type].value2_label;
+}
+function formatReading(v) {
+    const unit = v.unit ? ` ${v.unit}` : '';
+    return isPaired(v.vital_type) ? `${roundValue(v.value)}/${roundValue(v.value2)}${unit}` : `${roundValue(v.value)}${unit}`;
+}
+function formatDate(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function normalHintText(type) {
+    const n = vitalTypes[type].normal;
+    const base = Object.keys(vitalTypes[type].units)[0];
+    if (!n) return '';
+    if (isPaired(type)) return `Typical adult target: below ${n.high}/${n.high2} ${base}`;
+    return `Typical adult range: ${n.low}–${n.high} ${base}`;
+}
+function isOutsideNormal(v) {
+    const n = vitalTypes[v.vital_type].normal;
+    if (!n) return false;
+    const base = toBase(v.vital_type, v.value, v.unit);
+    if (isPaired(v.vital_type)) return base >= n.high || v.value2 >= n.high2;
+    return (n.low !== undefined && base < n.low) || (n.high !== undefined && base > n.high);
+}
+
+async function loadVitals() {
+    const response = await fetch(`/api/vitals/?patient_id=${currentPatientId()}`);
+    vitals = response.ok ? await response.json() : [];
+    render();
+}
+
+function render() {
+    const hasData = vitals.length > 0;
+    document.getElementById('vitalsEmpty').style.display = hasData ? 'none' : '';
+    document.getElementById('vitalsContent').style.display = hasData ? '' : 'none';
+    renderLatestCards();
+    renderChartTypeOptions();
+    renderChart();
+    renderHistory();
+}
+
+function renderLatestCards() {
+    const container = document.getElementById('latestCards');
+    let html = '';
+    Object.keys(vitalTypes).forEach(type => {
+        const entries = vitals.filter(v => v.vital_type === type);  // newest first
+        if (!entries.length) return;
+        const latest = entries[0];
+        let change = '';
+        if (entries.length > 1) {
+            const prev = entries[1];
+            // Compare in the latest entry's unit, even if the previous one used another unit
+            const diff = latest.value - fromBase(type, toBase(type, prev.value, prev.unit), latest.unit);
+            if (Math.abs(diff) >= 0.05) {
+                const sign = diff > 0 ? '+' : '';
+                change = `<small class="text-muted ml-1">${escapeHtml(sign + roundValue(diff))} since previous</small>`;
+            }
+        }
+        html += `
+            <div class="col-lg-3 col-md-4 col-sm-6">
+                <div class="small-box ${isOutsideNormal(latest) ? 'bg-warning' : 'bg-light border'}">
+                    <div class="inner">
+                        <h4 class="mb-1">${escapeHtml(formatReading(latest))}</h4>
+                        <p class="mb-0">${escapeHtml(vitalTypes[type].label)}${change}</p>
+                        <small class="text-muted">${escapeHtml(formatDate(latest.measured_at))}</small>
+                    </div>
+                </div>
+            </div>`;
+    });
+    container.innerHTML = html;
+}
+
+function renderChartTypeOptions() {
+    const select = document.getElementById('chartType');
+    const previous = select.value;
+    const types = Object.keys(vitalTypes).filter(type => vitals.some(v => v.vital_type === type));
+    select.innerHTML = '';
+    types.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = vitalTypes[type].label;
+        select.appendChild(option);
+    });
+    if (types.includes(previous)) select.value = previous;
+}
+
+function renderChart() {
+    const type = document.getElementById('chartType').value;
+    if (vitalChart) { vitalChart.destroy(); vitalChart = null; }
+    if (!type) return;
+
+    const entries = vitals.filter(v => v.vital_type === type).slice().reverse();  // oldest first
+    const displayUnit = entries[entries.length - 1].unit;  // chart in the unit of the latest entry
+    const labels = entries.map(v => new Date(v.measured_at).toLocaleDateString());
+    const values = entries.map(v => roundValue(fromBase(type, toBase(type, v.value, v.unit), displayUnit)));
+    const datasets = [{
+        label: (isPaired(type) ? vitalTypes[type].value_label : vitalTypes[type].label) + ` (${displayUnit})`,
+        data: values,
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        pointBackgroundColor: entries.map(v => isOutsideNormal(v) ? '#dc3545' : '#007bff'),
+        tension: 0.3,
+        fill: false,
+    }];
+    if (isPaired(type)) {
+        datasets.push({
+            label: `${vitalTypes[type].value2_label} (${displayUnit})`,
+            data: entries.map(v => roundValue(v.value2)),
+            borderColor: '#6f42c1',
+            pointBackgroundColor: '#6f42c1',
+            tension: 0.3,
+            fill: false,
+        });
+    }
+
+    vitalChart = new Chart(document.getElementById('vitalChart').getContext('2d'), {
+        type: 'line',
+        data: { labels: labels, datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        afterLabel: context => entries[context.dataIndex].notes || ''
+                    }
+                }
+            }
+        }
+    });
+    document.getElementById('normalHint').textContent = normalHintText(type);
+}
+
+function renderHistory() {
+    const body = document.getElementById('historyBody');
+    body.innerHTML = vitals.map(v => `
+        <tr>
+            <td>${escapeHtml(formatDate(v.measured_at))}</td>
+            <td>${escapeHtml(vitalTypes[v.vital_type] ? vitalTypes[v.vital_type].label : v.vital_type)}</td>
+            <td>${escapeHtml(formatReading(v))}
+                ${isOutsideNormal(v) ? '<span class="badge badge-warning ml-1">Outside typical range</span>' : ''}</td>
+            <td class="text-muted">${escapeHtml(v.notes || '')}</td>
+            <td class="text-right">
+                <button class="btn btn-sm btn-info" type="button" onclick="openVitalModal(${Number(v.id)})" title="Edit"><i class="mdi mdi-pencil"></i></button>
+                <button class="btn btn-sm btn-danger" type="button" onclick="deleteVital(${Number(v.id)})" title="Delete"><i class="mdi mdi-trash-can"></i></button>
+            </td>
+        </tr>`).join('');
+}
+
+function populateTypeSelect() {
+    const select = document.getElementById('vitalType');
+    select.innerHTML = '';
+    Object.keys(vitalTypes).forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = vitalTypes[type].label;
+        select.appendChild(option);
+    });
+}
+
+function updateFormForType(selectedUnit) {
+    const type = document.getElementById('vitalType').value;
+    const config = vitalTypes[type];
+    const paired = isPaired(type);
+    document.getElementById('vitalValueLabel').textContent = paired ? config.value_label : 'Value';
+    document.getElementById('vitalValue2Group').style.display = paired ? '' : 'none';
+    document.getElementById('vitalValue2').required = paired;
+    if (paired) document.getElementById('vitalValue2Label').textContent = config.value2_label;
+
+    const unitSelect = document.getElementById('vitalUnit');
+    unitSelect.innerHTML = '';
+    Object.keys(config.units).forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit;
+        option.textContent = unit;
+        unitSelect.appendChild(option);
+    });
+    // Default to the unit last used for this type
+    const lastUsed = vitals.find(v => v.vital_type === type);
+    unitSelect.value = selectedUnit || (lastUsed ? lastUsed.unit : Object.keys(config.units)[0]);
+}
+
+function toLocalInputValue(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function openVitalModal(id = null) {
+    const form = document.getElementById('vitalForm');
+    form.reset();
+    const vital = id ? vitals.find(v => v.id === id) : null;
+    document.getElementById('vitalId').value = vital ? vital.id : '';
+    document.getElementById('vitalModalTitle').textContent = vital ? 'Edit Measurement' : 'Record Measurement';
+    document.getElementById('vitalType').value = vital ? vital.vital_type : (document.getElementById('chartType').value || 'weight');
+    updateFormForType(vital ? vital.unit : null);
+    document.getElementById('vitalValue').value = vital ? vital.value : '';
+    document.getElementById('vitalValue2').value = vital && vital.value2 !== null ? vital.value2 : '';
+    document.getElementById('vitalMeasuredAt').value = toLocalInputValue(vital ? new Date(vital.measured_at) : new Date());
+    document.getElementById('vitalNotes').value = vital ? (vital.notes || '') : '';
+    $('#vitalModal').modal('show');
+}
+
+async function saveVital(event) {
+    event.preventDefault();
+    const id = document.getElementById('vitalId').value;
+    const type = document.getElementById('vitalType').value;
+    const payload = {
+        patient_id: currentPatientId(),
+        vital_type: type,
+        value: parseFloat(document.getElementById('vitalValue').value),
+        value2: isPaired(type) ? parseFloat(document.getElementById('vitalValue2').value) : null,
+        unit: document.getElementById('vitalUnit').value,
+        measured_at: document.getElementById('vitalMeasuredAt').value,
+        notes: document.getElementById('vitalNotes').value.trim() || null,
+    };
+    const button = document.getElementById('vitalSaveBtn');
+    button.disabled = true;
+    try {
+        const response = await fetch(id ? `/api/vitals/${encodeURIComponent(id)}` : '/api/vitals/', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            const detail = Array.isArray(data.detail) ? data.detail.map(d => d.msg).join(', ') : data.detail;
+            throw new Error(detail || 'Could not save measurement');
+        }
+        $('#vitalModal').modal('hide');
+        document.getElementById('chartType').value = type;
+        await loadVitals();
+        document.getElementById('chartType').value = type;
+        renderChart();
+    } catch (error) {
+        showNotification(error.message, 'error', 'Save Failed');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function deleteVital(id) {
+    if (!confirm('Delete this measurement?')) return;
+    const response = await fetch(`/api/vitals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) {
+        showNotification('Could not delete measurement', 'error', 'Delete Failed');
+        return;
+    }
+    await loadVitals();
+}
+
+$(document).ready(async function() {
+    const response = await fetch('/api/vitals/types');
+    vitalTypes = await response.json();
+    populateTypeSelect();
+    document.getElementById('vitalForm').addEventListener('submit', saveVital);
+    await loadVitals();
+});
+</script>
+{% endblock %}

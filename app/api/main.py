@@ -20,7 +20,7 @@ except Exception as e:
     print(f"❌ Database imports failed: {e}")
     DB_IMPORTS_SUCCESS = False
 
-from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients
+from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients, vitals
 
 def initialize_database():
     """Create tables, run migrations and seed essential data."""
@@ -106,6 +106,7 @@ app.include_router(panels.router, prefix="/api/panels", tags=["panels"])
 app.include_router(labs.router, prefix="/api/labs", tags=["labs"])
 app.include_router(units.router, prefix="/api/units", tags=["units"])
 app.include_router(results.router, prefix="/api/results", tags=["results"])
+app.include_router(vitals.router, prefix="/api/vitals", tags=["vitals"])
 app.include_router(pdf_import.router, prefix="/api/pdf", tags=["pdf-import"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 

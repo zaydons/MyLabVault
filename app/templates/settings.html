@@ -353,6 +353,7 @@
           <div class="col-md-6">
             <ul class="list-unstyled">
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="labResultsCount">0</span> Lab Results</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="vitalsCount">0</span> Vitals</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="labsCount">0</span> Lab Tests</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="panelsCount">0</span> Panels</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="unitsCount">0</span> Units</li>
@@ -551,6 +552,12 @@ function loadSystemInfo() {
                 </div>
                 <div class="row mt-2">
                     <div class="col-6">
+                        <small class="text-muted">Vitals:</small><br>
+                        <strong>${(data.vitals || 0).toLocaleString()}</strong>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-6">
                         <small class="text-muted">Panels:</small><br>
                         <strong>${data.panels.toLocaleString()}</strong>
                     </div>
@@ -602,6 +609,7 @@ function showResetConfirmation() {
             
             // Update counts in modal
             $('#labResultsCount').text(data.lab_results.toLocaleString());
+            $('#vitalsCount').text((data.vitals || 0).toLocaleString());
             $('#labsCount').text(data.labs.toLocaleString());
             $('#panelsCount').text(data.panels.toLocaleString());
             $('#unitsCount').text(data.units.toLocaleString());
@@ -874,6 +882,7 @@ function displayExportPreview(preview) {
     let previewHtml = '<div class="row">';
     previewHtml += `<div class="col-6"><strong>Patients:</strong> ${escapeHtml(preview.patients_count)}</div>`;
     previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${escapeHtml(preview.lab_results_count)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Vitals:</strong> ${escapeHtml(preview.vitals_count || 0)}</div>`;
     previewHtml += '</div><div class="row mt-1">';
     previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${escapeHtml(preview.labs_count)}</div>`;
     previewHtml += `<div class="col-6"><strong>Providers:</strong> ${escapeHtml(preview.providers_count)}</div>`;
@@ -1132,6 +1141,7 @@ function displayImportPreview(preview) {
     previewHtml += '</div><div class="row mt-1">';
     previewHtml += `<div class="col-6"><strong>Patients:</strong> ${escapeHtml(preview.patients_count)}</div>`;
     previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${escapeHtml(preview.lab_results_count)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Vitals:</strong> ${escapeHtml(preview.vitals_count || 0)}</div>`;
     previewHtml += '</div><div class="row mt-1">';
     previewHtml += `<div class="col-6"><strong>Providers:</strong> ${escapeHtml(preview.providers_count)}</div>`;
     previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${escapeHtml(preview.labs_count)}</div>`;

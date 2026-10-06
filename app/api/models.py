@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
-from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey, Text, func, or_, and_
+from sqlalchemy import Column, Integer, String, Float, DateTime, Date, ForeignKey, Text, Boolean, func, or_, and_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, Session
 
@@ -53,6 +53,7 @@ class Patient(Base):
     gender = Column(String(10), nullable=True)
 
     results = relationship("LabResult", back_populates="patient")
+    vitals = relationship("Vital", back_populates="patient")
 
     def get_age(self) -> Optional[int]:
         """Calculate patient age with proper leap year handling."""
@@ -228,7 +229,7 @@ class Lab(Base):
 
     def get_abnormal_results_count(self) -> int:
         """Get count of abnormal results for this lab."""
-        return sum(1 for result in self.results if not self.is_result_normal(result.result))
+        return sum(1 for result in self.results if not result.is_normal)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert lab to dictionary."""
@@ -262,6 +263,13 @@ class LabResult(Base):
     date_collected = Column(DateTime, nullable=False, index=True)
     notes = Column(Text, nullable=True)
     pdf_import_id = Column(String(255), nullable=True, index=True)
+    # Reference range printed on the report for this result; overrides the lab test's range when set
+    ref_low = Column(Float, nullable=True)
+    ref_high = Column(Float, nullable=True)
+    ref_text = Column(String(100), nullable=True)
+    flag = Column(String(20), nullable=True)  # Abnormal flag as printed by the lab (H, L, A, Critical, ...)
+    lab_comment = Column(Text, nullable=True)  # Comment printed by the lab for this result
+    fasting = Column(Boolean, nullable=True)  # None when unknown
 
     lab = relationship("Lab", back_populates="results")
     patient = relationship("Patient", back_populates="results")
@@ -274,26 +282,80 @@ class LabResult(Base):
         return self.pdf_import.filename if self.pdf_import else None
 
     @property
+    def has_own_range(self) -> bool:
+        """Whether a reference range was recorded with this result."""
+        return self.ref_low is not None or self.ref_high is not None
+
+    @property
+    def effective_ref_low(self) -> Optional[float]:
+        """Lower reference bound used for this result (its own range, else the lab test's)."""
+        if self.has_own_range:
+            return self.ref_low
+        if self.lab:
+            return self.lab.ref_value if self.lab.ref_type == "greater" else self.lab.ref_low
+        return None
+
+    @property
+    def effective_ref_high(self) -> Optional[float]:
+        """Upper reference bound used for this result (its own range, else the lab test's)."""
+        if self.has_own_range:
+            return self.ref_high
+        if self.lab:
+            return self.lab.ref_value if self.lab.ref_type == "less" else self.lab.ref_high
+        return None
+
+    @property
+    def flag_status(self) -> Optional[str]:
+        """Map the lab's printed flag to a status, if there is one."""
+        flag = (self.flag or "").strip().lower()
+        if not flag:
+            return None
+        if flag in ("h", "hi", "high", "hh", "high critical"):
+            return "high"
+        if flag in ("l", "lo", "low", "ll", "low critical"):
+            return "low"
+        return "abnormal"
+
+    @property
     def status(self) -> str:
-        """Get the status of this result."""
-        if self.lab and self.result is not None:
-            return self.lab.get_result_status(self.result)
-        return "unknown"
+        """Get the status of this result: normal, low, high, abnormal or unknown."""
+        status = "unknown"
+        if self.result is not None:
+            if self.has_own_range:
+                low, high = self.ref_low, self.ref_high
+                if low is not None and high is not None:
+                    status = "low" if self.result < low else "high" if self.result > high else "normal"
+                elif low is not None:
+                    status = "normal" if self.result > low else "low"
+                else:
+                    status = "normal" if self.result < high else "high"
+            elif self.lab:
+                status = self.lab.get_result_status(self.result)
+        if status == "unknown":
+            # Qualitative results, or numeric ones without a range: fall back to the lab's flag
+            status = self.flag_status or "unknown"
+        return status
 
     def get_status(self) -> str:
         """Get the status of this result (backward compatibility)."""
         return self.status
 
-    @property 
+    @property
     def is_normal(self) -> bool:
-        """Check if this result is normal."""
-        if self.lab and self.result is not None:
-            return self.lab.is_result_normal(self.result)
-        return True
+        """Check if this result is normal (results without enough information count as normal)."""
+        return self.status in ("normal", "unknown")
 
     @property
     def reference_range(self) -> Optional[str]:
-        """Get the reference range for this result."""
+        """Get the reference range for this result (as printed on its report when available)."""
+        if self.ref_text:
+            return self.ref_text
+        if self.has_own_range:
+            if self.ref_low is not None and self.ref_high is not None:
+                return f"{self.ref_low} - {self.ref_high}"
+            if self.ref_low is not None:
+                return f"> {self.ref_low}"
+            return f"< {self.ref_high}"
         if not self.lab:
             return None
 
@@ -324,8 +386,15 @@ class LabResult(Base):
             "provider_id": self.provider_id,
             "provider_name": self.provider.name if self.provider else None,
             "value": self.result,
+            "result_text": self.result_text,
             "date_collected": self.date_collected.isoformat() if self.date_collected is not None else None,
             "notes": self.notes,
+            "ref_low": self.ref_low,
+            "ref_high": self.ref_high,
+            "ref_text": self.ref_text,
+            "flag": self.flag,
+            "lab_comment": self.lab_comment,
+            "fasting": self.fasting,
             "status": self.status,
             "is_normal": self.is_normal,
             "reference_range": self.reference_range,
@@ -333,6 +402,35 @@ class LabResult(Base):
             "pdf_import_id": self.pdf_import_id,
             "pdf_filename": self.pdf_filename
         }
+
+class Vital(Base):
+    """A vital sign or body measurement recorded for a patient (weight, blood pressure, ...)."""
+    __tablename__ = "vitals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    vital_type = Column(String(30), nullable=False, index=True)
+    value = Column(Float, nullable=False)
+    value2 = Column(Float, nullable=True)  # Second value for paired readings (diastolic blood pressure)
+    unit = Column(String(20), nullable=True)
+    measured_at = Column(DateTime, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    patient = relationship("Patient", back_populates="vitals")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "vital_type": self.vital_type,
+            "value": self.value,
+            "value2": self.value2,
+            "unit": self.unit,
+            "measured_at": self.measured_at.isoformat() if self.measured_at else None,
+            "notes": self.notes,
+        }
+
 
 class PDFImportLog(Base):
     """PDF import log model."""

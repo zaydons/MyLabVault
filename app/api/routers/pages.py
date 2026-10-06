@@ -377,6 +377,11 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     """Settings management page."""
     return _render_simple_page("settings.html", request, db)
 
+@router.get("/vitals")
+def vitals_page(request: Request, db: Session = Depends(get_db)):
+    """Vitals (weight, blood pressure, ...) page."""
+    return _render_simple_page("vitals.html", request, db)
+
 @router.get("/patients")
 def patients_page(request: Request, db: Session = Depends(get_db)):
     """Patient management page."""

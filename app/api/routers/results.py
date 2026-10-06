@@ -102,25 +102,55 @@ def get_result(result_id: int, db: Session = Depends(get_db)):
     return _get_result_or_404(result_id, db)
 
 
+def _chart_point(result: LabResultModel) -> dict:
+    """Chart data for one result, including the reference range that applies to it."""
+    return {
+        'date': result.date_collected.strftime('%Y-%m-%d'),
+        'value': result.result,
+        'ref_low': result.effective_ref_low,
+        'ref_high': result.effective_ref_high,
+        'status': result.status,
+        'flag': result.flag,
+        'fasting': result.fasting,
+    }
+
+
+def _validate_result_references(result: LabResultCreate, db: Session) -> None:
+    """Ensure the lab, provider and patient referenced by a result exist."""
+    if not db.query(LabModel).filter(LabModel.id == result.lab_id).first():
+        raise HTTPException(status_code=400, detail="Lab not found")
+    if not db.query(ProviderModel).filter(ProviderModel.id == result.provider_id).first():
+        raise HTTPException(status_code=400, detail="Provider not found")
+    if not db.query(PatientModel).filter(PatientModel.id == result.patient_id).first():
+        raise HTTPException(status_code=400, detail="Patient not found")
+
+
+@router.post("/")
+def create_result(result: LabResultCreate, db: Session = Depends(get_db)):
+    """Create a lab result entered manually."""
+    if result.result is None and not (result.result_text or "").strip():
+        raise HTTPException(status_code=400, detail="Provide a numeric result or result text")
+    _validate_result_references(result, db)
+
+    db_result = LabResultModel(**result.model_dump())
+    db.add(db_result)
+    db.commit()
+    db_result = _get_result_or_404(db_result.id, db)
+    return {
+        "success": True,
+        "message": "Lab result created successfully",
+        "data": db_result.to_dict()
+    }
+
+
 @router.put("/{result_id}")
 def update_result(result_id: int, result: LabResultCreate, db: Session = Depends(get_db)):
     """Update an existing lab result with validation."""
     db_result = _get_result_or_404(result_id, db)
+    _validate_result_references(result, db)
 
-    # Validate relationships
-    lab = db.query(LabModel).filter(LabModel.id == result.lab_id).first()
-    if not lab:
-        raise HTTPException(status_code=400, detail="Lab not found")
-
-    provider = db.query(ProviderModel).filter(ProviderModel.id == result.provider_id).first()
-    if not provider:
-        raise HTTPException(status_code=400, detail="Provider not found")
-
-    patient = db.query(PatientModel).filter(PatientModel.id == result.patient_id).first()
-    if not patient:
-        raise HTTPException(status_code=400, detail="Patient not found")
-
-    for key, value in result.model_dump().items():
+    # Only fields sent by the client change, so older forms don't clear newer fields
+    for key, value in result.model_dump(exclude_unset=True).items():
         if key != 'pdf_filename':
             setattr(db_result, key, value)
 
@@ -191,10 +221,7 @@ def get_panel_charts_data(panel_id: int, request: Request, db: Session = Depends
         # Format results for chart
         formatted_results = []
         for result in results:
-            formatted_results.append({
-                'date': result.date_collected.strftime('%Y-%m-%d'),
-                'value': result.result
-            })
+            formatted_results.append(_chart_point(result))
         
         panel_data.append({
             'id': lab.id,
@@ -254,10 +281,7 @@ def get_individual_chart_data(lab_id: int, request: Request, db: Session = Depen
     # Format results for chart
     formatted_results = []
     for result in results:
-        formatted_results.append({
-            'date': result.date_collected.strftime('%Y-%m-%d'),
-            'value': result.result
-        })
+        formatted_results.append(_chart_point(result))
     
     return {
         'id': lab.id,

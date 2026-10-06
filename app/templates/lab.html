@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "components/result_badges.html" import status_badge, detail_badges, result_value %}
 
 {% block title %}{{ lab_info.name if lab_info else 'Lab Details' }} - MyLabVault{% endblock %}
 
@@ -148,20 +149,13 @@
                 <tr>
                   <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
                   <td>
-                    {{ result.result }} {{ lab_info.unit.name if lab_info.unit else '' }}
+                    {{ result_value(result, lab_info.unit.name if lab_info.unit else '') }}
+                    {% if result.has_own_range %}<br><small class="text-muted">Range on report: {{ result.reference_range }}</small>{% endif %}
                   </td>
                   <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
                   <td>
-                    {% set status = result.result | get_result_status(lab_info.ref_low, lab_info.ref_high) %}
-                    {% if status == 'normal' %}
-                      <span class="badge badge-success">Normal</span>
-                    {% elif status == 'low' %}
-                      <span class="badge badge-warning">Low</span>
-                    {% elif status == 'high' %}
-                      <span class="badge badge-warning">High</span>
-                    {% else %}
-                      <span class="badge badge-secondary">Unknown</span>
-                    {% endif %}
+                    {{ status_badge(result.status) }}
+                    {{ detail_badges(result) }}
                   </td>
                   <td>
                     <div class="btn-group btn-group-sm">
@@ -197,7 +191,7 @@
 {
     "hasResults": true,
     "labName": {{ lab_info.name | tojson }},
-    "unitName": {{ lab_info.unit.name | tojson if lab_info.unit else '""' }},
+    "unitName": {{ (lab_info.unit.name if lab_info.unit else '') | tojson }},
     "refLow": {{ lab_info.ref_low | tojson }},
     "refHigh": {{ lab_info.ref_high | tojson }},
     "results": [
@@ -205,6 +199,11 @@
         {
             "date": {{ result.date_collected.strftime('%Y-%m-%d') | tojson }},
             "value": {{ result.result | tojson }},
+            "refLow": {{ result.effective_ref_low | tojson }},
+            "refHigh": {{ result.effective_ref_high | tojson }},
+            "status": {{ result.status | tojson }},
+            "flag": {{ result.flag | tojson }},
+            "fasting": {{ result.fasting | tojson }},
             "dateDisplay": {{ result.date_collected.strftime('%m/%d/%Y') | tojson }}
         }{% if not loop.last %},{% endif %}
         {% endfor %}
@@ -286,8 +285,13 @@ function createLabChart(labData) {
     const ctx = canvas.getContext('2d');
     const dates = numericResults.map(r => r.dateDisplay);
     const values = numericResults.map(r => r.numeric_value);
-    const refLow = labData.refLow;
-    const refHigh = labData.refHigh;
+    // Each point carries its own reference range (from its report, else the lab test's)
+    const toNum = v => (v === null || v === undefined || isNaN(parseFloat(v))) ? null : parseFloat(v);
+    const lows = numericResults.map(r => toNum(r.refLow));
+    const highs = numericResults.map(r => toNum(r.refHigh));
+    const hasLow = lows.some(v => v !== null);
+    const hasHigh = highs.some(v => v !== null);
+    const isOutOfRange = r => ['high', 'low', 'abnormal'].includes(r.status);
 
     const datasets = [{
         label: labData.labName + (labData.unitName ? ` (${labData.unitName})` : ''),
@@ -297,67 +301,53 @@ function createLabChart(labData) {
         borderWidth: 2,
         fill: false,
         tension: 0.4,
-        pointBackgroundColor: values.map(value => {
-            if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
-                return (value < refLow || value > refHigh) ? '#dc3545' : '#007bff';
-            }
-            return '#007bff';
-        }),
+        pointBackgroundColor: numericResults.map(r => isOutOfRange(r) ? '#dc3545' : '#007bff'),
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2,
         pointRadius: 6,
         pointHoverRadius: 8,
     }];
 
-    // Add reference lines only if values are valid numbers
-    if (refLow !== null && !isNaN(refLow)) {
-        datasets.push({
-            label: 'Lower Reference',
-            data: Array(dates.length).fill(refLow),
-            borderColor: '#28a745',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            borderDash: [5, 5],
-            fill: false,
-            pointRadius: 0,
-            pointHoverRadius: 0,
-        });
-    }
+    const referenceLine = (label, data) => ({
+        label: label,
+        data: data,
+        borderColor: '#28a745',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        fill: false,
+        stepped: 'middle',
+        spanGaps: true,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+    });
 
-    if (refHigh !== null && !isNaN(refHigh)) {
-        datasets.push({
-            label: 'Upper Reference',
-            data: Array(dates.length).fill(refHigh),
-            borderColor: '#28a745',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            borderDash: [5, 5],
-            fill: false,
-            pointRadius: 0,
-            pointHoverRadius: 0,
-        });
-    }
+    // Add reference lines only where values are known
+    if (hasLow) datasets.push(referenceLine('Lower Reference', lows));
+    if (hasHigh) datasets.push(referenceLine('Upper Reference', highs));
 
-    // Add reference range fill between lines
-    if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
+    // Shade the normal range where both bounds are known
+    if (hasLow && hasHigh) {
         datasets.push({
             label: 'Normal Range',
-            data: Array(dates.length).fill(refHigh),
+            data: highs,
             borderColor: 'rgba(40, 167, 69, 0.3)',
             backgroundColor: 'rgba(40, 167, 69, 0.1)',
             borderWidth: 0,
-            fill: '+1', // Fill to the next dataset (lower reference line)
+            fill: '+1', // Fill to the next dataset (lower bounds)
+            stepped: 'middle',
             pointRadius: 0,
             pointHoverRadius: 0,
         });
-        
+
         datasets.push({
             label: '', // Hidden label
-            data: Array(dates.length).fill(refLow),
+            data: lows,
             borderColor: 'rgba(40, 167, 69, 0.3)',
             backgroundColor: 'rgba(40, 167, 69, 0.1)',
             borderWidth: 0,
             fill: false,
+            stepped: 'middle',
             pointRadius: 0,
             pointHoverRadius: 0,
         });
@@ -411,13 +401,14 @@ function createLabChart(labData) {
                         },
                         callbacks: {
                             afterLabel: function(context) {
-                                const value = context.parsed.y;
-                                if (refLow !== null && refHigh !== null && !isNaN(refLow) && !isNaN(refHigh)) {
-                                    if (value < refLow) return 'Status: Low';
-                                    if (value > refHigh) return 'Status: High';
-                                    return 'Status: Normal';
-                                }
-                                return 'Status: Normal';
+                                if (context.datasetIndex !== 0) return '';
+                                const point = numericResults[context.dataIndex];
+                                const status = point.status ? point.status.charAt(0).toUpperCase() + point.status.slice(1) : 'Unknown';
+                                const lines = [`Status: ${status}`];
+                                if (point.flag) lines.push(`Lab flag: ${point.flag}`);
+                                if (point.fasting === true) lines.push('Fasting');
+                                if (point.fasting === false) lines.push('Non-fasting');
+                                return lines;
                             }
                         }
                     }

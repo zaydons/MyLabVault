@@ -95,6 +95,8 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
             'result_text': test.get('result_text'),
             'unit': test.get('unit'),
             'reference_range': test.get('reference_range'),
+            'flag': test.get('flag'),
+            'lab_comment': test.get('lab_comment'),
             'is_numeric': test.get('is_numeric', False),
             'is_qualitative': test.get('is_qualitative', False),
             'numeric_value': test.get('numeric_value'),
@@ -140,6 +142,23 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
         matched_provider=matched_provider,
         import_id=str(import_log.id)
     )
+
+
+def _report_details(test: dict, parsed_data: dict) -> dict:
+    """Per-result details printed on the report: reference range, flag, comment, fasting."""
+    ref_range = test.get('reference_range') if isinstance(test.get('reference_range'), dict) else {}
+    ref_text = (ref_range.get('text') or '').strip() or None
+    flag = (test.get('flag') or '').strip() or None
+    comment = (test.get('lab_comment') or '').strip() or None
+    fasting = parsed_data.get('fasting')
+    return {
+        'ref_low': ref_range.get('low'),
+        'ref_high': ref_range.get('high'),
+        'ref_text': ref_text[:100] if ref_text else None,
+        'flag': flag[:20] if flag else None,
+        'lab_comment': comment,
+        'fasting': fasting if isinstance(fasting, bool) else None,
+    }
 
 
 async def _parse_with_ai(content: bytes, db: Session) -> dict:
@@ -755,7 +774,8 @@ async def confirm_pdf_import(
                     else datetime.now()
                 ),
                 notes=f"Imported from PDF: {import_log.filename} (test index: {test_index})",
-                pdf_import_id=str(import_log.id)
+                pdf_import_id=str(import_log.id),
+                **_report_details(test, parsed_data)
             )
             db.add(lab_result)
             imported_count += 1
