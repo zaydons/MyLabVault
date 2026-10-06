@@ -277,10 +277,16 @@ async def bulk_upload_pdfs(
                 "duplicate_warning": getattr(preview, 'duplicate_warning', None)
             })
             
-        except Exception as e:
+        except HTTPException as e:
             failed_uploads.append({
                 "filename": file.filename or "unknown",
-                "error": str(e)
+                "error": e.detail
+            })
+        except Exception:
+            logger.exception(f"Bulk upload failed for {file.filename}")
+            failed_uploads.append({
+                "filename": file.filename or "unknown",
+                "error": "Unable to process PDF."
             })
     
     return {

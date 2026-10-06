@@ -256,7 +256,7 @@ function loadPanelCharts(panelId, panelName) {
             
             $('#panelChartsTitle').html(`
                 <i class="mdi mdi-chart-multiple mr-2"></i>
-                ${panelName} - Lab Trends
+                ${escapeHtml(panelName)} - Lab Trends
             `);
             
             renderPanelCharts(data.labs);
@@ -288,7 +288,7 @@ function loadIndividualChart(labId, labName) {
             
             $('#individualChartTitle').html(`
                 <i class="mdi mdi-chart-line mr-2"></i>
-                ${labName} - Trend Chart
+                ${escapeHtml(labName)} - Trend Chart
             `);
             
             renderIndividualChart(data);

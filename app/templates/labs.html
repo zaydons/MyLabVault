@@ -556,7 +556,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Panel "${formData.name}" has been added successfully.
+                        Panel "${escapeHtml(formData.name)}" has been added successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>
@@ -601,7 +601,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Unit "${formData.name}" has been added successfully.
+                        Unit "${escapeHtml(formData.name)}" has been added successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>
@@ -670,7 +670,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Lab test "${formData.name}" has been added successfully.
+                        Lab test "${escapeHtml(formData.name)}" has been added successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>
@@ -733,7 +733,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Lab test "${formData.name}" has been updated successfully.
+                        Lab test "${escapeHtml(formData.name)}" has been updated successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>
