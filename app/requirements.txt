@@ -18,5 +18,5 @@ reportlab==4.0.4
 python-dateutil==2.9.0.post0
 
 # Environment & Configuration
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 pydantic-settings==2.7.0
