@@ -17,6 +17,8 @@ from ..database import get_db
 from ..models import PDFImportLog, LabResult, Lab, Provider, Patient, Panel, Unit, ImportTemplate
 from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
+from ..services import ai_parser
+from ..services.ai_parser import AIParseError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,10 +29,167 @@ router = APIRouter()
 UPLOADS_DIR = Path("/app/data/uploads/pdfs")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session) -> PDFImportPreview:
+    """Match parsed tests and provider against the database and build the import preview."""
+    # Find matched provider if physician name is available
+    matched_provider = None
+    if parsed_data.get('physician'):
+        # Simple fuzzy matching - in production, use more sophisticated matching
+        providers = db.query(Provider).all()
+        for provider in providers:
+            if parsed_data['physician'].lower() in provider.name.lower():
+                matched_provider = provider
+                break
+
+    # Convert tests to importable format and identify problematic ones
+    importable_tests = []
+    problematic_tests = []
+    
+    for test in parsed_data.get('tests', []):
+        # Find matching lab test with improved matching logic
+        lab_test = None
+        if test.get('name'):
+            test_name = test['name'].strip()
+            
+            # 1. Try exact match first (case insensitive)
+            lab_test = db.query(Lab).filter(
+                Lab.name.ilike(test_name)
+            ).first()
+            
+            # 2. If no exact match, try smart matching to avoid incorrect partial matches
+            # This prevents "Hemoglobin" from matching "Hemoglobin A1C"
+            if not lab_test:
+                all_labs = db.query(Lab).all()
+                for lab in all_labs:
+                    # Check if the test name matches the beginning of the lab name followed by space or end
+                    # This allows "TSH" to match "TSH (details)" but prevents "Hemoglobin" from matching "Hemoglobin A1C"
+                    lab_name_lower = lab.name.lower()
+                    test_name_lower = test_name.lower()
+                    
+                    # Match if test name is at start and followed by specific delimiters or end of string
+                    # Allow: parentheses, commas, dashes, but NOT spaces followed by letters
+                    if lab_name_lower.startswith(test_name_lower):
+                        if len(lab_name_lower) == len(test_name_lower):
+                            # Exact match
+                            lab_test = lab
+                            break
+                        else:
+                            next_char = lab_name_lower[len(test_name_lower)]
+                            # Allow punctuation or space followed by punctuation
+                            if next_char in '(),-':
+                                lab_test = lab
+                                break
+                            elif (next_char == ' ' and 
+                                  len(lab_name_lower) > len(test_name_lower) + 1 and
+                                  lab_name_lower[len(test_name_lower) + 1] in '(),-'):
+                                lab_test = lab
+                                break
+            
+            # 3. NO fallback partial matching - if exact and smart matching fail,
+            # it's better to create a new lab test than to incorrectly match
+            # This prevents "Hemoglobin" from matching "Hemoglobin A1c"
+
+        test_data = {
+            'name': test.get('name', 'Unknown Test'),
+            'result': test.get('result'),
+            'result_text': test.get('result_text'),
+            'unit': test.get('unit'),
+            'reference_range': test.get('reference_range'),
+            'is_numeric': test.get('is_numeric', False),
+            'is_qualitative': test.get('is_qualitative', False),
+            'numeric_value': test.get('numeric_value'),
+            'matched_lab_id': lab_test.id if lab_test else None,
+            'matched_lab_name': lab_test.name if lab_test else None,
+            'confidence': 1.0 if lab_test else 0.0
+        }
+        
+        # Identify problematic tests - be more lenient to allow manual review
+        issues = []
+        is_critical_issue = False
+        
+        if not test.get('name'):
+            issues.append("Test name could not be extracted from PDF")
+            is_critical_issue = True
+        if not test.get('result') and not test.get('numeric_value') and not test.get('result_text'):
+            issues.append("No result value could be extracted")
+            is_critical_issue = True
+        
+        # Non-critical issues that shouldn't prevent import
+        if not lab_test:
+            issues.append("No matching lab test found in database - will create new lab test")
+        if test.get('unit') and lab_test and lab_test.unit and test['unit'].lower() != lab_test.unit.name.lower():
+            issues.append(f"Unit mismatch: PDF shows '{test['unit']}', database expects '{lab_test.unit.name}'")
+        
+        # Only mark as problematic if there are critical issues
+        if is_critical_issue:
+            test_data['issues'] = issues
+            problematic_tests.append(test_data)
+        else:
+            # Mark as importable but include non-critical issues as warnings
+            if issues:
+                test_data['warnings'] = issues
+            importable_tests.append(test_data)
+
+    return PDFImportPreview(
+        parser=parsed_data.get('parser', 'standard'),
+        filename=filename,
+        date_collected=parsed_data.get('date_collected'),
+        total_tests_found=len(parsed_data.get('tests', [])),
+        importable_tests=importable_tests,
+        problematic_tests=problematic_tests,
+        matched_provider=matched_provider,
+        import_id=str(import_log.id)
+    )
+
+
+async def _parse_with_ai(content: bytes, db: Session) -> dict:
+    """Parse with the AI parser, passing existing test names so results map onto them."""
+    known_lab_names = [name for (name,) in db.query(Lab.name).all()]
+    return await ai_parser.parse_pdf_with_ai(content, known_lab_names)
+
+
+async def _parse_content(content: bytes, db: Session, use_ai: bool = False) -> dict:
+    """Parse a PDF, falling back to the AI parser (when enabled) if the standard parser finds nothing."""
+    if use_ai:
+        try:
+            return await _parse_with_ai(content, db)
+        except AIParseError as e:
+            raise HTTPException(status_code=400, detail=f"AI parsing failed: {e}")
+
+    try:
+        parsed_data = await PDFParser().parse_pdf_content(content)
+    except (ValueError, pypdf.errors.PdfReadError) as parse_error:
+        if not ai_parser.is_enabled():
+            raise
+        logger.info("Standard parser failed, retrying with AI parser")
+        try:
+            return await _parse_with_ai(content, db)
+        except AIParseError as e:
+            logger.warning(f"AI parser fallback failed: {e}")
+        # Report the standard parser's error, not the fallback's
+        raise parse_error
+
+    if not parsed_data.get('tests') and ai_parser.is_enabled():
+        logger.info("Standard parser found no tests, retrying with AI parser")
+        try:
+            return await _parse_with_ai(content, db)
+        except AIParseError as e:
+            logger.warning(f"AI parser fallback failed: {e}")
+    return parsed_data
+
+
+@router.get("/ai-status")
+def get_ai_status():
+    """Report whether AI parsing is configured."""
+    enabled = ai_parser.is_enabled()
+    return {"enabled": enabled, "model": ai_parser.get_model() if enabled else None}
+
+
 @router.post("/upload", response_model=PDFImportPreview)
 async def upload_pdf(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    ai: bool = False
 ):
     """
     Upload and analyze PDF lab report file.
@@ -79,9 +238,8 @@ async def upload_pdf(
         with open(file_path, "wb") as f:
             f.write(content)
 
-        # Parse PDF
-        parser = PDFParser()
-        parsed_data = await parser.parse_pdf_content(content)
+        # Parse PDF (AI parser when requested, or as a fallback when enabled)
+        parsed_data = await _parse_content(content, db, use_ai=ai)
 
         # Create import log with cached parsed data
         import json
@@ -98,115 +256,10 @@ async def upload_pdf(
         db.commit()
         db.refresh(import_log)
 
-        # Find matched provider if physician name is available
-        matched_provider = None
-        if parsed_data.get('physician'):
-            # Simple fuzzy matching - in production, use more sophisticated matching
-            providers = db.query(Provider).all()
-            for provider in providers:
-                if parsed_data['physician'].lower() in provider.name.lower():
-                    matched_provider = provider
-                    break
+        return _build_preview(parsed_data, import_log, file.filename, db)
 
-        # Convert tests to importable format and identify problematic ones
-        importable_tests = []
-        problematic_tests = []
-        
-        for test in parsed_data.get('tests', []):
-            # Find matching lab test with improved matching logic
-            lab_test = None
-            if test.get('name'):
-                test_name = test['name'].strip()
-                
-                # 1. Try exact match first (case insensitive)
-                lab_test = db.query(Lab).filter(
-                    Lab.name.ilike(test_name)
-                ).first()
-                
-                # 2. If no exact match, try smart matching to avoid incorrect partial matches
-                # This prevents "Hemoglobin" from matching "Hemoglobin A1C"
-                if not lab_test:
-                    all_labs = db.query(Lab).all()
-                    for lab in all_labs:
-                        # Check if the test name matches the beginning of the lab name followed by space or end
-                        # This allows "TSH" to match "TSH (details)" but prevents "Hemoglobin" from matching "Hemoglobin A1C"
-                        lab_name_lower = lab.name.lower()
-                        test_name_lower = test_name.lower()
-                        
-                        # Match if test name is at start and followed by specific delimiters or end of string
-                        # Allow: parentheses, commas, dashes, but NOT spaces followed by letters
-                        if lab_name_lower.startswith(test_name_lower):
-                            if len(lab_name_lower) == len(test_name_lower):
-                                # Exact match
-                                lab_test = lab
-                                break
-                            else:
-                                next_char = lab_name_lower[len(test_name_lower)]
-                                # Allow punctuation or space followed by punctuation
-                                if next_char in '(),-':
-                                    lab_test = lab
-                                    break
-                                elif (next_char == ' ' and 
-                                      len(lab_name_lower) > len(test_name_lower) + 1 and
-                                      lab_name_lower[len(test_name_lower) + 1] in '(),-'):
-                                    lab_test = lab
-                                    break
-                
-                # 3. NO fallback partial matching - if exact and smart matching fail,
-                # it's better to create a new lab test than to incorrectly match
-                # This prevents "Hemoglobin" from matching "Hemoglobin A1c"
-
-            test_data = {
-                'name': test.get('name', 'Unknown Test'),
-                'result': test.get('result'),
-                'result_text': test.get('result_text'),
-                'unit': test.get('unit'),
-                'reference_range': test.get('reference_range'),
-                'is_numeric': test.get('is_numeric', False),
-                'is_qualitative': test.get('is_qualitative', False),
-                'numeric_value': test.get('numeric_value'),
-                'matched_lab_id': lab_test.id if lab_test else None,
-                'matched_lab_name': lab_test.name if lab_test else None,
-                'confidence': 1.0 if lab_test else 0.0
-            }
-            
-            # Identify problematic tests - be more lenient to allow manual review
-            issues = []
-            is_critical_issue = False
-            
-            if not test.get('name'):
-                issues.append("Test name could not be extracted from PDF")
-                is_critical_issue = True
-            if not test.get('result') and not test.get('numeric_value') and not test.get('result_text'):
-                issues.append("No result value could be extracted")
-                is_critical_issue = True
-            
-            # Non-critical issues that shouldn't prevent import
-            if not lab_test:
-                issues.append("No matching lab test found in database - will create new lab test")
-            if test.get('unit') and lab_test and lab_test.unit and test['unit'].lower() != lab_test.unit.name.lower():
-                issues.append(f"Unit mismatch: PDF shows '{test['unit']}', database expects '{lab_test.unit.name}'")
-            
-            # Only mark as problematic if there are critical issues
-            if is_critical_issue:
-                test_data['issues'] = issues
-                problematic_tests.append(test_data)
-            else:
-                # Mark as importable but include non-critical issues as warnings
-                if issues:
-                    test_data['warnings'] = issues
-                importable_tests.append(test_data)
-
-        return PDFImportPreview(
-            filename=file.filename,
-            date_collected=parsed_data.get('date_collected'),
-            total_tests_found=len(parsed_data.get('tests', [])),
-            importable_tests=importable_tests,
-            problematic_tests=problematic_tests,
-            matched_provider=matched_provider,
-            import_id=str(import_log.id)
-        )
-
+    except HTTPException:
+        raise
     except FileNotFoundError:
         raise HTTPException(status_code=400, detail="PDF file not found. Please try uploading again.")
     except PermissionError:
@@ -224,6 +277,35 @@ async def upload_pdf(
         # Log the actual error for debugging
         logger.error(f"Unexpected PDF processing error: {str(e)}")
         raise HTTPException(status_code=500, detail="Unable to process PDF. This may not be a compatible lab report format.")
+
+@router.post("/rescan-ai/{import_id}", response_model=PDFImportPreview)
+async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
+    """Re-parse a pending import's PDF with the AI parser and replace its cached results."""
+    if not ai_parser.is_enabled():
+        raise HTTPException(status_code=400, detail="AI parsing is not enabled")
+
+    import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+    if not import_log:
+        raise HTTPException(status_code=404, detail="Import not found")
+    if import_log.tests_imported:
+        raise HTTPException(status_code=400, detail="Tests from this import have already been saved; it can no longer be re-scanned")
+
+    file_path = Path(import_log.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    content = file_path.read_bytes()
+
+    parsed_data = await _parse_content(content, db, use_ai=True)
+
+    import_log.parsed_data = json.dumps(parsed_data)
+    import_log.total_tests_found = len(parsed_data.get('tests', []))
+    import_log.date_collected = parsed_data.get('date_collected')
+    import_log.updated_at = datetime.now()
+    db.commit()
+    db.refresh(import_log)
+
+    return _build_preview(parsed_data, import_log, import_log.filename, db)
+
 
 @router.post("/bulk-upload")
 async def bulk_upload_pdfs(
@@ -274,6 +356,7 @@ async def bulk_upload_pdfs(
                 "tests_found": preview.total_tests_found,
                 "date_collected": preview.date_collected,
                 "importable_tests": preview.importable_tests,  # Include parsed test details
+                "parser": preview.parser,
                 "duplicate_warning": getattr(preview, 'duplicate_warning', None)
             })
             

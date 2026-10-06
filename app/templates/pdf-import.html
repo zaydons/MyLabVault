@@ -289,6 +289,65 @@ function getCookie(name) {
 let currentBatchId = null;
 let currentBatchData = null;
 let uploadQueue = [];
+let aiParsingEnabled = false;
+
+async function checkAiStatus() {
+    try {
+        const response = await fetch('/api/pdf/ai-status');
+        if (response.ok) {
+            aiParsingEnabled = (await response.json()).enabled === true;
+        }
+    } catch (error) {
+        console.error('Error checking AI parsing status:', error);
+    }
+}
+
+async function rescanFileWithAI(index) {
+    const file = currentBatchData && currentBatchData.files[index];
+    if (!file) return;
+
+    const card = document.getElementById(`file-card-${index}`);
+    const button = card.querySelector('.rescan-ai-btn');
+    button.disabled = true;
+    button.innerHTML = '<i class="mdi mdi-loading mdi-spin mr-1"></i> Scanning...';
+
+    try {
+        const response = await fetch(`/api/pdf/rescan-ai/${encodeURIComponent(file.import_id)}`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || 'AI re-scan failed');
+        }
+
+        currentBatchData.files[index] = {
+            ...file,
+            parser: data.parser,
+            tests_found: data.total_tests_found,
+            date_collected: data.date_collected,
+            importable_tests: data.importable_tests,
+        };
+
+        // Re-rendering refills every provider dropdown, so keep the other files' choices
+        const savedProviders = {};
+        document.querySelectorAll('.file-provider-select').forEach(select => {
+            savedProviders[select.id] = select.value;
+        });
+        const savedDate = document.getElementById(`date-${index}`)?.value || '';
+
+        card.innerHTML = renderFileCard(currentBatchData.files[index], index);
+        await loadProviders();
+        document.querySelectorAll('.file-provider-select').forEach(select => {
+            if (savedProviders[select.id]) select.value = savedProviders[select.id];
+        });
+        const dateInput = document.getElementById(`date-${index}`);
+        if (dateInput) dateInput.value = savedDate;
+
+        showNotification(`Found ${data.total_tests_found} tests with AI. Review them before importing.`, 'success', 'AI Re-scan Complete');
+    } catch (error) {
+        button.disabled = false;
+        button.innerHTML = '<i class="mdi mdi-robot-outline mr-1"></i> Re-scan with AI';
+        showNotification(error.message, 'error', 'AI Re-scan Failed');
+    }
+}
 
 $(document).ready(async function() {
     // Initialize date formatting
@@ -299,6 +358,9 @@ $(document).ready(async function() {
     
     // Load providers for dropdown
     loadProviders();
+
+    // Show AI re-scan controls only when AI parsing is configured
+    await checkAiStatus();
     
     // Load initial history
     await refreshHistory();
@@ -410,6 +472,158 @@ function hideUploadProgress() {
     document.getElementById('uploadProgress').style.display = 'none';
 }
 
+function renderFileCard(file, index) {
+    return `
+        <div class="card-header">
+            <h6 class="mb-0">
+                <i class="mdi mdi-file-pdf mr-2"></i>
+                ${escapeHtml(file.filename)}
+                ${file.parser === 'ai' ? '<span class="badge badge-primary ml-2" title="Results extracted with AI - review before importing">AI</span>' : ''}
+                <span class="badge badge-${file.status === 'duplicate' ? 'warning' : 'success'} float-right">
+                    ${escapeHtml(file.status === 'duplicate' ? 'Duplicate' : file.tests_found + ' tests found')}
+                </span>
+            </h6>
+        </div>
+        <div class="card-body py-2">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small><strong>Tests Found:</strong> ${escapeHtml(file.tests_found)}</small><br>
+                            <small><strong>Date:</strong> ${escapeHtml(file.date_collected || 'Not detected')}</small>
+                        </div>
+                        <div class="col-md-6">
+                            ${file.status !== 'duplicate' ? `
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input file-checkbox" 
+                                       id="file-${index}" data-import-id="${escapeHtml(file.import_id)}" checked>
+                                <label class="custom-control-label" for="file-${index}">
+                                    Import this file
+                                </label>
+                            </div>
+                            ` : `
+                            <small class="text-warning">
+                                <i class="mdi mdi-alert mr-1"></i>
+                                This file has already been imported previously
+                            </small>
+                            `}
+                        </div>
+                    </div>
+                    ${file.status !== 'duplicate' ? `
+                    <div class="form-group mt-2 mb-1">
+                        <label for="provider-${index}" class="mb-1"><small><strong>Provider for this file:</strong></small></label>
+                        <div class="input-group input-group-sm">
+                            <select class="form-control form-control-sm file-provider-select" 
+                                    id="provider-${index}" data-file-index="${index}" required>
+                                <option value="">Select provider...</option>
+                            </select>
+                            <div class="input-group-append">
+                                <button class="btn btn-success btn-sm" type="button" onclick="showNewProviderModal(${index})">
+                                    <i class="mdi mdi-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group mt-1 mb-2">
+                        <label for="date-${index}" class="mb-1"><small><strong>Override date (optional):</strong></small></label>
+                        <input type="date" class="form-control form-control-sm file-date-input" 
+                               id="date-${index}" data-file-index="${index}"
+                               placeholder="Leave empty to use PDF date">
+                        <small class="form-text text-muted">Leave empty to use date from PDF (${escapeHtml(file.date_collected || 'not detected')})</small>
+                    </div>
+                    ` : ''}
+                </div>
+                <div class="col-md-4 text-right">
+                    ${file.status !== 'duplicate' ? `
+                    <button class="btn btn-sm btn-info" type="button" data-toggle="collapse" 
+                            data-target="#tests-${index}" aria-expanded="false">
+                        <i class="mdi mdi-eye mr-1"></i> View Tests
+                    </button>
+                    ${aiParsingEnabled ? `
+                    <button class="btn btn-sm btn-outline-primary mt-1 rescan-ai-btn" type="button" onclick="rescanFileWithAI(${index})"
+                            title="Re-read this PDF with AI and replace the extracted results">
+                        <i class="mdi mdi-robot-outline mr-1"></i> Re-scan with AI
+                    </button>
+                    ` : ''}
+                    ` : ''}
+                </div>
+            </div>
+            
+            ${file.status !== 'duplicate' && file.importable_tests && file.importable_tests.length > 0 ? `
+            <div class="collapse mt-3" id="tests-${index}">
+                <div class="card card-body">
+                    <h6><i class="mdi mdi-test-tube mr-2"></i>Importable Test Results</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped test-results-table">
+                            <thead>
+                                <tr>
+                                    <th width="5%">
+                                        <div class="custom-control custom-checkbox">
+                                            <input type="checkbox" class="custom-control-input select-all-tests" 
+                                                   id="selectAll-${index}" checked
+                                                   onchange="toggleAllTests(${index})">
+                                            <label class="custom-control-label" for="selectAll-${index}"></label>
+                                        </div>
+                                    </th>
+                                    <th>Test Name</th>
+                                    <th>Result</th>
+                                    <th>Unit</th>
+                                    <th>Reference Range</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${file.importable_tests.map((test, testIndex) => `
+                                    <tr>
+                                        <td>
+                                            <div class="custom-control custom-checkbox">
+                                                <input type="checkbox" class="custom-control-input test-checkbox" 
+                                                       id="test-${index}-${testIndex}" 
+                                                       data-file-index="${index}" 
+                                                       data-test-index="${testIndex}" checked
+                                                       onchange="updateTestSelection(${index})">
+                                                <label class="custom-control-label" for="test-${index}-${testIndex}"></label>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <strong>${escapeHtml(test.name)}</strong>
+                                            ${test.matched_lab_name ? `<br><small class="text-success">Matched: ${escapeHtml(test.matched_lab_name)}</small>` : ''}
+                                        </td>
+                                        <td>
+                                            <span class="${test.is_numeric ? 'badge badge-primary' : 'badge badge-secondary'}">
+                                                ${escapeHtml(test.result || test.result_text || 'N/A')}
+                                            </span>
+                                        </td>
+                                        <td>${escapeHtml(test.unit || 'N/A')}</td>
+                                        <td>
+                                            ${escapeHtml(test.reference_range ? 
+                                                (typeof test.reference_range === 'string' ? test.reference_range : 
+                                                 test.reference_range.text || 'N/A') : 'N/A')}
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-${getTestStatusBadge(test)}">
+                                                ${getTestStatus(test)}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center">
+                        <small class="text-muted">
+                            <i class="mdi mdi-information mr-1"></i>
+                            Uncheck tests you don't want to import. Tests with green "Matched" labels 
+                            will be linked to existing lab definitions.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+}
+
 function showBatchConfirmation(batchData) {
     hideUploadProgress();
     
@@ -450,148 +664,8 @@ function showBatchConfirmation(batchData) {
     batchData.files.forEach((file, index) => {
         const fileCard = document.createElement('div');
         fileCard.className = 'card mb-2';
-        fileCard.innerHTML = `
-            <div class="card-header">
-                <h6 class="mb-0">
-                    <i class="mdi mdi-file-pdf mr-2"></i>
-                    ${escapeHtml(file.filename)}
-                    <span class="badge badge-${file.status === 'duplicate' ? 'warning' : 'success'} float-right">
-                        ${escapeHtml(file.status === 'duplicate' ? 'Duplicate' : file.tests_found + ' tests found')}
-                    </span>
-                </h6>
-            </div>
-            <div class="card-body py-2">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <small><strong>Tests Found:</strong> ${escapeHtml(file.tests_found)}</small><br>
-                                <small><strong>Date:</strong> ${escapeHtml(file.date_collected || 'Not detected')}</small>
-                            </div>
-                            <div class="col-md-6">
-                                ${file.status !== 'duplicate' ? `
-                                <div class="custom-control custom-checkbox">
-                                    <input type="checkbox" class="custom-control-input file-checkbox" 
-                                           id="file-${index}" data-import-id="${escapeHtml(file.import_id)}" checked>
-                                    <label class="custom-control-label" for="file-${index}">
-                                        Import this file
-                                    </label>
-                                </div>
-                                ` : `
-                                <small class="text-warning">
-                                    <i class="mdi mdi-alert mr-1"></i>
-                                    This file has already been imported previously
-                                </small>
-                                `}
-                            </div>
-                        </div>
-                        ${file.status !== 'duplicate' ? `
-                        <div class="form-group mt-2 mb-1">
-                            <label for="provider-${index}" class="mb-1"><small><strong>Provider for this file:</strong></small></label>
-                            <div class="input-group input-group-sm">
-                                <select class="form-control form-control-sm file-provider-select" 
-                                        id="provider-${index}" data-file-index="${index}" required>
-                                    <option value="">Select provider...</option>
-                                </select>
-                                <div class="input-group-append">
-                                    <button class="btn btn-success btn-sm" type="button" onclick="showNewProviderModal(${index})">
-                                        <i class="mdi mdi-plus"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-group mt-1 mb-2">
-                            <label for="date-${index}" class="mb-1"><small><strong>Override date (optional):</strong></small></label>
-                            <input type="date" class="form-control form-control-sm file-date-input" 
-                                   id="date-${index}" data-file-index="${index}"
-                                   placeholder="Leave empty to use PDF date">
-                            <small class="form-text text-muted">Leave empty to use date from PDF (${escapeHtml(file.date_collected || 'not detected')})</small>
-                        </div>
-                        ` : ''}
-                    </div>
-                    <div class="col-md-4 text-right">
-                        ${file.status !== 'duplicate' ? `
-                        <button class="btn btn-sm btn-info" type="button" data-toggle="collapse" 
-                                data-target="#tests-${index}" aria-expanded="false">
-                            <i class="mdi mdi-eye mr-1"></i> View Tests
-                        </button>
-                        ` : ''}
-                    </div>
-                </div>
-                
-                ${file.status !== 'duplicate' && file.importable_tests && file.importable_tests.length > 0 ? `
-                <div class="collapse mt-3" id="tests-${index}">
-                    <div class="card card-body">
-                        <h6><i class="mdi mdi-test-tube mr-2"></i>Importable Test Results</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-striped test-results-table">
-                                <thead>
-                                    <tr>
-                                        <th width="5%">
-                                            <div class="custom-control custom-checkbox">
-                                                <input type="checkbox" class="custom-control-input select-all-tests" 
-                                                       id="selectAll-${index}" checked
-                                                       onchange="toggleAllTests(${index})">
-                                                <label class="custom-control-label" for="selectAll-${index}"></label>
-                                            </div>
-                                        </th>
-                                        <th>Test Name</th>
-                                        <th>Result</th>
-                                        <th>Unit</th>
-                                        <th>Reference Range</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${file.importable_tests.map((test, testIndex) => `
-                                        <tr>
-                                            <td>
-                                                <div class="custom-control custom-checkbox">
-                                                    <input type="checkbox" class="custom-control-input test-checkbox" 
-                                                           id="test-${index}-${testIndex}" 
-                                                           data-file-index="${index}" 
-                                                           data-test-index="${testIndex}" checked
-                                                           onchange="updateTestSelection(${index})">
-                                                    <label class="custom-control-label" for="test-${index}-${testIndex}"></label>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <strong>${escapeHtml(test.name)}</strong>
-                                                ${test.matched_lab_name ? `<br><small class="text-success">Matched: ${escapeHtml(test.matched_lab_name)}</small>` : ''}
-                                            </td>
-                                            <td>
-                                                <span class="${test.is_numeric ? 'badge badge-primary' : 'badge badge-secondary'}">
-                                                    ${escapeHtml(test.result || test.result_text || 'N/A')}
-                                                </span>
-                                            </td>
-                                            <td>${escapeHtml(test.unit || 'N/A')}</td>
-                                            <td>
-                                                ${escapeHtml(test.reference_range ? 
-                                                    (typeof test.reference_range === 'string' ? test.reference_range : 
-                                                     test.reference_range.text || 'N/A') : 'N/A')}
-                                            </td>
-                                            <td>
-                                                <span class="badge badge-${getTestStatusBadge(test)}">
-                                                    ${getTestStatus(test)}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="text-center">
-                            <small class="text-muted">
-                                <i class="mdi mdi-information mr-1"></i>
-                                Uncheck tests you don't want to import. Tests with green "Matched" labels 
-                                will be linked to existing lab definitions.
-                            </small>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
-            </div>
-        `;
+        fileCard.id = `file-card-${index}`;
+        fileCard.innerHTML = renderFileCard(file, index);
         fileDetailsDiv.appendChild(fileCard);
     });
     

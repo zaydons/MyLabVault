@@ -16,6 +16,7 @@ MyLabVault is a comprehensive personal health data management system designed to
 - **Selective Import**: Choose which tests to import from each report
 - **Duplicate Detection**: Automatically detect and prevent duplicate imports
 - **Error Handling**: Robust parsing with fallback mechanisms for various PDF formats
+- **Optional AI Parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 
 ### 📊 **Data Visualization & Analytics**
 - **Interactive Dashboard**: Overview of health metrics with key statistics

@@ -24,6 +24,59 @@ This dataset holds everything the app stores: the SQLite database (`mylabvault.d
 
 Open `http://<truenas-ip>:8000` in a browser.
 
+## Optional: AI parsing with Amazon Bedrock
+
+MyLabVault can use Claude through Amazon Bedrock to read lab reports the built-in parser can't handle, such as scanned PDFs, unfamiliar layouts, or reports where it picks the wrong date. It's **off unless you configure it**. When it's off, nothing leaves your server.
+
+When it's on:
+- Uploads that the built-in parser can't read, or where it finds no tests, are retried with AI automatically.
+- Each uploaded file gets a **Re-scan with AI** button on the import screen.
+- Results parsed by AI are marked with an **AI** badge. You still review and confirm them before anything is saved.
+
+The PDF, including your name, date of birth and results, is sent to Claude in Amazon Bedrock in your AWS account. Data handling is covered by Amazon Bedrock's data-protection terms, and Anthropic has no access to the Bedrock inference infrastructure.
+
+### AWS setup
+
+1. **Model access:** in the AWS console, open **Amazon Bedrock → Model access** in your region (for example `us-east-1`) and make sure **Claude Haiku 4.5** is available. If you switch to another model later, enable that one too.
+2. **IAM policy:** go to **IAM → Policies → Create policy**, open the JSON tab, and create a policy named `MyLabVaultBedrock`:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Action": "bedrock-mantle:CreateInference",
+       "Resource": "*"
+     }]
+   }
+   ```
+3. **IAM user:** create a user named `mylabvault` with no console access and attach the policy.
+4. **Access key:** create an access key for the user (use case: *Application running outside AWS*). Save both values in a password manager; the secret is shown only once.
+5. **Budget alert:** go to **Billing → Budgets** and create a monthly budget, for example $5, with an email alert. Normal use costs cents per report.
+
+### Turn it on in TrueNAS
+
+Go to **Apps → mylabvault → Edit**, add these environment variables (the commented-out block in [`compose.yaml`](compose.yaml)), and save:
+
+| Variable | Value |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | Access key ID from step 4 |
+| `AWS_SECRET_ACCESS_KEY` | Secret access key from step 4 |
+| `AWS_REGION` | Your Bedrock region, e.g. `us-east-1` |
+| `MYLABVAULT_AI_MODEL` | Optional. Defaults to `anthropic.claude-haiku-4-5`; use `anthropic.claude-sonnet-5-5` for harder reports |
+
+AI parsing turns on when the two keys and the region are all set. Remove them to turn it off.
+
+### Troubleshooting
+
+The import screen shows the reason when an AI re-scan fails:
+
+| Message | Fix |
+|---|---|
+| *AWS credentials were rejected* | Check the access key ID and secret. |
+| *not allowed to use this model* | Grant model access in Bedrock, and attach the policy to the user. |
+| *not available in this AWS region* | Use a region where the model is offered, or change `MYLABVAULT_AI_MODEL`. |
+| *Could not reach the AI service* | The app needs outbound internet access. |
+
 ## Updating
 
 Every push to `main` publishes a new `:latest` image. To update, open the app in **Apps** and use **Update** (or **Edit** → **Save** to redeploy), which pulls the newest image. Your data in the dataset is kept.
