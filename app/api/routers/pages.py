@@ -76,6 +76,7 @@ def _render_simple_page(template_name: str, request: Request, db: Session):
     """Render a simple page with standard context."""
     user_settings = UserSettingsModel.get_settings(db)
     return templates.TemplateResponse(
+        request,
         template_name,
         {
             "request": request,
@@ -144,7 +145,8 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
     }
 
     return templates.TemplateResponse(
-        "dashboard.html", 
+        request,
+        "dashboard.html",
         {
             "request": request, 
             "dashboard_data": dashboard_data,
@@ -184,6 +186,7 @@ def results_page(request: Request, db: Session = Depends(get_db)):
     )
 
     return templates.TemplateResponse(
+        request,
         "results.html",
         {
             "request": request,
@@ -216,6 +219,7 @@ def lab_detail_page(request: Request, lab_id: int, db: Session = Depends(get_db)
     if not lab_info:
         # Lab not found, render with error state
         return templates.TemplateResponse(
+            request,
             "lab.html",
             {
                 "request": request,
@@ -244,6 +248,7 @@ def lab_detail_page(request: Request, lab_id: int, db: Session = Depends(get_db)
     lab_results = query.order_by(LabResultModel.date_collected.desc()).all()
 
     return templates.TemplateResponse(
+        request,
         "lab.html",
         {
             "request": request,
@@ -331,6 +336,7 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
             })
 
     return templates.TemplateResponse(
+        request,
         "charts.html",
         {
             "request": request,
@@ -403,6 +409,7 @@ def result_detail_page(request: Request, result_id: int, db: Session = Depends(g
     if not result:
         # Result not found, render with error state
         return templates.TemplateResponse(
+            request,
             "result_detail.html",
             {
                 "request": request,
@@ -413,6 +420,7 @@ def result_detail_page(request: Request, result_id: int, db: Session = Depends(g
         )
 
     return templates.TemplateResponse(
+        request,
         "result_detail.html",
         {
             "request": request,
