@@ -121,7 +121,7 @@ $(document).ready(function() {
                 dataSrc: ''
             },
             columns: [
-                { data: 'name' },
+                { data: 'name', render: $.fn.dataTable.render.text() },
                 { data: 'lab_count', defaultContent: '0' },
                 {
                     data: 'id',
@@ -136,7 +136,7 @@ $(document).ready(function() {
                                 <button type="button" class="btn btn-sm btn-primary edit-unit" data-id="${data}" title="Edit">
                                     <i class="mdi mdi-pencil"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-danger delete-unit ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                <button type="button" class="btn btn-sm btn-danger delete-unit ${deleteDisabled}" data-id="${data}" data-name="${escapeHtml(row.name)}" title="${deleteTitle}" ${deleteDisabled}>
                                     <i class="mdi mdi-delete"></i>
                                 </button>
                             </div>
@@ -196,7 +196,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Unit "${formData.name}" has been updated successfully.
+                        Unit "${escapeHtml(formData.name)}" has been updated successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>

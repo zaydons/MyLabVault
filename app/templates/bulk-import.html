@@ -390,9 +390,9 @@ $(document).ready(function() {
         
         // Add grouped options
         Object.keys(panelGroups).sort().forEach(panelName => {
-            const optgroup = $(`<optgroup label="${panelName}"></optgroup>`);
+            const optgroup = $(`<optgroup label="${escapeHtml(panelName)}"></optgroup>`);
             panelGroups[panelName].forEach(lab => {
-                optgroup.append(`<option value="${lab.id}">${lab.name}</option>`);
+                optgroup.append(`<option value="${escapeHtml(lab.id)}">${escapeHtml(lab.name)}</option>`);
             });
             $select.append(optgroup);
         });
@@ -404,7 +404,7 @@ $(document).ready(function() {
         $select.empty().append('<option value="">Select provider...</option>');
         $select.append('<option value="new_provider">+ Add New Provider</option>');
         providersData.forEach(provider => {
-            $select.append(`<option value="${provider.id}">${provider.name}</option>`);
+            $select.append(`<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.name)}</option>`);
         });
     }
 
@@ -414,7 +414,7 @@ $(document).ready(function() {
         $select.empty().append('<option value="">Select panel...</option>');
         $select.append('<option value="new_panel">+ Add New Panel</option>');
         panelsData.forEach(panel => {
-            $select.append(`<option value="${panel.id}">${panel.name}</option>`);
+            $select.append(`<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.name)}</option>`);
         });
     }
 
@@ -424,7 +424,7 @@ $(document).ready(function() {
         $select.empty().append('<option value="">Select unit...</option>');
         $select.append('<option value="new_unit">+ Add New Unit</option>');
         unitsData.forEach(unit => {
-            $select.append(`<option value="${unit.id}">${unit.name}</option>`);
+            $select.append(`<option value="${escapeHtml(unit.id)}">${escapeHtml(unit.name)}</option>`);
         });
     }
 

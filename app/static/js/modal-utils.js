@@ -7,6 +7,20 @@
 let currentPDFDownloadUrl = '';
 
 /**
+ * Escape a value for safe insertion into HTML markup.
+ * @param {*} value - Value to escape (null/undefined become an empty string)
+ * @returns {string} The escaped string
+ */
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * Show PDF in modal viewer
  * @param {string} filename - The PDF filename to display
  * @param {string} title - Optional title for the modal

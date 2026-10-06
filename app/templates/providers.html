@@ -178,8 +178,8 @@ $(document).ready(function() {
                 dataSrc: ''
             },
             columns: [
-                { data: 'name' },
-                { data: 'specialty', defaultContent: '<span class="text-muted">Not specified</span>' },
+                { data: 'name', render: $.fn.dataTable.render.text() },
+                { data: 'specialty', render: $.fn.dataTable.render.text(), defaultContent: '<span class="text-muted">Not specified</span>' },
                 { data: 'result_count', defaultContent: '0' },
                 { data: 'patient_count', defaultContent: '0' },
                 {
@@ -188,7 +188,7 @@ $(document).ready(function() {
                     render: function(data, type, row) {
                         const hasResults = row.result_count > 0;
                         const deleteButtonClass = hasResults ? 'btn-secondary disabled' : 'btn-danger delete-provider';
-                        const deleteButtonAttrs = hasResults ? 'disabled' : `data-id="${data}" data-name="${row.name}"`;
+                        const deleteButtonAttrs = hasResults ? 'disabled' : `data-id="${data}" data-name="${escapeHtml(row.name)}"`;
                         const deleteTitle = hasResults ? 'Cannot delete provider with associated lab results' : 'Delete';
                         
                         return `
@@ -241,7 +241,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Provider "${formData.name}" has been added successfully.
+                        Provider "${escapeHtml(formData.name)}" has been added successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>
@@ -292,7 +292,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Provider "${formData.name}" has been updated successfully.
+                        Provider "${escapeHtml(formData.name)}" has been updated successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>

@@ -394,7 +394,7 @@ function showUploadProgress(files) {
         fileDiv.className = 'upload-item mb-2';
         fileDiv.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
-                <span><i class="mdi mdi-file-pdf mr-2"></i>${file.name}</span>
+                <span><i class="mdi mdi-file-pdf mr-2"></i>${escapeHtml(file.name)}</span>
                 <span class="upload-status" id="status-${index}">
                     <i class="mdi mdi-loading mdi-spin text-info"></i> Uploading...
                 </span>
@@ -454,9 +454,9 @@ function showBatchConfirmation(batchData) {
             <div class="card-header">
                 <h6 class="mb-0">
                     <i class="mdi mdi-file-pdf mr-2"></i>
-                    ${file.filename}
+                    ${escapeHtml(file.filename)}
                     <span class="badge badge-${file.status === 'duplicate' ? 'warning' : 'success'} float-right">
-                        ${file.status === 'duplicate' ? 'Duplicate' : file.tests_found + ' tests found'}
+                        ${escapeHtml(file.status === 'duplicate' ? 'Duplicate' : file.tests_found + ' tests found')}
                     </span>
                 </h6>
             </div>
@@ -465,14 +465,14 @@ function showBatchConfirmation(batchData) {
                     <div class="col-md-8">
                         <div class="row">
                             <div class="col-md-6">
-                                <small><strong>Tests Found:</strong> ${file.tests_found}</small><br>
-                                <small><strong>Date:</strong> ${file.date_collected || 'Not detected'}</small>
+                                <small><strong>Tests Found:</strong> ${escapeHtml(file.tests_found)}</small><br>
+                                <small><strong>Date:</strong> ${escapeHtml(file.date_collected || 'Not detected')}</small>
                             </div>
                             <div class="col-md-6">
                                 ${file.status !== 'duplicate' ? `
                                 <div class="custom-control custom-checkbox">
                                     <input type="checkbox" class="custom-control-input file-checkbox" 
-                                           id="file-${index}" data-import-id="${file.import_id}" checked>
+                                           id="file-${index}" data-import-id="${escapeHtml(file.import_id)}" checked>
                                     <label class="custom-control-label" for="file-${index}">
                                         Import this file
                                     </label>
@@ -505,7 +505,7 @@ function showBatchConfirmation(batchData) {
                             <input type="date" class="form-control form-control-sm file-date-input" 
                                    id="date-${index}" data-file-index="${index}"
                                    placeholder="Leave empty to use PDF date">
-                            <small class="form-text text-muted">Leave empty to use date from PDF (${file.date_collected || 'not detected'})</small>
+                            <small class="form-text text-muted">Leave empty to use date from PDF (${escapeHtml(file.date_collected || 'not detected')})</small>
                         </div>
                         ` : ''}
                     </div>
@@ -556,19 +556,19 @@ function showBatchConfirmation(batchData) {
                                                 </div>
                                             </td>
                                             <td>
-                                                <strong>${test.name}</strong>
-                                                ${test.matched_lab_name ? `<br><small class="text-success">Matched: ${test.matched_lab_name}</small>` : ''}
+                                                <strong>${escapeHtml(test.name)}</strong>
+                                                ${test.matched_lab_name ? `<br><small class="text-success">Matched: ${escapeHtml(test.matched_lab_name)}</small>` : ''}
                                             </td>
                                             <td>
                                                 <span class="${test.is_numeric ? 'badge badge-primary' : 'badge badge-secondary'}">
-                                                    ${test.result || test.result_text || 'N/A'}
+                                                    ${escapeHtml(test.result || test.result_text || 'N/A')}
                                                 </span>
                                             </td>
-                                            <td>${test.unit || 'N/A'}</td>
+                                            <td>${escapeHtml(test.unit || 'N/A')}</td>
                                             <td>
-                                                ${test.reference_range ? 
+                                                ${escapeHtml(test.reference_range ? 
                                                     (typeof test.reference_range === 'string' ? test.reference_range : 
-                                                     test.reference_range.text || 'N/A') : 'N/A'}
+                                                     test.reference_range.text || 'N/A') : 'N/A')}
                                             </td>
                                             <td>
                                                 <span class="badge badge-${getTestStatusBadge(test)}">
@@ -699,7 +699,7 @@ async function confirmBatchImport() {
             const alert = `
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-check mr-2"></i>
-                    ${result.message}
+                    ${escapeHtml(result.message)}
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -828,7 +828,7 @@ async function createNewProvider() {
             const alert = `
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-check mr-2"></i>
-                    Provider "${provider.name}" created successfully${fileIndex ? ` and selected for file ${parseInt(fileIndex) + 1}` : ''}
+                    Provider "${escapeHtml(provider.name)}" created successfully${fileIndex ? ` and selected for file ${parseInt(fileIndex) + 1}` : ''}
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -941,7 +941,7 @@ function initializeHistoryTable() {
         data: [], // Start with empty data
         deferRender: true,
         columns: [
-            { data: 'filename' },
+            { data: 'filename', render: $.fn.dataTable.render.text() },
             { 
                 data: 'status',
                 className: 'text-center',
@@ -966,7 +966,7 @@ function initializeHistoryTable() {
                         title: data || 'Unknown Status'
                     };
                     
-                    return `<span style="font-size: 1.5rem; cursor: help;" title="${config.title}">
+                    return `<span style="font-size: 1.5rem; cursor: help;" title="${escapeHtml(config.title)}">
                               ${config.emoji}
                             </span>`;
                 }
@@ -1019,7 +1019,7 @@ function initializeHistoryTable() {
                 render: function(data) {
                     if (!data) return 'Not detected';
                     // Return HTML with data attribute for JavaScript formatting
-                    return `<span class="format-date" data-iso-date="${data}">${new Date(data).toLocaleDateString()}</span>`;
+                    return `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>`;
                 }
             },
             { 
@@ -1027,7 +1027,7 @@ function initializeHistoryTable() {
                 render: function(data) {
                     if (!data) return '';
                     // Return HTML with data attribute for JavaScript formatting
-                    return `<span class="format-date" data-iso-date="${data}">${new Date(data).toLocaleDateString()}</span>`;
+                    return `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>`;
                 }
             },
             {
@@ -1040,21 +1040,21 @@ function initializeHistoryTable() {
                     
                     // Context-aware primary action based on status
                     if (row.status === 'pending') {
-                        actions += `<button class="btn btn-primary" onclick="processImport(${row.id})" title="Process ${row.total_tests_found} tests">
+                        actions += `<button class="btn btn-primary" onclick="processImport(${Number(row.id)})" title="Process ${escapeHtml(row.total_tests_found)} tests">
                                       <i class="mdi mdi-play-circle"></i>
                                     </button>`;
                     } else if (row.status === 'completed') {
-                        actions += `<button class="btn btn-info view-pdf-btn" data-filename="${row.filename}" title="View PDF Report">
+                        actions += `<button class="btn btn-info view-pdf-btn" data-filename="${escapeHtml(row.filename)}" title="View PDF Report">
                                       📄
                                     </button>`;
                     } else if (row.status === 'failed') {
-                        actions += `<button class="btn btn-warning" onclick="processImport(${row.id})" title="Retry Process">
+                        actions += `<button class="btn btn-warning" onclick="processImport(${Number(row.id)})" title="Retry Process">
                                       <i class="mdi mdi-refresh"></i>
                                     </button>`;
                     }
                     
                     // Always show details button
-                    actions += `<button class="btn btn-secondary" onclick="viewImportDetails(${row.id})" title="View Details">
+                    actions += `<button class="btn btn-secondary" onclick="viewImportDetails(${Number(row.id)})" title="View Details">
                                   <i class="mdi mdi-information-outline"></i>
                                 </button>`;
                     
@@ -1062,7 +1062,7 @@ function initializeHistoryTable() {
                     const deleteDisabled = row.status === 'completed' && row.tests_imported > 0;
                     const deleteClass = deleteDisabled ? 'btn-outline-secondary disabled' : 'btn-danger';
                     const deleteTitle = deleteDisabled ? 'Cannot delete - has imported results' : 'Delete Import';
-                    actions += `<button class="btn ${deleteClass}" onclick="deleteImport(${row.id})" title="${deleteTitle}" ${deleteDisabled ? 'disabled' : ''}>
+                    actions += `<button class="btn ${deleteClass}" onclick="deleteImport(${Number(row.id)})" title="${deleteTitle}" ${deleteDisabled ? 'disabled' : ''}>
                                   <i class="mdi mdi-delete-outline"></i>
                                 </button>`;
                     
@@ -1365,14 +1365,14 @@ function displayImportDetails(importData) {
         <div class="row">
             <div class="col-md-12">
                 <h6><strong>Import Information</strong></h6>
-                <p><strong>Filename:</strong> ${importData.filename}</p>
+                <p><strong>Filename:</strong> ${escapeHtml(importData.filename)}</p>
                 <p><strong>Status:</strong> ${getStatusBadge(importData.status)}</p>
-                <p><strong>Tests Found:</strong> ${importData.total_tests_found}</p>
+                <p><strong>Tests Found:</strong> ${escapeHtml(importData.total_tests_found)}</p>
                 <p><strong>Tests Imported:</strong> ${importData.imported_test_indices ? importData.imported_test_indices.length : (importData.tests_imported || 0)}</p>
-                <p><strong>Date Collected:</strong> ${importData.date_collected ? `<span class="format-date" data-iso-date="${importData.date_collected}">${new Date(importData.date_collected).toLocaleDateString()}</span>` : 'Not detected'}</p>
-                <p><strong>Import Date:</strong> <span class="format-date" data-iso-date="${importData.created_at}">${new Date(importData.created_at).toLocaleString()}</span></p>
-                ${importData.provider_name ? `<p><strong>Current Provider:</strong> ${importData.provider_name}</p>` : ''}
-                ${importData.error_message ? `<p><strong>Error:</strong> <span class="text-danger">${importData.error_message}</span></p>` : ''}
+                <p><strong>Date Collected:</strong> ${importData.date_collected ? `<span class="format-date" data-iso-date="${escapeHtml(importData.date_collected)}">${new Date(importData.date_collected).toLocaleDateString()}</span>` : 'Not detected'}</p>
+                <p><strong>Import Date:</strong> <span class="format-date" data-iso-date="${escapeHtml(importData.created_at)}">${new Date(importData.created_at).toLocaleString()}</span></p>
+                ${importData.provider_name ? `<p><strong>Current Provider:</strong> ${escapeHtml(importData.provider_name)}</p>` : ''}
+                ${importData.error_message ? `<p><strong>Error:</strong> <span class="text-danger">${escapeHtml(importData.error_message)}</span></p>` : ''}
             </div>
         </div>`;
     
@@ -1584,7 +1584,7 @@ function displayImportDetails(importData) {
                     }
                     
                     // Add status badge styling
-                    let statusDisplay = resultStatus;
+                    let statusDisplay = escapeHtml(resultStatus);
                     if (resultStatus === 'Normal') {
                         statusDisplay = '<span class="badge badge-success">Normal</span>';
                     } else if (resultStatus === 'High' || resultStatus === 'Low' || resultStatus === 'Abnormal') {
@@ -1608,10 +1608,10 @@ function displayImportDetails(importData) {
                                     ${isImported ? '<i class="mdi mdi-check text-success ml-1" title="Already imported"></i>' : ''}
                                 </div>
                             </td>
-                            <td>${test.name || 'Unknown Test'}</td>
-                            <td>${test.result || test.result_text || 'N/A'}</td>
-                            <td>${test.unit || 'N/A'}</td>
-                            <td>${referenceRange}</td>
+                            <td>${escapeHtml(test.name || 'Unknown Test')}</td>
+                            <td>${escapeHtml(test.result || test.result_text || 'N/A')}</td>
+                            <td>${escapeHtml(test.unit || 'N/A')}</td>
+                            <td>${escapeHtml(referenceRange)}</td>
                             <td>${statusDisplay}</td>
                         </tr>
                     `;
@@ -1764,7 +1764,7 @@ function getStatusBadge(status) {
         'completed': '<span class="badge badge-success">Completed</span>',
         'failed': '<span class="badge badge-danger">Failed</span>'
     };
-    return badges[status] || status;
+    return badges[status] || escapeHtml(status);
 }
 
 async function processImport(importId) {

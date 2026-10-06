@@ -634,7 +634,7 @@ function executeDataReset() {
             const alert = `
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-check mr-2"></i>
-                    ${response.message} Refreshing page...
+                    ${escapeHtml(response.message)} Refreshing page...
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -799,7 +799,7 @@ function loadPatientsForExport() {
         patientsSelect.empty();
         
         patients.forEach(patient => {
-            patientsSelect.append(`<option value="${patient.id}">${patient.name}</option>`);
+            patientsSelect.append(`<option value="${escapeHtml(patient.id)}">${escapeHtml(patient.name)}</option>`);
         });
     }).fail(function() {
         console.error('Failed to load patients for export');
@@ -860,7 +860,7 @@ function generateExportPreview() {
         },
         error: function(xhr) {
             const error = xhr.responseJSON?.detail || 'Failed to generate preview';
-            $('#exportPreview').html(`<span class="text-danger">Error: ${error}</span>`);
+            $('#exportPreview').html(`<span class="text-danger">Error: ${escapeHtml(error)}</span>`);
         },
         complete: function() {
             $('#previewBtn').prop('disabled', false).html('<i class="mdi mdi-eye mr-1"></i>Preview');
@@ -872,18 +872,18 @@ function displayExportPreview(preview) {
     const previewDiv = $('#exportPreview');
     
     let previewHtml = '<div class="row">';
-    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${preview.patients_count}</div>`;
-    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${preview.lab_results_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${escapeHtml(preview.patients_count)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${escapeHtml(preview.lab_results_count)}</div>`;
     previewHtml += '</div><div class="row mt-1">';
-    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${preview.labs_count}</div>`;
-    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${preview.providers_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${escapeHtml(preview.labs_count)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${escapeHtml(preview.providers_count)}</div>`;
     previewHtml += '</div>';
     
     if (preview.include_pdfs) {
-        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${preview.pdf_files_count} (ZIP format)</div></div>`;
+        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${escapeHtml(preview.pdf_files_count)} (ZIP format)</div></div>`;
     }
     
-    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Estimated size: ${preview.estimated_size}</small></div></div>`;
+    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Estimated size: ${escapeHtml(preview.estimated_size)}</small></div></div>`;
     
     previewDiv.html(previewHtml);
 }
@@ -957,7 +957,7 @@ function executeExport() {
             const alert = `
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-check mr-2"></i>
-                    Export completed successfully. File downloaded: ${filename}
+                    Export completed successfully. File downloaded: ${escapeHtml(filename)}
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -973,7 +973,7 @@ function executeExport() {
             const alert = `
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-alert mr-2"></i>
-                    Export failed: ${error}
+                    Export failed: ${escapeHtml(error)}
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -1108,7 +1108,7 @@ function previewImportFile() {
             const alert = `
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-alert mr-2"></i>
-                    Import preview failed: ${error}
+                    Import preview failed: ${escapeHtml(error)}
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -1127,30 +1127,30 @@ function displayImportPreview(preview) {
     const previewDiv = $('#importPreviewContent');
     
     let previewHtml = '<div class="row">';
-    previewHtml += `<div class="col-6"><strong>File Type:</strong> ${preview.file_type}</div>`;
-    previewHtml += `<div class="col-6"><strong>Export Version:</strong> ${preview.export_version || 'N/A'}</div>`;
+    previewHtml += `<div class="col-6"><strong>File Type:</strong> ${escapeHtml(preview.file_type)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Export Version:</strong> ${escapeHtml(preview.export_version || 'N/A')}</div>`;
     previewHtml += '</div><div class="row mt-1">';
-    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${preview.patients_count}</div>`;
-    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${preview.lab_results_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${escapeHtml(preview.patients_count)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${escapeHtml(preview.lab_results_count)}</div>`;
     previewHtml += '</div><div class="row mt-1">';
-    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${preview.providers_count}</div>`;
-    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${preview.labs_count}</div>`;
+    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${escapeHtml(preview.providers_count)}</div>`;
+    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${escapeHtml(preview.labs_count)}</div>`;
     previewHtml += '</div>';
     
     if (preview.pdf_files_count > 0) {
-        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${preview.pdf_files_count}</div></div>`;
+        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${escapeHtml(preview.pdf_files_count)}</div></div>`;
     }
     
     if (preview.conflicts && preview.conflicts.length > 0) {
         previewHtml += '<div class="row mt-2"><div class="col-12">';
         previewHtml += '<small class="text-warning"><strong>Potential Conflicts:</strong></small><br>';
         preview.conflicts.forEach(conflict => {
-            previewHtml += `<small class="text-muted">• ${conflict}</small><br>`;
+            previewHtml += `<small class="text-muted">• ${escapeHtml(conflict)}</small><br>`;
         });
         previewHtml += '</div></div>';
     }
     
-    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Total file size: ${preview.file_size}</small></div></div>`;
+    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Total file size: ${escapeHtml(preview.file_size)}</small></div></div>`;
     
     previewDiv.html(previewHtml);
 }
@@ -1193,7 +1193,7 @@ function executeDataImport(isStartFromScratch = false) {
             const alert = `
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-check mr-2"></i>
-                    Data import completed successfully! Imported: ${response.imported_records} records, ${response.imported_pdfs || 0} PDF files.
+                    Data import completed successfully! Imported: ${escapeHtml(response.imported_records)} records, ${escapeHtml(response.imported_pdfs || 0)} PDF files.
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -1222,7 +1222,7 @@ function executeDataImport(isStartFromScratch = false) {
             const alert = `
                 <div class="alert alert-danger alert-dismissible fade show" role="alert">
                     <i class="mdi mdi-alert mr-2"></i>
-                    Import failed: ${error}
+                    Import failed: ${escapeHtml(error)}
                     <button type="button" class="close" data-dismiss="alert">
                         <span aria-hidden="true">&times;</span>
                     </button>

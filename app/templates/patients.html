@@ -236,7 +236,7 @@ $(document).ready(function() {
                 dataSrc: ''
             },
             columns: [
-                { data: 'name' },
+                { data: 'name', render: $.fn.dataTable.render.text() },
                 { 
                     data: 'age',
                     render: function(data, type, row) {
@@ -267,7 +267,7 @@ $(document).ready(function() {
                                 <button type="button" class="btn btn-sm btn-primary edit-patient" data-id="${data}" title="Edit">
                                     <i class="mdi mdi-pencil"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-danger delete-patient ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                <button type="button" class="btn btn-sm btn-danger delete-patient ${deleteDisabled}" data-id="${data}" data-name="${escapeHtml(row.name)}" title="${deleteTitle}" ${deleteDisabled}>
                                     <i class="mdi mdi-delete"></i>
                                 </button>
                             </div>
@@ -313,7 +313,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Patient "${formData.name}" has been added successfully.
+                        Patient "${escapeHtml(formData.name)}" has been added successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>
@@ -340,9 +340,9 @@ $(document).ready(function() {
                 <div class="row">
                     <div class="col-md-6">
                         <h6><strong>Patient Information</strong></h6>
-                        <p><strong>Name:</strong> ${data.patient.name}</p>
+                        <p><strong>Name:</strong> ${escapeHtml(data.patient.name)}</p>
                         <p><strong>Age:</strong> ${data.patient.age !== null ? data.patient.age : 'N/A'}</p>
-                        <p><strong>Gender:</strong> ${data.patient.gender || 'Not specified'}</p>
+                        <p><strong>Gender:</strong> ${escapeHtml(data.patient.gender || 'Not specified')}</p>
                     </div>
                     <div class="col-md-6">
                         <h6><strong>Lab Results Summary</strong></h6>
@@ -374,9 +374,9 @@ $(document).ready(function() {
                 data.recent_abnormal.forEach(function(result) {
                     content += `
                         <tr>
-                            <td>${result.lab_name}</td>
-                            <td>${result.result || result.result_text || 'N/A'}</td>
-                            <td><span class="badge badge-warning">${result.status}</span></td>
+                            <td>${escapeHtml(result.lab_name)}</td>
+                            <td>${escapeHtml(result.result || result.result_text || 'N/A')}</td>
+                            <td><span class="badge badge-warning">${escapeHtml(result.status)}</span></td>
                             <td>${new Date(result.date_collected).toLocaleDateString()}</td>
                         </tr>
                     `;
@@ -441,7 +441,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Patient "${formData.name}" has been updated successfully.
+                        Patient "${escapeHtml(formData.name)}" has been updated successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>

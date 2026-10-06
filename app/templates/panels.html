@@ -150,7 +150,7 @@ $(document).ready(function() {
                 dataSrc: ''
             },
             columns: [
-                { data: 'name' },
+                { data: 'name', render: $.fn.dataTable.render.text() },
                 { data: 'lab_count', defaultContent: '0' },
                 {
                     data: 'id',
@@ -168,7 +168,7 @@ $(document).ready(function() {
                                 <button type="button" class="btn btn-sm btn-primary edit-panel" data-id="${data}" title="Edit">
                                     <i class="mdi mdi-pencil"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-danger delete-panel ${deleteDisabled}" data-id="${data}" data-name="${row.name}" title="${deleteTitle}" ${deleteDisabled}>
+                                <button type="button" class="btn btn-sm btn-danger delete-panel ${deleteDisabled}" data-id="${data}" data-name="${escapeHtml(row.name)}" title="${deleteTitle}" ${deleteDisabled}>
                                     <i class="mdi mdi-delete"></i>
                                 </button>
                             </div>
@@ -206,7 +206,7 @@ $(document).ready(function() {
                 <div class="row">
                     <div class="col-md-6">
                         <h6><strong>Panel Information</strong></h6>
-                        <p><strong>Name:</strong> ${data.panel.name}</p>
+                        <p><strong>Name:</strong> ${escapeHtml(data.panel.name)}</p>
                         <p><strong>Lab Tests Count:</strong> ${data.lab_count}</p>
                     </div>
                 </div>
@@ -231,9 +231,9 @@ $(document).ready(function() {
                 data.labs.forEach(function(lab) {
                     content += `
                         <tr>
-                            <td>${lab.name}</td>
-                            <td>${lab.unit || 'N/A'}</td>
-                            <td>${lab.ref_low !== null && lab.ref_high !== null ? lab.ref_low + ' - ' + lab.ref_high : 'N/A'}</td>
+                            <td>${escapeHtml(lab.name)}</td>
+                            <td>${escapeHtml(lab.unit || 'N/A')}</td>
+                            <td>${escapeHtml(lab.ref_low !== null && lab.ref_high !== null ? lab.ref_low + ' - ' + lab.ref_high : 'N/A')}</td>
                         </tr>
                     `;
                 });
@@ -291,7 +291,7 @@ $(document).ready(function() {
                 const alert = `
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
                         <i class="mdi mdi-check mr-2"></i>
-                        Panel "${formData.name}" has been updated successfully.
+                        Panel "${escapeHtml(formData.name)}" has been updated successfully.
                         <button type="button" class="close" data-dismiss="alert">
                             <span aria-hidden="true">&times;</span>
                         </button>

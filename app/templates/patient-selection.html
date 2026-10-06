@@ -182,9 +182,11 @@
   </div>
 
   <!-- jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha384-vtXRMe3mGCbOeY7l30aIg8H9p3GdeSe4IFlP6G8JMa7o7lXvnz3GFKzPxzJdPfGK" crossorigin="anonymous"></script>
   <!-- Bootstrap 4 -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Shared helpers (escapeHtml) -->
+  <script src="/static/js/modal-utils.js"></script>
 
   <script>
   $(document).ready(function() {
@@ -272,15 +274,15 @@
           
           html += `
               <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-4">
-                  <div class="card patient-card" onclick="selectPatient(${patient.id})">
+                  <div class="card patient-card" onclick="selectPatient(${Number(patient.id)})">
                       <div class="card-body text-center p-4">
-                          <div class="patient-avatar">${initials}</div>
-                          <h5 class="card-title mb-1">${patient.name}</h5>
-                          <p class="text-muted small mb-2">Age: ${age}</p>
+                          <div class="patient-avatar">${escapeHtml(initials)}</div>
+                          <h5 class="card-title mb-1">${escapeHtml(patient.name)}</h5>
+                          <p class="text-muted small mb-2">Age: ${escapeHtml(age)}</p>
                           <div class="row text-center">
                               <div class="col-12">
                                   <small class="text-muted">Lab Results</small><br>
-                                  <strong class="text-primary">${resultCount}</strong>
+                                  <strong class="text-primary">${escapeHtml(resultCount)}</strong>
                               </div>
                           </div>
                       </div>
