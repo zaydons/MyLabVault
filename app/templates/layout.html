@@ -348,6 +348,12 @@
               <p>Charts</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="/vitals" class="nav-link {{ 'active' if request.url.path == '/vitals' }}">
+              <i class="nav-icon mdi mdi-heart-pulse"></i>
+              <p>Vitals</p>
+            </a>
+          </li>
           {% set manage_data_paths = ['/labs', '/panels', '/units', '/providers', '/import', '/patients'] %}
           {% set is_manage_data_page = request.url.path in manage_data_paths or request.url.path.startswith('/lab/') %}
           <li class="nav-item {{ 'menu-open' if is_manage_data_page }}">

@@ -1,0 +1,34 @@
+{# Shared badges for a lab result: status (from its own reference range, else the lab test's),
+   the lab's printed flag, fasting status and the lab's comment. #}
+
+{% macro status_badge(status) -%}
+  {% if status == 'normal' %}
+    <span class="badge badge-success">Normal</span>
+  {% elif status == 'low' %}
+    <span class="badge badge-warning">Low</span>
+  {% elif status == 'high' %}
+    <span class="badge badge-warning">High</span>
+  {% elif status == 'abnormal' %}
+    <span class="badge badge-danger">Abnormal</span>
+  {% else %}
+    <span class="badge badge-secondary">Unknown</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro detail_badges(result) -%}
+  {% if result.flag %}
+    <span class="badge badge-danger" title="Flag printed by the lab">{{ result.flag }}</span>
+  {% endif %}
+  {% if result.fasting is true %}
+    <span class="badge badge-info" title="Fasting specimen">Fasting</span>
+  {% elif result.fasting is false %}
+    <span class="badge badge-light border" title="Non-fasting specimen">Non-fasting</span>
+  {% endif %}
+  {% if result.lab_comment %}
+    <i class="mdi mdi-comment-text-outline text-muted" title="Lab comment: {{ result.lab_comment }}"></i>
+  {% endif %}
+{%- endmacro %}
+
+{% macro result_value(result, unit_name) -%}
+  {% if result.result is not none %}{{ result.result }} {{ unit_name or '' }}{% else %}{{ result.result_text or '—' }}{% endif %}
+{%- endmacro %}

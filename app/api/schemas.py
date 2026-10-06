@@ -104,6 +104,12 @@ class LabResultBase(BaseModel):
     date_collected: datetime
     notes: Optional[str] = None
     pdf_import_id: Optional[str] = None
+    ref_low: Optional[float] = None
+    ref_high: Optional[float] = None
+    ref_text: Optional[str] = Field(None, max_length=100)
+    flag: Optional[str] = Field(None, max_length=20)
+    lab_comment: Optional[str] = None
+    fasting: Optional[bool] = None
     @field_validator('pdf_import_id', mode='before')
     @classmethod
     def convert_pdf_import_id_to_string(cls, v):

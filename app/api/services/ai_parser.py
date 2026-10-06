@@ -49,6 +49,11 @@ class ExtractedTest(BaseModel):
     ref_high: Optional[float] = Field(None, description="Upper bound of the reference range, if any")
     ref_text: Optional[str] = Field(None, description="Reference range exactly as printed, e.g. '100-199', '>59', '<5.7'")
     flag: Optional[str] = Field(None, description="Abnormal flag as printed, e.g. 'H', 'L', 'High', 'Critical'")
+    comment: Optional[str] = Field(
+        None,
+        description="Comment or footnote the lab printed for this specific test (e.g. calculation method, "
+                    "specimen issues), copied as printed; null if none",
+    )
 
 
 class ExtractedReport(BaseModel):
@@ -60,6 +65,11 @@ class ExtractedReport(BaseModel):
     )
     ordering_provider: Optional[str] = Field(None, description="Ordering physician or provider name")
     lab_company: Optional[str] = Field(None, description="Laboratory company, e.g. 'Labcorp', 'Quest Diagnostics'")
+    fasting: Optional[bool] = Field(
+        None,
+        description="Whether the report states the patient was fasting (true) or not fasting (false); "
+                    "null if the report does not say",
+    )
     tests: List[ExtractedTest]
 
 
@@ -158,6 +168,7 @@ def _to_parser_test(test: ExtractedTest, known_names: Dict[str, str]) -> Dict[st
         "unit": (test.unit or "").strip(),
         "reference_range": {"low": ref_low, "high": ref_high, "text": ref_text or ""},
         "flag": test.flag,
+        "lab_comment": test.comment,
     }
 
 
@@ -262,6 +273,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
         "date_collected": _normalize_date(report.collection_date),
         "physician": report.ordering_provider,
         "lab_company": report.lab_company,
+        "fasting": report.fasting,
         "tests": tests,
         "ordered_panels": [],
         "panels": [],

@@ -122,6 +122,11 @@ def delete_patient(patient_id: int, db: Session = Depends(get_db)):
             status_code=400,
             detail="Cannot delete patient with associated lab results"
         )
+    if db_patient.vitals:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete patient with recorded vitals"
+        )
     
     patient_name = db_patient.name
     db.delete(db_patient)

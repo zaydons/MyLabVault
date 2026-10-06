@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "components/result_badges.html" import status_badge, detail_badges, result_value %}
 
 {% block title %}Lab Results - MyLabVault{% endblock %}
 
@@ -68,21 +69,13 @@
                     {% endif %}
                   </td>
                   <td>
-                    {{ result.result }} {{ result.lab.unit.name if result.lab and result.lab.unit else '' }}
+                    {{ result_value(result, result.lab.unit.name if result.lab and result.lab.unit else '') }}
                   </td>
                   <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
                   <td>{{ result.lab.panel.name if result.lab and result.lab.panel else '—' }}</td>
                   <td>
-                    {% set status = result.result | get_result_status(result.lab.ref_low if result.lab else none, result.lab.ref_high if result.lab else none) %}
-                    {% if status == 'normal' %}
-                      <span class="badge badge-success">Normal</span>
-                    {% elif status == 'low' %}
-                      <span class="badge badge-warning">Low</span>
-                    {% elif status == 'high' %}
-                      <span class="badge badge-warning">High</span>
-                    {% else %}
-                      <span class="badge badge-secondary">Unknown</span>
-                    {% endif %}
+                    {{ status_badge(result.status) }}
+                    {{ detail_badges(result) }}
                   </td>
                   <td>
                     <div class="btn-group btn-group-sm">
@@ -174,6 +167,14 @@
               <!-- Patient ID will be set from cookie -->
               <input type="hidden" id="resultPatient" name="patient_id" value="">
             </div>
+          </div>
+          <div class="form-group">
+            <label for="resultFasting">Fasting</label>
+            <select class="form-control" id="resultFasting" name="fasting">
+              <option value="">Unknown</option>
+              <option value="true">Fasting</option>
+              <option value="false">Non-fasting</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="resultNotes">Notes</label>
@@ -531,7 +532,8 @@ $(document).ready(function() {
             result: $('#resultValue').val() ? parseFloat($('#resultValue').val()) : null,
             result_text: $('#resultText').val().trim() || null,
             date_collected: $('#resultDate').val(),
-            notes: $('#resultNotes').val().trim() || null
+            notes: $('#resultNotes').val().trim() || null,
+            fasting: $('#resultFasting').val() === '' ? null : $('#resultFasting').val() === 'true'
         };
         
         // Validation

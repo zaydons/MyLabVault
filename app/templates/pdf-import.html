@@ -593,6 +593,8 @@ function renderFileCard(file, index) {
                                             <span class="${test.is_numeric ? 'badge badge-primary' : 'badge badge-secondary'}">
                                                 ${escapeHtml(test.result || test.result_text || 'N/A')}
                                             </span>
+                                            ${test.flag ? `<span class="badge badge-danger ml-1" title="Flag printed by the lab">${escapeHtml(test.flag)}</span>` : ''}
+                                            ${test.lab_comment ? `<i class="mdi mdi-comment-text-outline text-muted ml-1" title="${escapeHtml(test.lab_comment)}"></i>` : ''}
                                         </td>
                                         <td>${escapeHtml(test.unit || 'N/A')}</td>
                                         <td>

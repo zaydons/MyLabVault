@@ -534,8 +534,10 @@ class PDFParser:
                 column_map['unit'] = i
             elif 'REFERENCE' in header or 'INTERVAL' in header:
                 column_map['reference'] = i
-            # Explicitly ignore FLAG and LAB columns
-            elif 'FLAG' in header or 'LAB' in header:
+            elif 'FLAG' in header:
+                column_map['flag'] = i
+            # Explicitly ignore LAB (performing lab) columns
+            elif 'LAB' in header:
                 ignored_columns.append(i)
                 continue  # Skip these columns entirely
 
@@ -602,12 +604,18 @@ class PDFParser:
         # Parse reference range
         ref_range = self.parse_reference_range(reference_range or '')
 
+        # Abnormal flag as printed (H, L, High, Low, ...)
+        flag = None
+        if 'flag' in column_map and column_map['flag'] < len(row):
+            flag = (row[column_map['flag']] or '').strip() or None
+
         return {
             'name': test_name,
             'result': result,
             'result_text': result_text,
             'unit': unit or '',
             'reference_range': ref_range,
+            'flag': flag,
             'is_numeric': numeric_value is not None,
             'is_qualitative': is_qualitative,
             'numeric_value': numeric_value

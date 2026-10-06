@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models import (
-    LabResult as LabResultModel, Lab as LabModel,
+    LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel,
     Patient as PatientModel, Provider as ProviderModel,
     Panel as PanelModel, PDFImportLog, Unit as UnitModel,
     UserSettings as UserSettingsModel
@@ -38,6 +38,7 @@ class ExportConfiguration(BaseModel):
 class ExportPreviewResponse(BaseModel):
     patients_count: int
     lab_results_count: int
+    vitals_count: int = 0
     labs_count: int
     providers_count: int
     panels_count: int
@@ -52,6 +53,7 @@ class ImportPreviewResponse(BaseModel):
     export_version: Optional[str] = None
     patients_count: int
     lab_results_count: int
+    vitals_count: int = 0
     labs_count: int
     providers_count: int
     panels_count: int
@@ -156,8 +158,9 @@ def reset_data(db: Session = Depends(get_db)):
     """Reset all application data to initial state (DESTRUCTIVE OPERATION)."""
     try:
         # Delete all data in correct dependency order to avoid foreign key constraint errors
-        # 1. First delete LabResults (depends on Lab, Patient, Provider)
+        # 1. First delete LabResults and Vitals (depend on Lab, Patient, Provider)
         db.query(LabResultModel).delete()
+        db.query(VitalModel).delete()
         db.commit()  # Commit this deletion first
 
         # 2. Then delete Labs (depends on Panel, Unit)  
@@ -219,6 +222,7 @@ def get_data_counts(db: Session = Depends(get_db)):
     """Get comprehensive counts of all data types in the system."""
     try:
         lab_results_count = db.query(LabResultModel).count()
+        vitals_count = db.query(VitalModel).count()
         labs_count = db.query(LabModel).count()
         panels_count = db.query(PanelModel).count()
         patients_count = db.query(PatientModel).count()
@@ -233,13 +237,14 @@ def get_data_counts(db: Session = Depends(get_db)):
             pdf_files_count = len(list(pdf_dir.glob("*.pdf")))
 
         total_items = (
-            lab_results_count + labs_count + panels_count + patients_count + providers_count + units_count + pdf_imports_count + pdf_files_count
+            lab_results_count + vitals_count + labs_count + panels_count + patients_count + providers_count + units_count + pdf_imports_count + pdf_files_count
         )
 
         return {
             "success": True,
             "data": {
                 "lab_results": lab_results_count,
+                "vitals": vitals_count,
                 "labs": labs_count,
                 "panels": panels_count,
                 "providers": providers_count,
@@ -286,6 +291,7 @@ def get_export_preview(
         
         # Get counts
         lab_results_count = lab_results_query.count()
+        vitals_count = _vitals_query(config, patient_ids, db).count()
         
         # Get related data counts
         patients_count = len(patient_ids) if patient_ids and 'all' not in config.patients else db.query(PatientModel).count()
@@ -311,6 +317,7 @@ def get_export_preview(
         return ExportPreviewResponse(
             patients_count=patients_count,
             lab_results_count=lab_results_count,
+            vitals_count=vitals_count,
             labs_count=labs_count,
             providers_count=providers_count,
             panels_count=panels_count,
@@ -437,6 +444,7 @@ def preview_import_file(
         export_info = export_data.get('export_info', {})
         patients_count = len(export_data.get('patients', []))
         lab_results_count = len(export_data.get('lab_results', []))
+        vitals_count = len(export_data.get('vitals', []))
         labs_count = len(export_data.get('labs', []))
         providers_count = len(export_data.get('providers', []))
         panels_count = len(export_data.get('panels', []))
@@ -458,6 +466,7 @@ def preview_import_file(
             export_version=export_info.get('version'),
             patients_count=patients_count,
             lab_results_count=lab_results_count,
+            vitals_count=vitals_count,
             labs_count=labs_count,
             providers_count=providers_count,
             panels_count=panels_count,
@@ -582,6 +591,7 @@ def _generate_export_data(config: ExportConfiguration, db: Session) -> dict:
     
     # Get data
     lab_results = lab_results_query.all()
+    vitals = _vitals_query(config, patient_ids, db).all()
     
     # Get related data
     if patient_ids and 'all' not in config.patients:
@@ -613,7 +623,8 @@ def _generate_export_data(config: ExportConfiguration, db: Session) -> dict:
         "panels": [_panel_to_dict(p) for p in panels],
         "units": [_unit_to_dict(u) for u in units],
         "labs": [_lab_to_dict(l) for l in labs],
-        "lab_results": [_lab_result_to_dict(lr) for lr in lab_results]
+        "lab_results": [_lab_result_to_dict(lr) for lr in lab_results],
+        "vitals": [_vital_to_dict(v) for v in vitals]
     }
     
     return export_data
@@ -700,6 +711,33 @@ def _lab_to_dict(lab: LabModel) -> dict:
         "created_at": getattr(lab, 'created_at', None).isoformat() if hasattr(lab, 'created_at') and getattr(lab, 'created_at') else None
     }
 
+def _vitals_query(config: ExportConfiguration, patient_ids: List[int], db: Session):
+    """Vitals selected by the export configuration (same patient and date filters as lab results)."""
+    query = db.query(VitalModel)
+    if patient_ids and 'all' not in config.patients:
+        query = query.filter(VitalModel.patient_id.in_(patient_ids))
+    if config.date_range:
+        if config.date_range.start:
+            query = query.filter(VitalModel.measured_at >= config.date_range.start)
+        if config.date_range.end:
+            query = query.filter(VitalModel.measured_at <= config.date_range.end)
+    return query.order_by(VitalModel.measured_at)
+
+
+def _vital_to_dict(vital: VitalModel) -> dict:
+    """Convert vital model to dictionary."""
+    return {
+        "id": vital.id,
+        "patient_id": vital.patient_id,
+        "vital_type": vital.vital_type,
+        "value": vital.value,
+        "value2": vital.value2,
+        "unit": vital.unit,
+        "measured_at": vital.measured_at.isoformat() if vital.measured_at else None,
+        "notes": vital.notes,
+    }
+
+
 def _lab_result_to_dict(lab_result: LabResultModel) -> dict:
     """Convert lab result model to dictionary."""
     return {
@@ -714,6 +752,12 @@ def _lab_result_to_dict(lab_result: LabResultModel) -> dict:
         "result_text": lab_result.result_text,
         "date_collected": lab_result.date_collected.isoformat() if lab_result.date_collected else None,
         "notes": lab_result.notes,
+        "ref_low": lab_result.ref_low,
+        "ref_high": lab_result.ref_high,
+        "ref_text": lab_result.ref_text,
+        "flag": lab_result.flag,
+        "lab_comment": lab_result.lab_comment,
+        "fasting": lab_result.fasting,
         "created_at": getattr(lab_result, 'created_at', None).isoformat() if hasattr(lab_result, 'created_at') and getattr(lab_result, 'created_at') else None,
         "lab_details": {
             "unit_name": lab_result.lab.unit.name if lab_result.lab and lab_result.lab.unit else None,
@@ -784,8 +828,9 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
     try:
         # If not merging, clear existing data
         if not merge_data or start_from_scratch:
-            # Delete all lab results first (foreign key constraints)
+            # Delete all lab results and vitals first (foreign key constraints)
             db.query(LabResultModel).delete()
+            db.query(VitalModel).delete()
             db.query(LabModel).delete()
             db.query(PanelModel).delete()
             db.query(UnitModel).delete()
@@ -907,9 +952,32 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
                 result=result_data.get('result'),
                 result_text=result_data.get('result_text'),
                 date_collected=datetime.fromisoformat(result_data['date_collected']).date() if result_data.get('date_collected') else None,
-                notes=result_data.get('notes')
+                notes=result_data.get('notes'),
+                ref_low=result_data.get('ref_low'),
+                ref_high=result_data.get('ref_high'),
+                ref_text=result_data.get('ref_text'),
+                flag=result_data.get('flag'),
+                lab_comment=result_data.get('lab_comment'),
+                fasting=result_data.get('fasting')
             )
             db.add(new_result)
+            imported_records += 1
+
+        # Import vitals (absent from exports made before vitals existed)
+        for vital_data in export_data.get('vitals', []):
+            if (vital_data.get('patient_id') not in patient_id_map or not vital_data.get('measured_at')
+                    or not vital_data.get('vital_type') or vital_data.get('value') is None):
+                warnings.append("Skipped vital due to missing patient mapping, type, value or date")
+                continue
+            db.add(VitalModel(
+                patient_id=patient_id_map[vital_data['patient_id']],
+                vital_type=vital_data.get('vital_type'),
+                value=vital_data.get('value'),
+                value2=vital_data.get('value2'),
+                unit=vital_data.get('unit'),
+                measured_at=datetime.fromisoformat(vital_data['measured_at']),
+                notes=vital_data.get('notes')
+            ))
             imported_records += 1
         
         # Import PDF files

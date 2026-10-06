@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from "components/result_badges.html" import status_badge %}
 
 {% block title %}{{ result.lab.name if result and result.lab else 'Result Details' }} - MyLabVault{% endblock %}
 
@@ -121,6 +122,32 @@
               </div>
               
               <div class="form-group">
+                <label for="resultFasting">Fasting</label>
+                <select class="form-control" id="resultFasting" name="fasting">
+                  <option value="" {% if result.fasting is none %}selected{% endif %}>Unknown</option>
+                  <option value="true" {% if result.fasting is true %}selected{% endif %}>Fasting</option>
+                  <option value="false" {% if result.fasting is false %}selected{% endif %}>Non-fasting</option>
+                </select>
+              </div>
+
+              {% if result.flag or result.lab_comment or result.has_own_range %}
+              <div class="card card-outline card-secondary mb-3">
+                <div class="card-body py-2">
+                  <h6 class="mb-2"><i class="mdi mdi-file-document-outline mr-1"></i> From the lab report</h6>
+                  <p class="mb-1">Status: {{ status_badge(result.status) }}
+                    {% if result.flag %}<span class="ml-2">Lab flag: <span class="badge badge-danger">{{ result.flag }}</span></span>{% endif %}
+                  </p>
+                  {% if result.has_own_range %}
+                  <p class="mb-1">Reference range on this report: {{ result.reference_range }} {{ result.lab.unit.name if result.lab.unit else '' }}</p>
+                  {% endif %}
+                  {% if result.lab_comment %}
+                  <p class="mb-0">Lab comment: <span class="text-muted" style="white-space: pre-line;">{{ result.lab_comment }}</span></p>
+                  {% endif %}
+                </div>
+              </div>
+              {% endif %}
+
+              <div class="form-group">
                 <label for="resultNotes">Notes</label>
                 <textarea class="form-control" id="resultNotes" name="notes" rows="3" 
                           placeholder="Optional notes about this result">{{ result.notes if result.notes else '' }}</textarea>
@@ -128,7 +155,10 @@
               
               <!-- Reference Range Info -->
               <div class="alert alert-info">
-                <h6><i class="mdi mdi-information mr-1"></i> Reference Range</h6>
+                <h6><i class="mdi mdi-information mr-1"></i> {{ "Lab test's default reference range" if result.has_own_range else "Reference Range" }}</h6>
+                {% if result.has_own_range %}
+                  <p class="mb-1 small">This result is judged against the range printed on its report (above).</p>
+                {% endif %}
                 {% if result.lab.ref_low is not none and result.lab.ref_high is not none %}
                   <p class="mb-0">Normal range: {{ result.lab.ref_low }} - {{ result.lab.ref_high }} {{ result.lab.unit.name if result.lab.unit else '' }}</p>
                 {% elif result.lab.ref_type == 'greater' and result.lab.ref_value is not none %}
@@ -202,7 +232,8 @@ $(document).ready(function() {
             result: $('#resultValue').val() ? parseFloat($('#resultValue').val()) : null,
             result_text: $('#resultText').val().trim() || null,
             date_collected: $('#resultDate').val(),
-            notes: $('#resultNotes').val().trim() || null
+            notes: $('#resultNotes').val().trim() || null,
+            fasting: $('#resultFasting').val() === '' ? null : $('#resultFasting').val() === 'true'
         };
         
         const selectedUnitId = parseInt($('#resultUnit').val()) || null;
