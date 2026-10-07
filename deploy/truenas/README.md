@@ -79,9 +79,17 @@ The import screen shows the reason when an AI re-scan fails:
 
 ## Updating
 
-Every push to `main` publishes a new `:latest` image. To update, open the app in **Apps** and use **Update** (or **Edit** → **Save** to redeploy), which pulls the newest image. Your data in the dataset is kept.
+Every push to `main` publishes a new `:latest` image. The running version (for example `Version 2026.10.07.32 (5f86139)`) is shown at the bottom right of every page. TrueNAS always shows *Version 1.0.0* for custom apps, so use the app's footer instead. When a newer image has been published, an **Update available** badge appears next to it. The app checks GitHub every few hours; set `MYLABVAULT_UPDATE_CHECK: "false"` to turn the check off.
 
-To pin a specific build instead of `:latest`, use a commit tag such as `ghcr.io/zaydons/mylabvault:<commit-sha>`.
+To update, pull the new image in a TrueNAS shell, then restart the app. **Update** in the Apps screen does not always pull a new `:latest`.
+
+```bash
+docker pull ghcr.io/zaydons/mylabvault:latest
+```
+
+Then go to **Apps → mylabvault** and click **Stop**, then **Start**. Your data in the dataset is kept.
+
+To pin a specific build instead of `:latest`, use its version or commit tag, such as `ghcr.io/zaydons/mylabvault:2026.10.07.32` or `ghcr.io/zaydons/mylabvault:<commit-sha>`.
 
 ## Backups
 

@@ -423,6 +423,14 @@
 
   <!-- Footer -->
   <footer class="main-footer">
+    <div class="float-right d-none d-sm-inline small">
+      <a href="#" id="updateAvailableBadge" class="badge badge-warning mr-2" style="display: none;"
+         title="A newer MyLabVault image has been published. Click for update steps."
+         target="_blank" rel="noopener">Update available</a>
+      <span title="{% if build_info.commit %}Commit {{ build_info.commit }}{% endif %}{% if build_info.build_date %}, built {{ build_info.build_date }}{% endif %}">
+        Version {{ build_info.build }}{% if build_info.commit %} ({{ build_info.commit }}){% endif %}
+      </span>
+    </div>
     <strong>Copyright &copy; 2025 MyLabVault.</strong> All rights reserved.
   </footer>
 </div>
@@ -605,5 +613,15 @@ function showPatientSelection() {
 </script>
 
 {% block extra_scripts %}{% endblock %}
+<script>
+// Show a badge when a newer image has been published (checked by the server, cached for hours)
+fetch('/api/update-check').then(r => r.ok ? r.json() : null).then(info => {
+  if (!info || !info.update_available) return;
+  const badge = document.getElementById('updateAvailableBadge');
+  badge.href = 'https://github.com/zaydons/MyLabVault/blob/main/deploy/truenas/README.md#updating';
+  badge.title = `Newer build ${info.latest_commit} is available (running ${info.commit}). Click for update steps.`;
+  badge.style.display = '';
+}).catch(() => {});
+</script>
 </body>
 </html>

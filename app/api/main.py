@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 
 from . import __version__, __author__, __description__
+from . import build_info
 # Import database components with error handling
 try:
     from .database import engine, init_essential_data
@@ -123,5 +124,11 @@ async def get_version():
 		"version": __version__,
 		"author": __author__,
 		"description": __description__,
-		"api_version": "v1"
+		"api_version": "v1",
+		**build_info.get_build_info(),
 	}
+
+@app.get("/api/update-check")
+def get_update_check():
+	"""Whether a newer image has been published than the one running."""
+	return build_info.check_for_update()
