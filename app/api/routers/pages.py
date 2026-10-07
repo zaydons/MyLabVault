@@ -101,6 +101,15 @@ def index_page(request: Request, db: Session = Depends(get_db)):
     # Always redirect to dashboard (patient will be handled via cookie)
     return RedirectResponse(url="/dashboard", status_code=302)
 
+@router.get("/welcome")
+def welcome_page(request: Request, db: Session = Depends(get_db)):
+    """First-run screen that asks for the patient's name."""
+    from fastapi.responses import RedirectResponse
+    from .setup import needs_setup
+    if not needs_setup(db):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return templates.TemplateResponse(request, "welcome.html", {"request": request})
+
 @router.get("/dashboard")
 def dashboard_page(request: Request, db: Session = Depends(get_db)):
     """Dashboard page with server-side rendering."""

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from .setup import reset_setup_state
 from ..models import (
     LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel,
     Patient as PatientModel, Provider as ProviderModel,
@@ -185,8 +186,9 @@ def reset_data(db: Session = Depends(get_db)):
                 except Exception:
                     continue  # Continue if file can't be deleted
 
-        # Recreate default patient with ID 1
+        # Recreate default patient with ID 1; the welcome screen asks for a name again
         default_patient = PatientModel(id=1, name="Default Patient")
+        reset_setup_state()
         db.add(default_patient)
         
         # Create default settings with JSON string for options
