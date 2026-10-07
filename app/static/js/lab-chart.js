@@ -141,7 +141,6 @@
                                 }
                                 if (p.flag) lines.push(`Lab flag: ${p.flag}`);
                                 if (p.fasting === true) lines.push('Fasting');
-                                if (p.fasting === false) lines.push('Non-fasting');
                                 return lines;
                             }
                         }

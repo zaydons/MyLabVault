@@ -1,5 +1,5 @@
 {# Shared badges for a lab result: status (from its own reference range, else the lab test's),
-   the lab's printed flag, fasting status and the lab's comment. #}
+   the lab's printed flag, a Fasting tag and the lab's comment. #}
 
 {% macro status_badge(status) -%}
   {% if status == 'normal' %}
@@ -21,8 +21,6 @@
   {% endif %}
   {% if result.fasting is true %}
     <span class="badge badge-status-info" title="Fasting specimen">Fasting</span>
-  {% elif result.fasting is false %}
-    <span class="badge badge-light border" title="Non-fasting specimen">Non-fasting</span>
   {% endif %}
   {% if result.lab_comment %}
     <i class="mdi mdi-comment-text-outline text-muted" role="img" aria-label="Lab comment: {{ result.lab_comment }}" title="Lab comment: {{ result.lab_comment }}"></i>
