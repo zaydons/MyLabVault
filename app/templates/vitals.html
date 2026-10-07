@@ -42,9 +42,9 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header d-flex align-items-center">
-            <h3 class="card-title mb-0"><i class="mdi mdi-chart-line mr-2"></i>Trend</h3>
+            <h2 class="card-title mb-0"><i class="mdi mdi-chart-line mr-2"></i>Trend</h2>
             <div class="ml-auto">
-              <select class="form-control form-control-sm" id="chartType" onchange="renderChart()"></select>
+              <select class="form-control form-control-sm" id="chartType" onchange="renderChart()" aria-label="Measurement to chart"></select>
             </div>
           </div>
           <div class="card-body">
@@ -55,12 +55,12 @@
 
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title"><i class="mdi mdi-table mr-2"></i>History</h3>
+            <h2 class="card-title"><i class="mdi mdi-table mr-2"></i>History</h2>
           </div>
           <div class="card-body table-responsive p-0">
             <table class="table table-striped table-sm mb-0">
               <thead>
-                <tr><th>Date</th><th>Measurement</th><th>Reading</th><th>Notes</th><th style="width: 90px;"></th></tr>
+                <tr><th>Date</th><th>Measurement</th><th>Reading</th><th>Notes</th><th style="width: 90px;"><span class="sr-only">Actions</span></th></tr>
               </thead>
               <tbody id="historyBody"></tbody>
             </table>
@@ -275,18 +275,22 @@ function renderChart() {
     document.getElementById('normalHint').textContent = normalHintText(type);
 }
 
+function vitalLabel(v) {
+    return vitalTypes[v.vital_type] ? vitalTypes[v.vital_type].label : v.vital_type;
+}
+
 function renderHistory() {
     const body = document.getElementById('historyBody');
     body.innerHTML = vitals.map(v => `
         <tr>
             <td>${escapeHtml(formatDate(v.measured_at))}</td>
-            <td>${escapeHtml(vitalTypes[v.vital_type] ? vitalTypes[v.vital_type].label : v.vital_type)}</td>
+            <td>${escapeHtml(vitalLabel(v))}</td>
             <td>${escapeHtml(formatReading(v))}
-                ${isOutsideNormal(v) ? '<span class="badge badge-warning ml-1">Outside typical range</span>' : ''}</td>
+                ${isOutsideNormal(v) ? '<span class="badge badge-status-out ml-1"><i class="mdi mdi-alert-outline" aria-hidden="true"></i> Outside typical range</span>' : ''}</td>
             <td class="text-muted">${escapeHtml(v.notes || '')}</td>
-            <td class="text-right">
-                <button class="btn btn-sm btn-info" type="button" onclick="openVitalModal(${Number(v.id)})" title="Edit"><i class="mdi mdi-pencil"></i></button>
-                <button class="btn btn-sm btn-danger" type="button" onclick="deleteVital(${Number(v.id)})" title="Delete"><i class="mdi mdi-trash-can"></i></button>
+            <td class="text-right text-nowrap">
+                <button class="btn btn-sm btn-info" type="button" onclick="openVitalModal(${Number(v.id)})" title="Edit" aria-label="Edit ${escapeHtml(vitalLabel(v))} reading from ${escapeHtml(formatDate(v.measured_at))}"><i class="mdi mdi-pencil" aria-hidden="true"></i></button>
+                <button class="btn btn-sm btn-danger" type="button" onclick="deleteVital(${Number(v.id)})" title="Delete" aria-label="Delete ${escapeHtml(vitalLabel(v))} reading from ${escapeHtml(formatDate(v.measured_at))}"><i class="mdi mdi-trash-can" aria-hidden="true"></i></button>
             </td>
         </tr>`).join('');
 }

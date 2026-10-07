@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}MyLabVault{% endblock %}</title>
 
-    <!-- Google Font: IBM Plex Sans -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap">
+    <!-- Front-end libraries are served locally (see scripts/vendor-assets.sh); pages make no third-party requests -->
+    <link rel="stylesheet" href="/static/vendor/fonts/ibm-plex-sans.css">
     <!-- Material Design Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+    <link rel="stylesheet" href="/static/vendor/mdi/css/materialdesignicons.min.css">
     <!-- AdminLTE -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="/static/vendor/admin-lte/adminlte.min.css">
     
     <!-- DataTables CSS -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/2.3.2/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/3.0.5/css/responsive.bootstrap5.min.css">
+    <link rel="stylesheet" href="/static/vendor/datatables/dataTables.bootstrap4.min.css">
+    <link rel="stylesheet" href="/static/vendor/datatables/responsive.bootstrap4.min.css">
     
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="/static/vendor/jquery/jquery.min.js"></script>
+    <script src="/static/vendor/chart.js/chart.umd.js"></script>
     
     <!-- Custom CSS for IBM Plex Sans -->
     <style>
@@ -102,10 +102,6 @@
             transition: all 0.2s ease-in-out;
         }
         
-        .chart-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
-        }
         
         .chart-card[style*="cursor: pointer"]:hover {
             border-color: #007bff !important;
@@ -141,12 +137,12 @@
 
         /* Enhanced Card Header Styling */
         .card-header {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            background: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
         }
 
         .dark-mode .card-header {
-            background: linear-gradient(135deg, #454d55 0%, #3a424a 100%);
+            background: #3f474e;
             border-bottom-color: #6c757d;
         }
 
@@ -170,30 +166,6 @@
             transition: all 0.2s ease-in-out;
         }
 
-        .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            border-color: #28a745;
-        }
-
-        .btn-success:hover {
-            background: linear-gradient(135deg, #218838 0%, #1e9e7c 100%);
-            border-color: #1e7e34;
-        }
-
-        .btn-info {
-            background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
-            border-color: #17a2b8;
-        }
-
-        .btn-info:hover {
-            background: linear-gradient(135deg, #138496 0%, #1e9e7c 100%);
-            border-color: #117a8b;
-        }
 
         /* Enhanced Info Box Styling */
         .info-box {
@@ -202,10 +174,6 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .info-box:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
 
         .info-box-icon {
             border-radius: 0.5rem 0 0 0.5rem;
@@ -218,7 +186,7 @@
         }
 
         .table thead th {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            background: #f1f3f5;
             border-bottom: 2px solid #dee2e6;
             font-weight: 600;
             text-transform: uppercase;
@@ -227,7 +195,7 @@
         }
 
         .dark-mode .table thead th {
-            background: linear-gradient(135deg, #454d55 0%, #3a424a 100%);
+            background: #3f474e;
             border-bottom-color: #6c757d;
             color: #ffffff;
         }
@@ -272,19 +240,94 @@
             border-color: #138496;
             background: linear-gradient(135deg, rgba(23, 162, 184, 0.15) 0%, rgba(23, 162, 184, 0.1) 100%);
         }
+        /* ---- Accessibility: contrast (WCAG AA 4.5:1 for text), focus, motion ---- */
+        body:not(.dark-mode) .content-wrapper a:not(.btn):not(.nav-link):not(.dropdown-item):not(.badge):not(.page-link),
+        body:not(.dark-mode) .content-wrapper .text-primary { color: #0056b3 !important; }
+        body:not(.dark-mode) .text-muted { color: #5a6268 !important; }
+        .btn-primary, .badge-primary, .bg-primary { background-color: #0062cc !important; border-color: #0062cc !important; color: #fff !important; }
+        .btn-primary:hover { background-color: #004fa3 !important; }
+        .btn-success, .badge-success, .bg-success { background-color: #1e7e34 !important; border-color: #1e7e34 !important; color: #fff !important; }
+        .btn-success:hover { background-color: #186429 !important; }
+        .btn-info, .badge-info, .bg-info { background-color: #117a8b !important; border-color: #117a8b !important; color: #fff !important; }
+        .btn-info:hover { background-color: #0d5f6c !important; }
+        .btn-danger, .badge-danger, .bg-danger { background-color: #c82333 !important; border-color: #c82333 !important; color: #fff !important; }
+        .btn-secondary, .badge-secondary { background-color: #5a6268 !important; border-color: #5a6268 !important; color: #fff !important; }
+        .btn-outline-primary { color: #0056b3; border-color: #0056b3; }
+        .dark-mode .btn-outline-primary { color: #8ec5ff; border-color: #8ec5ff; }
+        .navbar-light .navbar-nav .nav-link { color: #495057; }
+        .navbar-light .navbar-nav .nav-link:hover { color: #212529; }
+        .sidebar-dark-primary .nav-sidebar > .nav-item > .nav-link.active,
+        .sidebar-dark-primary .nav-sidebar > .nav-item.menu-open > .nav-link { background-color: #0062cc !important; color: #fff !important; }
+        body:not(.dark-mode) .main-footer, body:not(.dark-mode) .main-footer strong { color: #5a6268; }
+        body:not(.dark-mode) .btn-outline-secondary { color: #545b62; border-color: #545b62; }
+        body:not(.dark-mode) .btn-outline-info { color: #0f6674; border-color: #0f6674; }
+        body:not(.dark-mode) .btn-outline-info:hover { color: #fff; background-color: #0f6674; }
+        body:not(.dark-mode) .content-wrapper .text-info { color: #0f6674 !important; }
+        body:not(.dark-mode) .content-wrapper .text-warning { color: #8a5a00 !important; }
+        body .bg-warning .text-muted, body .bg-warning small { color: #3b3200 !important; }
+        /* Dark mode equivalents */
+        .dark-mode .content-wrapper a:not(.btn):not(.nav-link):not(.dropdown-item):not(.badge):not(.page-link),
+        .dark-mode .content-wrapper .text-primary { color: #8ec5ff !important; }
+        .dark-mode .text-muted, .dark-mode .bg-light small, .dark-mode .bg-light .mb-0 { color: #c8cdd2 !important; }
+        .dark-mode .main-footer, .dark-mode .main-footer strong { color: #c8cdd2; }
+        .dark-mode .btn-outline-secondary { color: #dee2e6; border-color: #adb5bd; }
+        .dark-mode .content-wrapper .text-info, .dark-mode #dateFormatPreview { color: #7fd8e6 !important; }
+        .dark-mode .btn-outline-info { color: #7fd8e6; border-color: #7fd8e6; }
+        .dark-mode .content-wrapper .text-danger { color: #ff8a95 !important; }
+        body:not(.dark-mode) .content-wrapper .text-danger { color: #b02a37 !important; }
+        .main-sidebar .brand-link .brand-text { color: rgba(255, 255, 255, 0.92) !important; }
+        .alert-info { background-color: #117a8b !important; border-color: #0f6674 !important; color: #fff !important; }
+        body .alert-info .text-muted, body .alert-info small { color: #f1f3f5 !important; }
+
+        :focus-visible { outline: 3px solid #0b6bcb !important; outline-offset: 2px; }
+        .dark-mode :focus-visible { outline-color: #8ec5ff !important; }
+        .skip-link { position: absolute; left: 0.5rem; top: -3rem; z-index: 2000; padding: 0.5rem 1rem; background: #0062cc; color: #fff !important; border-radius: 0.25rem; }
+        .skip-link:focus { top: 0.5rem; }
+        main.content-wrapper:focus { outline: none; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+        }
+
+        /* ---- Result status badges: text + icon, never color alone ---- */
+        .badge-status-normal, .badge-status-out, .badge-status-abnormal, .badge-status-none, .badge-status-info { border: 1px solid transparent; font-weight: 600; }
+        .badge-status-normal { background: #e3f3e8; color: #1b5e2f; border-color: #b7dfc3; }
+        .badge-status-out { background: #fff1c2; color: #6b4300; border-color: #f0d27a; }
+        .badge-status-abnormal { background: #fbe3e5; color: #8a1c27; border-color: #f1b8be; }
+        .badge-status-none { background: #eceef0; color: #464d54; border-color: #d6dade; }
+        .badge-status-info { background: #e3eefb; color: #0b4a85; border-color: #b9d3f2; }
+        .dark-mode .badge-status-normal { background: #1d3b27; color: #b9ecc8; border-color: #2f5e3e; }
+        .dark-mode .badge-status-out { background: #4a3a10; color: #ffe08a; border-color: #6b5419; }
+        .dark-mode .badge-status-abnormal { background: #4d1d22; color: #ffc2c8; border-color: #6e2b32; }
+        .dark-mode .badge-status-none { background: #3a4047; color: #d5d9dd; border-color: #535a62; }
+        .dark-mode .badge-status-info { background: #1b3550; color: #bcd9f7; border-color: #2b4f75; }
+
+        /* ---- Dashboard summary ---- */
+        .summary-card .card-body { padding: 1rem 1.25rem; }
+        .summary-label { font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #5a6268; }
+        .dark-mode .summary-label { color: #c2c7cc; }
+        .summary-value { font-size: 1.5rem; font-weight: 600; line-height: 1.3; margin-top: 0.25rem; }
+        .summary-detail { font-size: 0.875rem; color: #5a6268; }
+        .dark-mode .summary-detail { color: #c2c7cc; }
+        .summary-card-alert { border-left: 4px solid #c82333; }
+        .summary-card-alert .summary-value { color: #a71d2a; }
+        .dark-mode .summary-card-alert .summary-value { color: #ff9aa4; }
+        .result-number { font-variant-numeric: tabular-nums; font-weight: 600; }
+        h2.card-title { font-size: 1.1rem; }
     </style>
     
     {% block extra_head %}{% endblock %}
 </head>
 <body class="hold-transition sidebar-mini {{ 'dark-mode' if user_settings.dark_mode }} {{ 'sidebar-collapse' if not user_settings.sidebar_open }}">
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <div class="wrapper">
 
   <!-- Navbar -->
-  <nav class="main-header navbar navbar-expand {{ 'navbar-dark' if user_settings.dark_mode else 'navbar-white navbar-light' }}">
+  <nav aria-label="Top bar" class="main-header navbar navbar-expand {{ 'navbar-dark' if user_settings.dark_mode else 'navbar-white navbar-light' }}">
     <!-- Left navbar links -->
     <ul class="navbar-nav">
       <li class="nav-item">
-        <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="mdi mdi-menu"></i></a>
+        <a class="nav-link" data-widget="pushmenu" href="#" role="button" aria-label="Toggle navigation menu"><i class="mdi mdi-menu" aria-hidden="true"></i></a>
       </li>
     </ul>
 
@@ -310,15 +353,15 @@
         </div>
       </li>
       <li class="nav-item">
-        <a class="nav-link" href="#" onclick="toggleDarkMode()">
-          <i class="mdi mdi-{{ 'white-balance-sunny' if user_settings.dark_mode else 'moon-waxing-crescent' }}"></i>
+        <a class="nav-link" href="#" role="button" onclick="toggleDarkMode()" aria-label="{{ 'Switch to light mode' if user_settings.dark_mode else 'Switch to dark mode' }}">
+          <i class="mdi mdi-{{ 'white-balance-sunny' if user_settings.dark_mode else 'moon-waxing-crescent' }}" aria-hidden="true"></i>
         </a>
       </li>
     </ul>
   </nav>
 
   <!-- Main Sidebar Container -->
-  <aside class="main-sidebar sidebar-dark-primary elevation-4">
+  <aside aria-label="Main navigation" class="main-sidebar sidebar-dark-primary elevation-4">
     <!-- Brand Logo -->
     <a href="/" class="brand-link">
       <i class="mdi mdi-flask brand-image img-circle elevation-3" style="margin-left: .8rem; margin-right: .5rem; font-size: 1.8rem;"></i>
@@ -328,29 +371,29 @@
     <!-- Sidebar -->
     <div class="sidebar">
       <!-- Sidebar Menu -->
-      <nav class="mt-2">
-        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+      <nav class="mt-2" aria-label="Sections">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" data-accordion="false">
           <li class="nav-item">
-            <a href="/" class="nav-link {{ 'active' if request.url.path == '/' }}">
-              <i class="nav-icon mdi mdi-view-dashboard"></i>
+            <a href="/dashboard" class="nav-link {{ 'active' if request.url.path in ('/', '/dashboard') }}">
+              <i class="nav-icon mdi mdi-view-dashboard" aria-hidden="true"></i>
               <p>Dashboard</p>
             </a>
           </li>
           <li class="nav-item">
             <a href="/results" class="nav-link {{ 'active' if request.url.path == '/results' }}">
-              <i class="nav-icon mdi mdi-file-document-multiple"></i>
+              <i class="nav-icon mdi mdi-file-document-multiple" aria-hidden="true"></i>
               <p>All Results</p>
             </a>
           </li>
           <li class="nav-item">
             <a href="/charts" class="nav-link {{ 'active' if request.url.path == '/charts' }}">
-              <i class="nav-icon mdi mdi-chart-line"></i>
+              <i class="nav-icon mdi mdi-chart-line" aria-hidden="true"></i>
               <p>Charts</p>
             </a>
           </li>
           <li class="nav-item">
             <a href="/vitals" class="nav-link {{ 'active' if request.url.path == '/vitals' }}">
-              <i class="nav-icon mdi mdi-heart-pulse"></i>
+              <i class="nav-icon mdi mdi-heart-pulse" aria-hidden="true"></i>
               <p>Vitals</p>
             </a>
           </li>
@@ -358,7 +401,7 @@
           {% set is_manage_data_page = request.url.path in manage_data_paths or request.url.path.startswith('/lab/') %}
           <li class="nav-item {{ 'menu-open' if is_manage_data_page }}">
             <a href="#" class="nav-link {{ 'active' if is_manage_data_page }}">
-              <i class="nav-icon mdi mdi-database-cog"></i>
+              <i class="nav-icon mdi mdi-database-cog" aria-hidden="true"></i>
               <p>Manage Data <i class="mdi mdi-chevron-left right"></i></p>
             </a>
             <ul class="nav nav-treeview">
@@ -407,7 +450,7 @@
           </li>
           <li class="nav-item">
             <a href="/settings" class="nav-link {{ 'active' if request.url.path == '/settings' }}">
-              <i class="nav-icon mdi mdi-cog"></i>
+              <i class="nav-icon mdi mdi-cog" aria-hidden="true"></i>
               <p>Settings</p>
             </a>
           </li>
@@ -417,9 +460,9 @@
   </aside>
 
   <!-- Content Wrapper -->
-  <div class="content-wrapper">
+  <main id="main-content" class="content-wrapper" tabindex="-1">
     {% block content %}{% endblock %}
-  </div>
+  </main>
 
   <!-- Footer -->
   <footer class="main-footer">
@@ -436,15 +479,15 @@
 </div>
 
 <!-- Bootstrap 4 -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <!-- AdminLTE App -->
-<script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="/static/vendor/admin-lte/adminlte.min.js"></script>
 
 <!-- DataTables JS -->
-<script src="https://cdn.datatables.net/2.3.2/js/dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/2.3.2/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/3.0.5/js/dataTables.responsive.min.js"></script>
-<script src="https://cdn.datatables.net/responsive/3.0.5/js/responsive.bootstrap5.min.js"></script>
+<script src="/static/vendor/datatables/dataTables.min.js"></script>
+<script src="/static/vendor/datatables/dataTables.bootstrap4.min.js"></script>
+<script src="/static/vendor/datatables/dataTables.responsive.min.js"></script>
+<script src="/static/vendor/datatables/responsive.bootstrap4.min.js"></script>
 
 <!-- Global Modal Utilities -->
 <script src="/static/js/modal-utils.js"></script>
@@ -622,6 +665,16 @@ fetch('/api/update-check').then(r => r.ok ? r.json() : null).then(info => {
   badge.title = `Newer build ${info.latest_commit} is available (running ${info.commit}). Click for update steps.`;
   badge.style.display = '';
 }).catch(() => {});
+</script>
+<script>
+// Icon-only controls that only have a tooltip get it as their accessible name (also after tables redraw)
+function labelIconOnlyControls(root) {
+  (root || document).querySelectorAll('a[title], button[title]').forEach(el => {
+    if (!el.getAttribute('aria-label') && !el.textContent.trim()) el.setAttribute('aria-label', el.getAttribute('title'));
+  });
+}
+document.addEventListener('DOMContentLoaded', () => labelIconOnlyControls());
+if (window.jQuery) jQuery(document).on('draw.dt', () => labelIconOnlyControls());
 </script>
 </body>
 </html>

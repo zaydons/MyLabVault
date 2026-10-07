@@ -26,10 +26,10 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">
+            <h2 class="card-title">
               <i class="mdi mdi-file-document-multiple mr-2"></i>
               Lab Results ({{ results|length | number_format }} total)
-            </h3>
+            </h2>
             <div class="card-tools">
               <a href="/import" class="btn btn-success btn-sm mr-2">
                 <i class="mdi mdi-file-upload mr-1"></i>
@@ -58,7 +58,7 @@
               <tbody>
                 {% for result in results %}
                 <tr data-date="{{ result.date_collected.isoformat() }}">
-                  <td class="format-date">{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                  <td class="format-date" data-order="{{ result.date_collected.isoformat() }}">{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
                   <td>
                     {% if result.lab_id %}
                       <a href="/lab/{{ result.lab_id }}" class="lab-link text-primary font-weight-bold" style="text-decoration: none;">
@@ -67,9 +67,12 @@
                     {% else %}
                       {{ result.lab.name if result.lab else 'Unknown Lab' }}
                     {% endif %}
+                    {# On phones the date column folds away, so show it here #}
+                    <div class="small text-muted d-md-none format-date">{{ result.date_collected.strftime('%m/%d/%Y') }}</div>
                   </td>
                   <td>
-                    {{ result_value(result, result.lab.unit.name if result.lab and result.lab.unit else '') }}
+                    <span class="result-number">{{ result_value(result, result.lab.unit.name if result.lab and result.lab.unit else '') }}</span>
+                    <div class="d-md-none mt-1">{{ status_badge(result.status) }}</div>
                   </td>
                   <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
                   <td>{{ result.lab.panel.name if result.lab and result.lab.panel else '—' }}</td>
@@ -79,11 +82,12 @@
                   </td>
                   <td>
                     <div class="btn-group btn-group-sm">
-                      <button class="btn btn-info edit-btn" data-id="{{ result.id }}" onclick="editResult('{{ result.id }}')">
-                        <i class="mdi mdi-pencil"></i>
+                      {% set row_label = (result.lab.name if result.lab else 'lab') ~ ' result from ' ~ result.date_collected.strftime('%m/%d/%Y') %}
+                      <button type="button" class="btn btn-info edit-btn" data-id="{{ result.id }}" onclick="editResult('{{ result.id }}')" aria-label="Edit {{ row_label }}" title="Edit">
+                        <i class="mdi mdi-pencil" aria-hidden="true"></i>
                       </button>
-                      <button class="btn btn-danger delete-btn" data-id="{{ result.id }}" onclick="deleteResult('{{ result.id }}')">
-                        <i class="mdi mdi-trash-can"></i>
+                      <button type="button" class="btn btn-danger delete-btn" data-id="{{ result.id }}" onclick="deleteResult('{{ result.id }}')" aria-label="Delete {{ row_label }}" title="Delete">
+                        <i class="mdi mdi-trash-can" aria-hidden="true"></i>
                       </button>
                     </div>
                   </td>
@@ -426,7 +430,16 @@ $(document).ready(function() {
                 targets: [6], // Actions column
                 orderable: false,
                 searchable: false
-            }
+            },
+            // On narrow screens keep the test, its value and status visible; the rest folds into the row details
+            { targets: 1, responsivePriority: 1 },
+            { targets: 2, responsivePriority: 2 },
+            { targets: 5, responsivePriority: 3 },
+            { targets: 0, responsivePriority: 4 },
+            { targets: 6, responsivePriority: 5 },
+            { targets: [3, 4], responsivePriority: 10 },
+            // Phones show the date and status inside the test and result cells instead
+            { targets: [0, 5], className: 'min-tablet-l' }
         ]
     });
     

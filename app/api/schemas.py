@@ -81,7 +81,12 @@ class LabBase(BaseModel):
 
 
 class LabCreate(LabBase):
-    pass
+    @field_validator("ref_type")
+    @classmethod
+    def check_ref_type(cls, value: Optional[str]) -> Optional[str]:
+        if value not in (None, "range", "greater", "less"):
+            raise ValueError("ref_type must be 'range', 'greater' or 'less'")
+        return value
 
 
 

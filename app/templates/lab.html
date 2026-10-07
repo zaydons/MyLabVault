@@ -53,7 +53,7 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Lab Test Information</h3>
+            <h2 class="card-title">Lab Test Information</h2>
           </div>
           <div class="card-body">
             <div class="row">
@@ -87,10 +87,10 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">
+            <h2 class="card-title">
               <i class="mdi mdi-chart-line mr-2"></i>
               Results Trend Chart
-            </h3>
+            </h2>
           </div>
           <div class="card-body">
             {% if lab_results|length %}
@@ -127,10 +127,10 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">
+            <h2 class="card-title">
               <i class="mdi mdi-flask mr-2"></i>
               All Results for {{ lab_info.name }} ({{ lab_results|length | number_format }} total)
-            </h3>
+            </h2>
           </div>
           <div class="card-body">
             {% if lab_results %}
@@ -147,7 +147,7 @@
               <tbody>
                 {% for result in lab_results %}
                 <tr>
-                  <td>{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
+                  <td data-order="{{ result.date_collected.isoformat() }}">{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
                   <td>
                     {{ result_value(result, lab_info.unit.name if lab_info.unit else '') }}
                     {% if result.has_own_range %}<br><small class="text-muted">Range on report: {{ result.reference_range }}</small>{% endif %}
@@ -159,8 +159,8 @@
                   </td>
                   <td>
                     <div class="btn-group btn-group-sm">
-                      <button class="btn btn-danger delete-btn" data-id="{{ result.id }}" onclick="deleteResult('{{ result.id }}')" title="Delete Result">
-                        <i class="mdi mdi-trash-can"></i>
+                      <button type="button" class="btn btn-danger delete-btn" data-id="{{ result.id }}" onclick="deleteResult('{{ result.id }}')" title="Delete result" aria-label="Delete {{ lab_info.name }} result from {{ result.date_collected.strftime('%m/%d/%Y') }}">
+                        <i class="mdi mdi-trash-can" aria-hidden="true"></i>
                       </button>
                     </div>
                   </td>
@@ -238,11 +238,13 @@ $(document).ready(function() {
                     targets: [4],
                     orderable: false,
                     searchable: false
-                }
-            ],
-            dom: 'Bfrtip',
-            buttons: [
-                'copy', 'csv', 'excel', 'pdf', 'print'
+                },
+                // On narrow screens keep the date, value and status visible
+                { targets: 1, responsivePriority: 1 },
+                { targets: 3, responsivePriority: 2 },
+                { targets: 0, responsivePriority: 3 },
+                { targets: 4, responsivePriority: 4 },
+                { targets: 2, responsivePriority: 10 }
             ]
         });
         
