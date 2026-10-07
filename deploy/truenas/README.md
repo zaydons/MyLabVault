@@ -22,7 +22,7 @@ This dataset holds everything the app stores: the SQLite database (`mylabvault.d
 4. If port `8000` is already used on your server, change the **left** side of `"8000:8000"` (for example `"30080:8000"`).
 5. Click **Save**. TrueNAS pulls the image and starts the container. It shows as **Running** once the health check passes, which takes up to about 40 seconds.
 
-Open `http://<truenas-ip>:8000` in a browser.
+Open `http://<truenas-ip>:8000` in a browser. On first launch the app asks whose results these are; enter your name, or choose *Skip for now* to keep "Default Patient".
 
 ## Optional: AI parsing with Amazon Bedrock
 

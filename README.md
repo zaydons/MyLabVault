@@ -2,7 +2,7 @@
 
 **Your personal health data, organized and accessible.**
 
-MyLabVault is a comprehensive personal health data management system designed to help you track, analyze, and visualize your lab results over time. Upload PDF lab reports, automatically parse test data, and gain insights into your health trends through interactive charts and dashboards.
+MyLabVault is a self-hosted app for tracking your lab results and vitals over time. Upload PDF lab reports, review what was extracted, and follow your trends on a dashboard and charts. Everything is stored on your own server.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
@@ -10,54 +10,54 @@ MyLabVault is a comprehensive personal health data management system designed to
 
 ## ✨ Key Features
 
-### 📄 **PDF Lab Report Processing**
-- **Intelligent Parsing**: Automatically extract test results from LabCorp, Quest, and other major lab providers
-- **Bulk Upload**: Process multiple PDF files simultaneously
-- **Selective Import**: Choose which tests to import from each report
-- **Duplicate Detection**: Automatically detect and prevent duplicate imports
-- **Error Handling**: Robust parsing with fallback mechanisms for various PDF formats
-- **Optional AI Parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
+### 📄 **PDF Lab Report Import**
+- **Automatic parsing**: Extracts test results from LabCorp, Quest and similar reports, including each result's reference range, the lab's flag (H/L), comments and fasting status
+- **Collection date detection**: Uses the date next to "Collected", "Collection Date" or "Date Drawn", never the date of birth
+- **Provider matching**: The ordering provider on the report is selected automatically when it matches a saved provider, or offered as a one-click new provider
+- **Bulk upload and selective import**: Upload several PDFs at once and choose which tests to keep
+- **Duplicate detection**: Files that were already imported are flagged
+- **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 
-### 📊 **Data Visualization & Analytics**
-- **Interactive Dashboard**: Overview of health metrics with key statistics
-- **Trending Charts**: Track test values over time using Chart.js
-- **Panel-Based Organization**: Group related tests for better analysis
-- **Abnormal Result Detection**: Automatic flagging of out-of-range values
-- **Historical Comparisons**: Compare results across different time periods
+### 📊 **Dashboard and Charts**
+- **Dashboard**: Your latest draw, how many tests are out of range right now, a *Needs attention* list, your latest vitals, and the latest value of every test with the change since the previous result
+- **Trend charts**: Straight lines on a real time axis, the reference range shaded behind each point, and out-of-range results marked with a triangle and an H/L label
+- **Charts page**: Opens on your most recent panel; link straight to a chart with `/charts?lab=<id>` or `/charts?panel=<id>`
+- **Plain-language descriptions**: Each test's page explains what it measures (built in for about 70 common tests, or write your own)
+
+### ❤️ **Vitals**
+- **Record vitals**: Log weight, blood pressure and heart rate in one form from the dashboard or the Vitals page
+- **Blood pressure categories**: Readings are labelled Normal, Elevated, Stage 1, Stage 2 or Hypertensive crisis (AHA adult categories)
+- **More measurements**: Height, temperature, oxygen saturation, respiratory rate and blood glucose, with unit conversion (lb/kg, °F/°C, mg/dL/mmol/L)
 
 ### 🏥 **Health Data Management**
-- **Multi-Patient Support**: Manage data for family members
-- **Healthcare Provider Tracking**: Associate results with specific providers
-- **Test Categorization**: Organized by medical panels (Lipid, Metabolic, CBC, etc.)
-- **Reference Range Validation**: Automatic normal/abnormal classification
-- **Search & Filter**: Advanced filtering across all results
+- **Multiple patients**: Keep results for family members separately and switch between them from the top bar
+- **Reference ranges**: Ranges can be low–high, greater than or less than, and each result can carry the range printed on its own report
+- **Search**: Press `/` anywhere to search for a test or page
+- **Backup and restore**: Export and import all data, including uploaded PDFs, from Settings
 
-### 🎨 **Modern User Interface**
-- **Professional Design**: Built with AdminLTE 3.2.0 for a clean, medical-grade interface
-- **Dark/Light Mode**: Toggle between themes with persistent user preferences
-- **Responsive Layout**: Optimized for desktop, tablet, and mobile devices
-- **Interactive Tables**: DataTables integration with search, sort, and pagination
-- **Modal-Based Workflows**: Streamlined data entry and confirmation processes
+### 🎨 **Interface**
+- **Responsive**: Works on phones as well as desktops; results tables keep the value, status and date visible on small screens
+- **Accessible**: Meets WCAG AA text contrast in light and dark mode, works with the keyboard and screen readers, and respects the reduced-motion setting
+- **Dark and light mode**, remembered between visits
+- **Version and updates**: The footer shows the running version and an *Update available* badge when a newer image has been published
 
-### 🛡️ **Data Security & Privacy**
-- **Local Storage**: All data stays on your infrastructure - no cloud dependencies
-- **SQLite Database**: Lightweight, reliable, and private data storage
-- **Docker Containerization**: Isolated environment with security controls
-- **Health Check Monitoring**: Built-in application health monitoring
+### 🛡️ **Privacy**
+- **Self-hosted**: Data is stored in a SQLite database on your server
+- **No third-party page requests**: Scripts, styles, icons and fonts are bundled with the app, so pages work without internet access
+- **Outbound connections** happen only for optional AI parsing (Amazon Bedrock, off unless configured) and the update check (GitHub, every few hours; set `MYLABVAULT_UPDATE_CHECK=false` to turn it off)
+- **No login yet**: Anyone who can reach the app on your network can open it, so keep it on a trusted LAN
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - **Docker** (20.10+) and **Docker Compose** (v2.0+)
-- **Git** for cloning the repository
 
 ### Installation
 
-#### Option 1: Using Pre-built Image (Recommended)
+#### Option 1: Pre-built image (recommended)
 
-1. **Create docker-compose.yml**
+1. **Create `docker-compose.yml`**
    ```yaml
-   version: '3.8'
    services:
      mylabvault:
        image: ghcr.io/zaydons/mylabvault:latest
@@ -66,11 +66,6 @@ MyLabVault is a comprehensive personal health data management system designed to
        volumes:
          - ./data:/app/data
        restart: unless-stopped
-   ```
-   
-   *Optional: Add health monitoring for production deployments*
-   ```yaml
-   # Add these lines under mylabvault service for health monitoring:
        healthcheck:
          test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
          interval: 30s
@@ -81,14 +76,14 @@ MyLabVault is a comprehensive personal health data management system designed to
 
 2. **Start the application**
    ```bash
-   docker-compose up -d mylabvault
+   docker compose up -d mylabvault
    ```
 
 #### Option 2: TrueNAS SCALE
 
 Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/README.md](deploy/truenas/README.md).
 
-#### Option 3: Build from Source
+#### Option 3: Build from source
 
 1. **Clone the repository**
    ```bash
@@ -100,197 +95,157 @@ Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/RE
    ```bash
    # Using the convenience script (recommended)
    ./start-dev.sh
-   
-   # Or manually with docker-compose
-   docker-compose up -d mylabvault
+
+   # Or manually
+   docker compose up -d mylabvault
    ```
 
-3. **Access the application**
-   - 🌐 **Web Application**: http://localhost:8000
-   - 📚 **API Documentation**: http://localhost:8000/api/docs
-   - 🔍 **Health Check**: http://localhost:8000/health
+3. **Open the application**
+   - 🌐 **Web application**: http://localhost:8000
+   - 📚 **API documentation**: http://localhost:8000/api/docs
+   - 🔍 **Health check**: http://localhost:8000/health
 
 ### First Steps
-1. **Upload Your First PDF**: Go to "PDF Import" and upload a lab report
-2. **Review Results**: Check the parsed data and select tests to import
-3. **Explore Dashboard**: View your health metrics and trends
-4. **Manage Providers**: Add your healthcare providers for better organization
-5. **Customize Settings**: Set your preferred theme and UI preferences
+1. **Enter your name**: On first launch a welcome screen asks who the results are for (you can skip it and rename the patient later)
+2. **Import a PDF**: Go to *PDF Import*, upload a lab report and check the extracted results
+3. **Import the tests you want**: Pick the provider (often selected for you) and confirm
+4. **Explore**: Open the dashboard, a test's page or *Charts* to see trends
+5. **Record vitals**: Use *Record vitals* on the dashboard
+
+## 🔄 Updating
+
+Every push to `main` publishes a new `ghcr.io/zaydons/mylabvault:latest` image, also tagged with its version (for example `2026.10.07.35`) and commit. Pull it and recreate the container:
+
+```bash
+docker compose pull mylabvault && docker compose up -d mylabvault
+```
+
+Database changes are applied automatically on startup. For TrueNAS, see [Updating](deploy/truenas/README.md#updating).
 
 ## 🏗️ Architecture
 
 ### Technology Stack
-- **Backend**: Python 3.11 + FastAPI + SQLAlchemy ORM
-- **Frontend**: Server-side Jinja2 templates + AdminLTE 3.2.0
+- **Backend**: Python 3.11, FastAPI, SQLAlchemy
+- **Frontend**: Server-rendered Jinja2 templates with AdminLTE 3.2 (Bootstrap 4), DataTables, Chart.js and Material Design Icons, all served locally from `app/static/vendor`
 - **Database**: SQLite with Alembic migrations
-- **PDF Processing**: pypdf + pdfplumber for intelligent parsing
-- **UI Components**: Bootstrap 4 + DataTables + Chart.js + Material Design Icons
-- **Containerization**: Docker with health checks and network isolation
+- **PDF processing**: pdfplumber and pypdf, plus optional Claude through Amazon Bedrock
+- **Container**: Alpine-based Docker image with a health check, built by GitHub Actions
 
 ### Project Structure
 ```
-lablog/
-├── app/                          # Application root
-│   ├── api/                      # FastAPI backend
-│   │   ├── models.py            # SQLAlchemy database models
-│   │   ├── routers/             # API route handlers
-│   │   │   ├── pdf_import.py    # PDF processing endpoints
-│   │   │   ├── results.py       # Lab results management
-│   │   │   └── pages.py         # Frontend page routes
-│   │   └── services/            # Business logic
-│   │       └── pdf_parser.py    # Advanced PDF parsing engine
-│   ├── templates/               # Jinja2 HTML templates
-│   │   ├── components/          # Reusable UI components
-│   │   ├── dashboard.html       # Main dashboard interface
-│   │   └── pdf-import.html      # PDF upload workflow
-│   ├── data/                    # Persistent data storage
-│   │   ├── mylabvault.db       # SQLite database
-│   │   └── uploads/pdfs/       # Uploaded PDF files
-│   └── alembic/                 # Database migrations
-├── docker-compose.yml           # Container orchestration
-└── start-dev.sh                # Quick start script
+MyLabVault/
+├── app/
+│   ├── api/
+│   │   ├── main.py               # FastAPI app, routers, welcome-screen redirect
+│   │   ├── models.py             # SQLAlchemy models
+│   │   ├── schemas.py            # Request/response schemas
+│   │   ├── build_info.py         # Build version and update check
+│   │   ├── routers/              # API and page routes (results, labs, vitals, pdf_import, search, setup, ...)
+│   │   └── services/
+│   │       ├── pdf_parser.py     # Built-in PDF parser
+│   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
+│   │       └── test_descriptions.py  # Plain-language test descriptions
+│   ├── templates/                # Jinja2 pages and components
+│   ├── static/
+│   │   ├── js/                   # Shared scripts (charts, modals)
+│   │   └── vendor/               # Bundled front-end libraries and fonts
+│   ├── alembic/                  # Database migrations
+│   └── data/                     # Database and uploaded PDFs (mounted volume)
+├── deploy/truenas/               # TrueNAS SCALE app and guide
+├── scripts/vendor-assets.sh      # Re-downloads the bundled front-end libraries
+├── docker-compose.yml            # Local development
+└── start-dev.sh                  # Quick start script
 ```
 
 ### Database Schema
-- **Patients**: Personal information and demographics
-- **Providers**: Healthcare providers and laboratories
-- **Panels**: Test groupings (CBC, Metabolic, Lipid, etc.)
-- **Labs**: Individual test definitions with reference ranges
-- **LabResults**: Test results with values and metadata
-- **PDFImportLog**: Import history and processing status
-- **UserSettings**: UI preferences and application settings
+- **Patients**: Name, date of birth and gender
+- **Providers**: Healthcare providers
+- **Panels**: Test groupings (Lipid, Metabolic, CBC, ...)
+- **Labs**: Test definitions with unit, reference range and optional description
+- **LabResults**: Values with date, provider, the report's own range, flag, comment and fasting status
+- **Vitals**: Weight, blood pressure and other measurements
+- **PDFImportLog**: Import history and parsed data
+- **UserSettings**: Preferences such as dark mode and first-run setup
 
-## 📋 Usage Guide
+## 💾 Data and Backups
 
-### PDF Import Workflow
-1. **Upload**: Drag & drop or select PDF lab reports
-2. **Parse**: Automatic extraction of test data and metadata
-3. **Review**: Preview parsed results with confidence indicators
-4. **Select**: Choose specific tests to import (selective import)
-5. **Import**: Save selected results to your database
-6. **Track**: Monitor import history and processing status
+- **Database**: `data/mylabvault.db` in the mounted volume (`/app/data` in the container)
+- **Uploaded PDFs**: `data/uploads/pdfs/`
+- **Portable backup**: the *Export* section of *Settings* downloads all data, and its *Import* section restores it
+- **File backup**: Copy the whole data folder while the app is stopped, or snapshot the dataset (TrueNAS)
 
-### Data Management
-- **View All Results**: Browse and filter all lab results
-- **Individual Lab Analysis**: Detailed view with trend charts
-- **Provider Management**: Add and organize healthcare providers
-- **Panel Organization**: Group tests by medical categories
-- **Patient Profiles**: Manage multiple family members
-
-### Analytics & Reporting
-- **Dashboard Overview**: Key health metrics and recent results
-- **Trend Analysis**: Chart.js visualizations of test values over time
-- **Abnormal Detection**: Automatic flagging of out-of-range results
-- **Export Capabilities**: Download results for external analysis
-
-### Data Persistence
-- **Database**: `app/data/mylabvault.db` (SQLite)
-- **Uploaded Files**: `app/data/uploads/pdfs/` (permanent storage)
-- **Application Logs**: Docker container logs via `docker logs mylabvault`
-
-### Backup & Recovery
 ```bash
-# Backup your data
-docker exec mylabvault cp -r /app/data /app/backup-$(date +%Y%m%d)
-
-# Or backup from host
-cp -r ./app/data ./backup-$(date +%Y%m%d)
+docker compose stop mylabvault
+cp -r ./data ./backup-$(date +%Y%m%d)
+docker compose start mylabvault
 ```
 
 ## 🛠️ Development & Management
 
 ### Container Management
 ```bash
-# View application status
-docker-compose ps mylabvault
-
-# View logs
-docker logs mylabvault -f
-
-# Restart application
-docker-compose restart mylabvault
-
-# Stop application
-docker-compose down
-
-# Rebuild and restart
-docker-compose down && docker-compose build && docker-compose up -d mylabvault
-
-# Access container shell
-docker exec -it mylabvault /bin/sh
+docker compose ps mylabvault          # Status
+docker logs mylabvault -f             # Logs
+docker compose restart mylabvault     # Restart
+docker compose down                   # Stop
+docker exec -it mylabvault /bin/sh    # Shell
 ```
 
-### API Development
-- **Interactive Documentation**: http://localhost:8000/api/docs (Swagger UI)
-- **Alternative Docs**: http://localhost:8000/api/redoc (ReDoc)
-- **OpenAPI Spec**: http://localhost:8000/openapi.json
+### Updating bundled front-end libraries
+Versions are pinned in `scripts/vendor-assets.sh`. Change a version, run the script and test the UI; it rewrites `app/static/vendor` and its `SHA256SUMS`.
+
+### API
+- **Swagger UI**: http://localhost:8000/api/docs
+- **ReDoc**: http://localhost:8000/api/redoc
 
 ### Key Endpoints
 ```
-GET  /api/results/              # Retrieve lab results with filtering
-POST /api/pdf/upload           # Upload single PDF lab report  
-POST /api/pdf/bulk-upload      # Upload multiple PDF files
-POST /api/pdf/confirm          # Confirm and process PDF import
-GET  /api/pdf/history          # Get PDF import history
-GET  /api/labs/                # Manage lab test definitions
-GET  /api/providers/           # Manage healthcare providers
-GET  /api/patients/            # Manage patient profiles
+GET  /api/results/             # Lab results
+POST /api/results/             # Add a result
+POST /api/pdf/upload           # Upload one PDF (add ?ai=true to use AI parsing)
+POST /api/pdf/bulk-upload      # Upload several PDFs
+POST /api/pdf/rescan-ai/{id}   # Re-parse a pending import with AI
+POST /api/pdf/confirm          # Import the selected tests
+GET  /api/pdf/history          # Import history
+GET  /api/labs/                # Lab test definitions
+GET  /api/vitals/              # Vitals (filter with patient_id, vital_type)
+GET  /api/search/?q=           # Quick search for tests and pages
+GET  /api/patients/            # Patients
+GET  /api/providers/           # Providers
+POST /api/settings/export      # Export all data
+GET  /version                  # Running version and build
+GET  /api/update-check         # Whether a newer image has been published
 ```
 
 ## 🔍 Troubleshooting
 
-### Common Issues
+**A PDF imports no tests**
+- Scanned reports have no text to read. Turn on AI parsing and use *Re-scan with AI*, or add the results by hand.
+- Check the logs: `docker logs mylabvault | grep -i pdf`
 
-**PDF Import Problems**
+**The wrong collection date was detected**
+- Change it with *Override date* on the import screen before importing.
+
+**The app doesn't show a change you just deployed**
+- Compare the version in the footer with the latest build. Pull the image again and recreate the container (see [Updating](#-updating)).
+
+**Start over with an empty database** (⚠️ deletes all data)
+- Use *Settings → Reset All Data*, or stop the app and delete `data/mylabvault.db`.
+
+**The application doesn't start**
 ```bash
-# Check if PDF contains readable text
-docker exec mylabvault python -c "import pdfplumber; print('PDF readable' if pdfplumber.open('/app/data/uploads/pdfs/yourfile.pdf').pages else 'PDF not readable')"
-
-# View detailed import logs
-docker logs mylabvault | grep "PDF"
-```
-
-**Database Issues**
-```bash
-# Check database connectivity
-docker exec mylabvault python -c "from api.database import engine; print('DB OK' if engine.connect() else 'DB Error')"
-
-# Reset database (⚠️ WARNING: This will delete all data)
-docker exec mylabvault rm /app/data/mylabvault.db
-docker-compose restart mylabvault
-```
-
-**Application Not Starting**
-```bash
-# Check Docker resources
-docker system df
-
-# Verify health status
-docker-compose ps mylabvault
-
-# View startup logs
+docker compose ps mylabvault
 docker logs mylabvault --tail 50
 ```
 
-### Performance Optimization
-- **Large PDF Files**: Files over 10MB may take longer to process
-- **Bulk Imports**: Process in batches of 10-20 files for optimal performance
-- **Database Size**: Regular cleanup of old import logs recommended for large datasets
-
-### Getting Help
-1. Check the application logs: `docker logs mylabvault`
-2. Verify Docker resources and connectivity
-3. Review the API documentation at `/api/docs` for endpoint details
-4. Check file permissions in `app/data/` directory
-
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the MIT License; see [LICENSE.md](LICENSE.md). Bundled front-end libraries keep their own licenses, listed in [app/static/vendor/README.md](app/static/vendor/README.md).
 
 ## 🏥 Medical Disclaimer
 
-MyLabVault is a personal data management tool and is not intended to provide medical advice. Always consult with qualified healthcare professionals regarding your medical data and health decisions. This software is provided for informational and organizational purposes only.
+MyLabVault is a personal data management tool and is not intended to provide medical advice. Test descriptions, reference ranges and blood pressure categories are general information. Always consult qualified healthcare professionals about your results and health decisions.
 
 ---
 
-**MyLabVault** - Take control of your health data with privacy, security, and intelligence.
+**MyLabVault** - Take control of your health data, on your own server.
