@@ -16,7 +16,7 @@ services:
     #   AWS_ACCESS_KEY_ID: "<access key id>"
     #   AWS_SECRET_ACCESS_KEY: "<secret access key>"
     #   AWS_REGION: "us-east-1"
-    #   MYLABVAULT_AI_MODEL: "anthropic.claude-haiku-4-5"
+    #   MYLABVAULT_AI_MODEL: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
