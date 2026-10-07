@@ -194,6 +194,11 @@
               </div>
             </div>
           </div>
+          <div class="form-group">
+            <label for="labDescription">Description <span class="text-muted small">(optional)</span></label>
+            <textarea class="form-control" id="labDescription" rows="2" maxlength="2000" aria-describedby="labDescriptionHelp"></textarea>
+            <small class="form-text text-muted" id="labDescriptionHelp">What this test measures, in your own words. Leave blank to use the built-in description for common tests.</small>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-dismiss="modal">
@@ -267,6 +272,11 @@
                 <input type="number" step="0.01" class="form-control" id="editLabRefHigh" name="ref_high">
               </div>
             </div>
+          </div>
+          <div class="form-group">
+            <label for="editLabDescription">Description <span class="text-muted small">(optional)</span></label>
+            <textarea class="form-control" id="editLabDescription" rows="2" maxlength="2000" aria-describedby="editLabDescriptionHelp"></textarea>
+            <small class="form-text text-muted" id="editLabDescriptionHelp">What this test measures, in your own words. Leave blank to use the built-in description for common tests.</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -643,7 +653,8 @@ $(document).ready(function() {
             name: $('#labName').val().trim(),
             panel_id: parseInt($('#labPanel').val()),
             unit_id: parseInt($('#labUnit').val()),
-            ref_type: refType
+            ref_type: refType,
+            description: $('#labDescription').val().trim() || null
         };
 
         if (refType === 'range') {
@@ -703,6 +714,8 @@ $(document).ready(function() {
             $('#editLabUnit').val(lab.unit_id);
             $('#editLabRefLow').val(lab.ref_low);
             $('#editLabRefHigh').val(lab.ref_high);
+            $('#editLabDescription').val(lab.description || '')
+                .attr('placeholder', lab.description ? '' : (lab.display_description || ''));
             $('#editLabModal').modal('show');
         });
     });
@@ -717,7 +730,8 @@ $(document).ready(function() {
             panel_id: parseInt($('#editLabPanel').val()),
             unit_id: parseInt($('#editLabUnit').val()),
             ref_low: $('#editLabRefLow').val() ? parseFloat($('#editLabRefLow').val()) : null,
-            ref_high: $('#editLabRefHigh').val() ? parseFloat($('#editLabRefHigh').val()) : null
+            ref_high: $('#editLabRefHigh').val() ? parseFloat($('#editLabRefHigh').val()) : null,
+            description: $('#editLabDescription').val().trim() || null
         };
 
         $.ajax({

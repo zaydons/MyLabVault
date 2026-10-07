@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome - MyLabVault</title>
+  <link rel="stylesheet" href="/static/vendor/fonts/ibm-plex-sans.css">
+  <link rel="stylesheet" href="/static/vendor/mdi/css/materialdesignicons.min.css">
+  <link rel="stylesheet" href="/static/vendor/admin-lte/adminlte.min.css">
+  <style>
+    body { font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f4f6f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .welcome { width: 100%; max-width: 440px; }
+    .welcome .brand { font-size: 1.5rem; font-weight: 600; color: #343a40; text-align: center; margin-bottom: 1rem; }
+    .welcome .brand i { color: #0062cc; }
+    .welcome .card { border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 4px 16px rgba(0,0,0,.06); border-radius: .5rem; }
+    .welcome h1 { font-size: 1.35rem; font-weight: 600; }
+    .welcome .text-muted { color: #5a6268 !important; }
+    .btn-primary { background-color: #0062cc; border-color: #0062cc; }
+    .btn-link { color: #0056b3; }
+    :focus-visible { outline: 3px solid #0b6bcb !important; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main class="welcome">
+    <div class="brand"><i class="mdi mdi-flask mr-1" aria-hidden="true"></i>MyLabVault</div>
+    <div class="card">
+      <div class="card-body p-4">
+        <h1 class="mb-2">Welcome</h1>
+        <p class="text-muted mb-4">Who are these lab results for? This name appears on your dashboard and patient switcher. You can add family members later under Manage Data &rarr; Patients.</p>
+
+        <div class="alert alert-danger d-none" id="welcomeError" role="alert" tabindex="-1"></div>
+
+        <form id="welcomeForm" novalidate>
+          <div class="form-group">
+            <label for="welcomeName">Your name</label>
+            <input type="text" class="form-control" id="welcomeName" maxlength="255" autocomplete="name" required autofocus>
+          </div>
+          <div class="form-group">
+            <label for="welcomeDob">Date of birth <span class="text-muted small">(optional)</span></label>
+            <input type="date" class="form-control" id="welcomeDob" autocomplete="bday" aria-describedby="welcomeDobHelp">
+            <small class="form-text text-muted" id="welcomeDobHelp">Used to show your age; it stays on this server.</small>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="welcomeSave">Get started</button>
+          <button type="button" class="btn btn-link btn-block btn-sm" id="welcomeSkip">Skip for now</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    const form = document.getElementById('welcomeForm');
+    const errorBox = document.getElementById('welcomeError');
+    const save = document.getElementById('welcomeSave');
+
+    function showError(message, field) {
+      errorBox.textContent = message;
+      errorBox.classList.remove('d-none');
+      (field || errorBox).focus();
+    }
+
+    async function submit(body) {
+      save.disabled = true;
+      try {
+        const response = await fetch('/api/setup/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof data.detail === 'string' ? data.detail : 'Something went wrong. Please try again.');
+        }
+        window.location.href = '/dashboard';
+      } catch (error) {
+        showError(error.message);
+        save.disabled = false;
+      }
+    }
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const nameInput = document.getElementById('welcomeName');
+      const name = nameInput.value.trim();
+      if (!name) return showError('Enter your name, or choose Skip for now.', nameInput);
+      submit({ name, date_of_birth: document.getElementById('welcomeDob').value || null });
+    });
+    document.getElementById('welcomeSkip').addEventListener('click', () => submit({ skip: true }));
+  })();
+  </script>
+</body>
+</html>

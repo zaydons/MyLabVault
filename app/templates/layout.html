@@ -19,6 +19,7 @@
     <!-- Chart.js -->
     <script src="/static/vendor/jquery/jquery.min.js"></script>
     <script src="/static/vendor/chart.js/chart.umd.js"></script>
+    <script src="/static/js/lab-chart.js"></script>
     
     <!-- Custom CSS for IBM Plex Sans -->
     <style>
@@ -314,6 +315,24 @@
         .dark-mode .summary-card-alert .summary-value { color: #ff9aa4; }
         .result-number { font-variant-numeric: tabular-nums; font-weight: 600; }
         h2.card-title { font-size: 1.1rem; }
+        /* ---- Top bar search ---- */
+        .app-search { position: relative; display: flex; align-items: center; margin-left: 0.5rem; }
+        .app-search-box { position: relative; width: 280px; }
+        .app-search-box .form-control { padding-left: 2rem; }
+        .app-search-icon { position: absolute; left: 0.6rem; top: 50%; transform: translateY(-50%); color: #5a6268; pointer-events: none; }
+        .app-search-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1050; background: #fff; border: 1px solid #ced4da; border-radius: 0.375rem; box-shadow: 0 6px 16px rgba(0,0,0,.12); max-height: 70vh; overflow-y: auto; }
+        .app-search-results li { padding: 0.5rem 0.75rem; cursor: pointer; }
+        .app-search-results li .detail { display: block; font-size: 0.8rem; color: #5a6268; }
+        .app-search-results li[aria-selected="true"], .app-search-results li:hover { background: #e7f1fb; }
+        .app-search-results li.empty { cursor: default; color: #5a6268; }
+        .dark-mode .app-search-results { background: #343a40; border-color: #6c757d; }
+        .dark-mode .app-search-results li .detail, .dark-mode .app-search-icon { color: #c8cdd2; }
+        .dark-mode .app-search-results li[aria-selected="true"], .dark-mode .app-search-results li:hover { background: #3f4a56; }
+        @media (max-width: 767.98px) {
+            .app-search { position: static; }
+            .app-search-box { display: none; position: absolute; left: 0.5rem; right: 0.5rem; top: calc(100% + 4px); width: auto; z-index: 1050; }
+            .app-search.open .app-search-box { display: block; }
+        }
     </style>
     
     {% block extra_head %}{% endblock %}
@@ -330,6 +349,20 @@
         <a class="nav-link" data-widget="pushmenu" href="#" role="button" aria-label="Toggle navigation menu"><i class="mdi mdi-menu" aria-hidden="true"></i></a>
       </li>
     </ul>
+
+    <!-- Quick search: lab tests and pages -->
+    <form class="app-search" id="appSearch" role="search" onsubmit="return false;">
+      <button type="button" class="btn btn-link nav-link app-search-toggle d-md-none" aria-label="Search" aria-expanded="false" aria-controls="appSearchBox" onclick="toggleAppSearch()">
+        <i class="mdi mdi-magnify" aria-hidden="true"></i>
+      </button>
+      <div class="app-search-box" id="appSearchBox">
+        <i class="mdi mdi-magnify app-search-icon" aria-hidden="true"></i>
+        <input type="search" class="form-control form-control-sm" id="appSearchInput" placeholder="Search tests…  ( / )"
+               autocomplete="off" role="combobox" aria-label="Search lab tests and pages" aria-autocomplete="list"
+               aria-expanded="false" aria-controls="appSearchResults">
+        <ul class="app-search-results list-unstyled mb-0" id="appSearchResults" role="listbox" aria-label="Search results" hidden></ul>
+      </div>
+    </form>
 
     <!-- Right navbar links -->
     <ul class="navbar-nav ml-auto">
@@ -675,6 +708,79 @@ function labelIconOnlyControls(root) {
 }
 document.addEventListener('DOMContentLoaded', () => labelIconOnlyControls());
 if (window.jQuery) jQuery(document).on('draw.dt', () => labelIconOnlyControls());
+</script>
+<script>
+// Top bar search: type to find a lab test or page, arrow keys to move, Enter to open, Escape to close
+(function () {
+  const form = document.getElementById('appSearch');
+  const input = document.getElementById('appSearchInput');
+  const list = document.getElementById('appSearchResults');
+  if (!form || !input || !list) return;
+  let items = [], active = -1, timer = null, seq = 0;
+
+  function close() {
+    list.hidden = true; input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant'); active = -1;
+  }
+  function highlight(index) {
+    const options = list.querySelectorAll('[role="option"]');
+    options.forEach((el, i) => el.setAttribute('aria-selected', i === index ? 'true' : 'false'));
+    active = index;
+    if (options[index]) { input.setAttribute('aria-activedescendant', options[index].id); options[index].scrollIntoView({ block: 'nearest' }); }
+  }
+  function render() {
+    list.innerHTML = items.length
+      ? items.map((item, i) => `<li role="option" id="appSearchOpt${i}" aria-selected="false" data-index="${i}">
+           ${escapeHtml(item.label)}<span class="detail">${escapeHtml(item.detail || '')}</span></li>`).join('')
+      : '<li class="empty" role="option" aria-disabled="true" id="appSearchOptNone">No matching tests or pages</li>';
+    list.hidden = false; input.setAttribute('aria-expanded', 'true');
+    highlight(items.length ? 0 : -1);
+  }
+  async function search(q) {
+    const mine = ++seq;
+    try {
+      const response = await fetch(`/api/search/?q=${encodeURIComponent(q)}`);
+      if (!response.ok || mine !== seq) return;
+      items = await response.json();
+      if (input.value.trim()) render();
+    } catch (e) { /* offline or server restarting: leave the list as is */ }
+  }
+  function go(index) { if (items[index]) window.location.href = items[index].url; }
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (!q) { items = []; close(); return; }
+    timer = setTimeout(() => search(q), 150);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' && items.length) { e.preventDefault(); highlight((active + 1) % items.length); }
+    else if (e.key === 'ArrowUp' && items.length) { e.preventDefault(); highlight((active - 1 + items.length) % items.length); }
+    else if (e.key === 'Enter') { e.preventDefault(); go(active >= 0 ? active : 0); }
+    else if (e.key === 'Escape') { close(); if (form.classList.contains('open')) toggleAppSearch(false); }
+  });
+  list.addEventListener('mousedown', e => {
+    const li = e.target.closest('[data-index]');
+    if (li) { e.preventDefault(); go(parseInt(li.dataset.index, 10)); }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 100));
+  // "/" focuses search from anywhere except text fields
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+    e.preventDefault();
+    if (window.matchMedia('(max-width: 767.98px)').matches) toggleAppSearch(true); else input.focus();
+  });
+
+  window.toggleAppSearch = function (open) {
+    const toggle = form.querySelector('.app-search-toggle');
+    const show = open === undefined ? !form.classList.contains('open') : open;
+    form.classList.toggle('open', show);
+    toggle.setAttribute('aria-expanded', show ? 'true' : 'false');
+    if (show) input.focus(); else { close(); toggle.focus(); }
+  };
+})();
 </script>
 </body>
 </html>

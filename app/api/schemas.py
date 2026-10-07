@@ -78,6 +78,7 @@ class LabBase(BaseModel):
     ref_high: Optional[float] = None
     ref_type: Optional[str] = "range"
     ref_value: Optional[float] = None
+    description: Optional[str] = Field(None, max_length=2000)
 
 
 class LabCreate(LabBase):
@@ -87,6 +88,11 @@ class LabCreate(LabBase):
         if value not in (None, "range", "greater", "less"):
             raise ValueError("ref_type must be 'range', 'greater' or 'less'")
         return value
+
+    @field_validator("description")
+    @classmethod
+    def blank_description_is_none(cls, value: Optional[str]) -> Optional[str]:
+        return (value.strip() or None) if value is not None else None
 
 
 

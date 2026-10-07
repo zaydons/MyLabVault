@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from .. import build_info
 from ..database import get_db
+from .vitals import VITAL_TYPES, bp_category
 from ..models import (
     LabResult as LabResultModel, 
     Lab as LabModel,
@@ -14,7 +15,8 @@ from ..models import (
     Panel as PanelModel, 
     Unit as UnitModel,
     UserSettings as UserSettingsModel,
-    PDFImportLog as PDFImportLogModel
+    PDFImportLog as PDFImportLogModel,
+    Vital as VitalModel,
 )
 from sqlalchemy import func
 
@@ -99,6 +101,15 @@ def index_page(request: Request, db: Session = Depends(get_db)):
     # Always redirect to dashboard (patient will be handled via cookie)
     return RedirectResponse(url="/dashboard", status_code=302)
 
+@router.get("/welcome")
+def welcome_page(request: Request, db: Session = Depends(get_db)):
+    """First-run screen that asks for the patient's name."""
+    from fastapi.responses import RedirectResponse
+    from .setup import needs_setup
+    if not needs_setup(db):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return templates.TemplateResponse(request, "welcome.html", {"request": request})
+
 @router.get("/dashboard")
 def dashboard_page(request: Request, db: Session = Depends(get_db)):
     """Dashboard page with server-side rendering."""
@@ -140,7 +151,32 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
         sum(1 for r in results if r.date_collected.date() == last_draw.date_collected.date()) if last_draw else 0
     )
 
+    # Latest reading per vital type, for the dashboard's vitals card
+    latest_vitals = []
+    seen_types = set()
+    for vital in (
+        db.query(VitalModel)
+        .filter(VitalModel.patient_id == patient_id)
+        .order_by(VitalModel.measured_at.desc(), VitalModel.id.desc())
+        .all()
+    ):
+        config = VITAL_TYPES.get(vital.vital_type)
+        if not config or vital.vital_type in seen_types:
+            continue
+        seen_types.add(vital.vital_type)
+        reading = f"{vital.value:g}/{vital.value2:g}" if vital.value2 is not None else f"{vital.value:g}"
+        latest_vitals.append({
+            "type": vital.vital_type,
+            "label": config["label"],
+            "reading": f"{reading} {vital.unit}" if vital.unit else reading,
+            "measured_at": vital.measured_at,
+            "bp_category": bp_category(vital.value, vital.value2)
+            if vital.vital_type == "blood_pressure" and vital.value2 is not None else None,
+        })
+    latest_vitals.sort(key=lambda v: list(VITAL_TYPES).index(v["type"]))
+
     dashboard_data = {
+        "latest_vitals": latest_vitals,
         "total_results": len(results),
         "tests_tracked": len(latest),
         "last_draw": last_draw,
@@ -340,6 +376,15 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
                 'labs': lab_list
             })
 
+    # Open on the panel of the most recent result, so the page isn't empty on arrival
+    latest = (
+        db.query(LabModel.panel_id)
+        .join(LabResultModel, LabModel.id == LabResultModel.lab_id)
+        .filter(LabResultModel.patient_id == patient_id)
+        .order_by(LabResultModel.date_collected.desc(), LabResultModel.id.desc())
+        .first()
+    )
+
     return templates.TemplateResponse(
         request,
         "charts.html",
@@ -347,6 +392,7 @@ def charts_page(request: Request, db: Session = Depends(get_db)):
             "request": request,
             "panels": panels_data,
             "grouped_labs": grouped_labs,
+            "default_panel_id": latest[0] if latest else None,
             "user_settings": user_settings.to_dict(),
             "pending_imports_count": get_pending_imports_count(db)
         }

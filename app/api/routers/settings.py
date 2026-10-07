@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from .setup import reset_setup_state
 from ..models import (
     LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel,
     Patient as PatientModel, Provider as ProviderModel,
@@ -185,8 +186,9 @@ def reset_data(db: Session = Depends(get_db)):
                 except Exception:
                     continue  # Continue if file can't be deleted
 
-        # Recreate default patient with ID 1
+        # Recreate default patient with ID 1; the welcome screen asks for a name again
         default_patient = PatientModel(id=1, name="Default Patient")
+        reset_setup_state()
         db.add(default_patient)
         
         # Create default settings with JSON string for options
@@ -708,6 +710,7 @@ def _lab_to_dict(lab: LabModel) -> dict:
         "ref_high": lab.ref_high,
         "ref_value": lab.ref_value,
         "ref_type": lab.ref_type,
+        "description": lab.description,
         "created_at": getattr(lab, 'created_at', None).isoformat() if hasattr(lab, 'created_at') and getattr(lab, 'created_at') else None
     }
 
@@ -930,7 +933,8 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
                     ref_low=lab_data.get('ref_low'),
                     ref_high=lab_data.get('ref_high'),
                     ref_value=lab_data.get('ref_value'),
-                    ref_type=lab_data.get('ref_type')
+                    ref_type=lab_data.get('ref_type'),
+                    description=lab_data.get('description')
                 )
                 db.add(new_lab)
                 db.flush()
