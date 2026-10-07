@@ -108,42 +108,45 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
     # Get selected patient from cookie
     patient_id = get_selected_patient_id(request)
 
-    # Build base queries
-    results_query = db.query(LabResultModel)
-    recent_results_query = (
+    results = (
         db.query(LabResultModel)
         .options(
             joinedload(LabResultModel.lab).joinedload(LabModel.unit),
             joinedload(LabResultModel.provider),
-            joinedload(LabResultModel.patient)
         )
-    )
-
-    # Filter by patient
-    results_query = results_query.filter(LabResultModel.patient_id == patient_id)
-    recent_results_query = recent_results_query.filter(LabResultModel.patient_id == patient_id)
-
-    # Get dashboard statistics
-    total_results = results_query.count()
-    recent_results_count = results_query.count()  # Could add date filtering
-    total_labs = db.query(LabModel).count()  # Labs are shared across patients
-    total_providers = db.query(ProviderModel).count()  # Providers are shared across patients
-
-    # Get recent results
-    recent_results = (
-        recent_results_query.order_by(LabResultModel.date_collected.desc())
-        .limit(10)
+        .filter(LabResultModel.patient_id == patient_id)
+        .order_by(LabResultModel.date_collected.desc(), LabResultModel.id.desc())
         .all()
     )
 
+    # Latest result per lab test, with the change from the previous numeric result
+    latest_by_lab = {}
+    for result in results:
+        entry = latest_by_lab.get(result.lab_id)
+        if entry is None:
+            latest_by_lab[result.lab_id] = {"result": result, "previous": None}
+        elif entry["previous"] is None and result.result is not None and entry["result"].result is not None:
+            entry["previous"] = result
+    latest = []
+    for entry in latest_by_lab.values():
+        result, previous = entry["result"], entry["previous"]
+        entry["change"] = (result.result - previous.result) if previous else None
+        latest.append(entry)
+    latest.sort(key=lambda e: (e["result"].lab.name.lower() if e["result"].lab else ""))
+    attention = [e for e in latest if e["result"].status in ("high", "low", "abnormal")]
+
+    last_draw = results[0] if results else None
+    last_draw_count = (
+        sum(1 for r in results if r.date_collected.date() == last_draw.date_collected.date()) if last_draw else 0
+    )
+
     dashboard_data = {
-        "stats": {
-            "total_results": total_results,
-            "recent_results": recent_results_count,
-            "total_labs": total_labs,
-            "total_providers": total_providers
-        },
-        "recent_results": recent_results
+        "total_results": len(results),
+        "tests_tracked": len(latest),
+        "last_draw": last_draw,
+        "last_draw_count": last_draw_count,
+        "attention": attention,
+        "latest": latest,
     }
 
     return templates.TemplateResponse(

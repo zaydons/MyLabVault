@@ -172,55 +172,36 @@ class Lab(Base):
     unit = relationship("Unit", back_populates="labs")
     results = relationship("LabResult", back_populates="lab")
 
+    def reference_bounds(self) -> tuple:
+        """(low, high, inclusive) for this test's reference range; a bound is None when open-ended."""
+        if self.ref_type == "greater" and self.ref_value is not None:
+            return float(self.ref_value), None, False
+        if self.ref_type == "less" and self.ref_value is not None:
+            return None, float(self.ref_value), False
+        low = float(self.ref_low) if self.ref_low is not None else None
+        high = float(self.ref_high) if self.ref_high is not None else None
+        return low, high, True
+
     def is_result_normal(self, value: float) -> bool:
-        """Check if a result value is within normal range."""
+        """Check if a result value is within normal range (no range counts as normal)."""
         if value is None:
             return True
-        try:
-            # Handle different reference range types
-            if self.ref_type == "greater" and self.ref_value is not None:
-                return value > self.ref_value
-            elif self.ref_type == "less" and self.ref_value is not None:
-                return value < self.ref_value
-            elif self.ref_type == "range" or self.ref_type is None:
-                # Traditional range-based check
-                ref_low = float(self.ref_low) if self.ref_low is not None else None
-                ref_high = float(self.ref_high) if self.ref_high is not None else None
-                if ref_low is None or ref_high is None:
-                    return True
-                return ref_low <= value <= ref_high
-            else:
-                return True
-        except (ValueError, TypeError):
-            return True
+        return self.get_result_status(value) in ("normal", "unknown")
 
     def get_result_status(self, value: float) -> str:
-        """Get status of a result value (normal, high, low)."""
+        """Get status of a result value: normal, high, low, or unknown when there is no range."""
         try:
-            # Handle different reference range types
-            if self.ref_type == "greater" and self.ref_value is not None:
-                if value > self.ref_value:
-                    return "normal"
-                else:
-                    return "low"
-            elif self.ref_type == "less" and self.ref_value is not None:
-                if value < self.ref_value:
-                    return "normal"
-                else:
-                    return "high"
-            elif self.ref_type == "range" or self.ref_type is None:
-                # Traditional range-based check
-                if self.ref_low is None or self.ref_high is None:
-                    return "unknown"
-                if value < self.ref_low:
-                    return "low"
-                if value > self.ref_high:
-                    return "high"
-                return "normal"
-            else:
-                return "unknown"
+            value = float(value)
+            low, high, inclusive = self.reference_bounds()
         except (ValueError, TypeError):
             return "unknown"
+        if low is None and high is None:
+            return "unknown"
+        if low is not None and (value < low or (not inclusive and value == low)):
+            return "low"
+        if high is not None and (value > high or (not inclusive and value == high)):
+            return "high"
+        return "normal"
 
 
     def get_result_count(self) -> int:
@@ -364,11 +345,14 @@ class LabResult(Base):
             return f"> {self.lab.ref_value}"
         elif self.lab.ref_type == "less" and self.lab.ref_value is not None:
             return f"< {self.lab.ref_value}"
-        elif (self.lab.ref_type == "range" or self.lab.ref_type is None) and \
-             self.lab.ref_low is not None and self.lab.ref_high is not None:
-            return f"{self.lab.ref_low} - {self.lab.ref_high}"
-        else:
-            return None
+        low, high = self.lab.ref_low, self.lab.ref_high
+        if low is not None and high is not None:
+            return f"{low} - {high}"
+        if low is not None:
+            return f"≥ {low}"
+        if high is not None:
+            return f"≤ {high}"
+        return None
 
     def get_reference_range(self) -> Optional[str]:
         """Get the reference range for this result (backward compatibility)."""

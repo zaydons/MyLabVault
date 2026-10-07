@@ -18,123 +18,152 @@
   </div>
 </div>
 
+{% macro change_text(entry) -%}
+  {% if entry.change is not none and entry.previous %}
+    {% set prev_date = entry.previous.date_collected %}
+    {% if entry.change > 0 %}
+      <span class="text-muted small text-nowrap" aria-label="up {{ '%g'|format(entry.change|round(2)) }} from {{ prev_date.strftime('%m/%d/%Y') }}">
+        <i class="mdi mdi-arrow-up" aria-hidden="true"></i>{{ '%g'|format(entry.change|round(2)) }}</span>
+    {% elif entry.change < 0 %}
+      <span class="text-muted small text-nowrap" aria-label="down {{ '%g'|format((-entry.change)|round(2)) }} from {{ prev_date.strftime('%m/%d/%Y') }}">
+        <i class="mdi mdi-arrow-down" aria-hidden="true"></i>{{ '%g'|format((-entry.change)|round(2)) }}</span>
+    {% else %}
+      <span class="text-muted small">no change</span>
+    {% endif %}
+  {%- endif %}
+{%- endmacro %}
+
 <!-- Main content -->
 <section class="content">
   <div class="container-fluid">
-    <!-- Info boxes -->
+    {% set last = dashboard_data.last_draw %}
+    <!-- Summary -->
     <div class="row">
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-info">
-          <span class="info-box-icon">
-            <i class="mdi mdi-file-document"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number">{{ dashboard_data.stats.total_results | number_format }}</span>
-            <span class="info-box-text">Total Results</span>
+      <div class="col-md-4">
+        <div class="card summary-card">
+          <div class="card-body">
+            <div class="summary-label">Latest draw</div>
+            {% if last %}
+              <div class="summary-value" data-date="{{ last.date_collected.isoformat() }}"><span class="format-date">{{ last.date_collected.strftime('%m/%d/%Y') }}</span></div>
+              <div class="summary-detail">{{ dashboard_data.last_draw_count }} result{{ 's' if dashboard_data.last_draw_count != 1 }}{% if last.provider %} &middot; {{ last.provider.name }}{% endif %}</div>
+            {% else %}
+              <div class="summary-value">None yet</div>
+            {% endif %}
           </div>
         </div>
       </div>
-
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-success">
-          <span class="info-box-icon">
-            <i class="mdi mdi-chart-line"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number">{{ dashboard_data.stats.recent_results | number_format }}</span>
-            <span class="info-box-text">Recent Results</span>
+      <div class="col-md-4">
+        <div class="card summary-card {{ 'summary-card-alert' if dashboard_data.attention }}">
+          <div class="card-body">
+            <div class="summary-label">Out of range now</div>
+            <div class="summary-value">
+              {% if dashboard_data.attention %}
+                <i class="mdi mdi-alert-circle-outline" aria-hidden="true"></i>
+                {{ dashboard_data.attention|length }} test{{ 's' if dashboard_data.attention|length != 1 }}
+              {% else %}
+                <i class="mdi mdi-check-circle-outline" aria-hidden="true"></i> None
+              {% endif %}
+            </div>
+            <div class="summary-detail">Based on each test's latest result</div>
           </div>
         </div>
       </div>
-
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-warning">
-          <span class="info-box-icon">
-            <i class="mdi mdi-flask"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number">{{ dashboard_data.stats.total_labs | number_format }}</span>
-            <span class="info-box-text">Lab Tests</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-danger">
-          <span class="info-box-icon">
-            <i class="mdi mdi-office-building"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number">{{ dashboard_data.stats.total_providers | number_format }}</span>
-            <span class="info-box-text">Providers</span>
+      <div class="col-md-4">
+        <div class="card summary-card">
+          <div class="card-body">
+            <div class="summary-label">Tracking</div>
+            <div class="summary-value">{{ dashboard_data.tests_tracked }} test{{ 's' if dashboard_data.tests_tracked != 1 }}</div>
+            <div class="summary-detail">{{ dashboard_data.total_results | number_format }} results in total</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Recent Results -->
-    <div class="row">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">
-              <i class="mdi mdi-file-document mr-2"></i>
-              Recent Results
-            </h3>
-            <div class="card-tools">
-              <a href="/results" class="btn btn-primary btn-sm">
-                View All Results
-              </a>
+    {% if dashboard_data.attention %}
+    <!-- Needs attention -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <i class="mdi mdi-alert-circle-outline mr-2" aria-hidden="true"></i>
+          Needs attention
+        </h2>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for entry in dashboard_data.attention %}
+          {% set r = entry.result %}
+          <li class="list-group-item d-flex flex-wrap align-items-center attention-item">
+            <div class="mr-auto pr-2">
+              <a href="/lab/{{ r.lab_id }}" class="font-weight-bold">{{ r.lab.name if r.lab else 'Unknown test' }}</a>
+              <div class="small text-muted">
+                Range {{ r.reference_range or 'not set' }} &middot;
+                <span data-date="{{ r.date_collected.isoformat() }}"><span class="format-date">{{ r.date_collected.strftime('%m/%d/%Y') }}</span></span>
+              </div>
             </div>
-          </div>
-          <div class="card-body p-0">
-            {% if dashboard_data.recent_results %}
-            <div class="table-responsive">
-              <table class="table table-striped">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Lab Test</th>
-                    <th>Result</th>
-                    <th>Provider</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for result in dashboard_data.recent_results[:10] %}
-                  <tr data-date="{{ result.date_collected.isoformat() }}">
-                    <td class="format-date">{{ result.date_collected.strftime('%m/%d/%Y') }}</td>
-                    <td>
-                      {% if result.lab_id %}
-                        <a href="/lab/{{ result.lab_id }}" class="lab-link text-primary font-weight-bold" style="text-decoration: none;">
-                          <strong>{{ result.lab_name or result.lab.name or 'Unknown Lab' }}</strong>
-                        </a>
-                      {% else %}
-                        <strong>{{ result.lab_name or (result.lab.name if result.lab else 'Unknown Lab') }}</strong>
-                      {% endif %}
-                    </td>
-                    <td>
-                      {{ result_value(result, result.lab.unit.name if result.lab and result.lab.unit else '') }}
-                    </td>
-                    <td>{{ result.provider.name if result.provider else 'Unknown Provider' }}</td>
-                    <td>
-                      {{ status_badge(result.status) }}
-                      {{ detail_badges(result) }}
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+            <div class="text-right">
+              <span class="result-number">{{ result_value(r, r.lab.unit.name if r.lab and r.lab.unit else '') }}</span>
+              {{ status_badge(r.status) }}
+              <div>{{ change_text(entry) }}</div>
             </div>
-            {% else %}
-            <div class="text-center py-4">
-              <i class="mdi mdi-flask text-muted mb-3" style="font-size: 3rem;"></i>
-              <h5 class="text-muted">No Recent Results</h5>
-              <p class="text-muted">Import a PDF or add results manually to get started</p>
-            </div>
-            {% endif %}
-          </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Latest result per test -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <i class="mdi mdi-flask-outline mr-2" aria-hidden="true"></i>
+          Latest results
+        </h2>
+        <div class="card-tools">
+          <a href="/results" class="btn btn-outline-primary btn-sm">All results</a>
         </div>
+      </div>
+      <div class="card-body p-0">
+        {% if dashboard_data.latest %}
+        <div class="table-responsive">
+          <table class="table table-striped mb-0">
+            <caption class="sr-only">Most recent result for each lab test, with the change since the previous result</caption>
+            <thead>
+              <tr>
+                <th scope="col">Test</th>
+                <th scope="col">Latest</th>
+                <th scope="col" class="d-none d-md-table-cell">Change</th>
+                <th scope="col" class="d-none d-lg-table-cell">Range</th>
+                <th scope="col" class="d-none d-md-table-cell">Date</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in dashboard_data.latest %}
+              {% set r = entry.result %}
+              <tr>
+                <td><a href="/lab/{{ r.lab_id }}" class="font-weight-bold">{{ r.lab.name if r.lab else 'Unknown test' }}</a></td>
+                <td>
+                  <span class="result-number">{{ result_value(r, r.lab.unit.name if r.lab and r.lab.unit else '') }}</span>
+                  <div class="d-md-none">{{ change_text(entry) }}</div>
+                </td>
+                <td class="d-none d-md-table-cell">{{ change_text(entry) }}</td>
+                <td class="d-none d-lg-table-cell text-muted">{{ r.reference_range or '—' }}</td>
+                <td class="d-none d-md-table-cell" data-date="{{ r.date_collected.isoformat() }}"><span class="format-date">{{ r.date_collected.strftime('%m/%d/%Y') }}</span></td>
+                <td>{{ status_badge(r.status) }} {{ detail_badges(r) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+          <i class="mdi mdi-flask-outline text-muted mb-3" style="font-size: 3rem;" aria-hidden="true"></i>
+          <h3 class="h5 text-muted">No results yet</h3>
+          <p class="text-muted">Import a PDF lab report or add a result to get started.</p>
+          <a href="/import" class="btn btn-primary">Import a PDF</a>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -159,8 +188,8 @@ async function formatAllDates() {
         const userFormat = await getUserDateFormat();
         
         for (const element of dateElements) {
-            const row = element.closest('tr');
-            const isoDate = row ? row.dataset.date : null;
+            const holder = element.closest('[data-date]');
+            const isoDate = holder ? holder.dataset.date : null;
             
             if (isoDate) {
                 const formattedDate = formatDateSync(isoDate, userFormat);

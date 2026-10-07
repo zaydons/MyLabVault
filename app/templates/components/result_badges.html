@@ -3,15 +3,15 @@
 
 {% macro status_badge(status) -%}
   {% if status == 'normal' %}
-    <span class="badge badge-success">Normal</span>
+    <span class="badge badge-status-normal">Normal</span>
   {% elif status == 'low' %}
-    <span class="badge badge-warning">Low</span>
+    <span class="badge badge-status-out"><i class="mdi mdi-arrow-down-bold" aria-hidden="true"></i> Low</span>
   {% elif status == 'high' %}
-    <span class="badge badge-warning">High</span>
+    <span class="badge badge-status-out"><i class="mdi mdi-arrow-up-bold" aria-hidden="true"></i> High</span>
   {% elif status == 'abnormal' %}
-    <span class="badge badge-danger">Abnormal</span>
+    <span class="badge badge-status-abnormal"><i class="mdi mdi-alert" aria-hidden="true"></i> Abnormal</span>
   {% else %}
-    <span class="badge badge-secondary">Unknown</span>
+    <span class="badge badge-status-none" title="No reference range to compare against">No range</span>
   {% endif %}
 {%- endmacro %}
 
@@ -20,12 +20,12 @@
     <span class="badge badge-danger" title="Flag printed by the lab">{{ result.flag }}</span>
   {% endif %}
   {% if result.fasting is true %}
-    <span class="badge badge-info" title="Fasting specimen">Fasting</span>
+    <span class="badge badge-status-info" title="Fasting specimen">Fasting</span>
   {% elif result.fasting is false %}
     <span class="badge badge-light border" title="Non-fasting specimen">Non-fasting</span>
   {% endif %}
   {% if result.lab_comment %}
-    <i class="mdi mdi-comment-text-outline text-muted" title="Lab comment: {{ result.lab_comment }}"></i>
+    <i class="mdi mdi-comment-text-outline text-muted" role="img" aria-label="Lab comment: {{ result.lab_comment }}" title="Lab comment: {{ result.lab_comment }}"></i>
   {% endif %}
 {%- endmacro %}
 

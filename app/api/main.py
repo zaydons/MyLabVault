@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 
@@ -76,13 +77,12 @@ logger = logging.getLogger(__name__)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
 	"""Global exception handler for Pydantic validation errors."""
-	logger.error(f"Validation error for {request.method} {request.url}")
-	logger.error(f"Request headers: {dict(request.headers)}")
-	logger.error(f"Validation errors: {exc.errors()}")
-	
+	errors = jsonable_encoder(exc.errors())  # custom validators put the exception object in the error context
+	logger.error(f"Validation error for {request.method} {request.url.path}: {errors}")
+
 	return JSONResponse(
 		status_code=422,
-		content={"detail": exc.errors(), "error_type": "validation_error"}
+		content={"detail": errors, "error_type": "validation_error"}
 	)
 
 # Configure CORS middleware for same-origin requests

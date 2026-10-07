@@ -53,10 +53,10 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">
+            <h2 class="card-title">
               <i class="mdi mdi-pencil mr-2"></i>
               Edit Lab Result
-            </h3>
+            </h2>
           </div>
           <form id="editResultForm">
             <div class="card-body">
@@ -64,8 +64,8 @@
               <div class="row">
                 <div class="col-md-6">
                   <div class="form-group">
-                    <label>Lab Test</label>
-                    <input type="text" class="form-control" value="{{ result.lab.name }}" readonly>
+                    <label for="resultLabName">Lab Test</label>
+                    <input type="text" class="form-control" id="resultLabName" value="{{ result.lab.name }}" readonly>
                     <small class="form-text text-muted">Panel: {{ result.lab.panel.name if result.lab.panel else 'Unknown' }}</small>
                   </div>
                 </div>
