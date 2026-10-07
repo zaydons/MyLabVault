@@ -37,14 +37,14 @@ The PDF, including your name, date of birth and results, is sent to Claude in Am
 
 ### AWS setup
 
-1. **Model access:** in the AWS console, open **Amazon Bedrock → Model access** in your region (for example `us-east-1`) and make sure **Claude Haiku 4.5** is available. If you switch to another model later, enable that one too.
+1. **Model access:** in the AWS console, open **Amazon Bedrock** in your region (for example `us-east-1`) and confirm **Claude Haiku 4.5** answers in the **Chat / Text playground**. If it asks for Anthropic use-case details, submit them first. If you switch to another model later, check that one too.
 2. **IAM policy:** go to **IAM → Policies → Create policy**, open the JSON tab, and create a policy named `MyLabVaultBedrock`:
    ```json
    {
      "Version": "2012-10-17",
      "Statement": [{
        "Effect": "Allow",
-       "Action": "bedrock-mantle:CreateInference",
+       "Action": "bedrock:InvokeModel",
        "Resource": "*"
      }]
    }
@@ -62,7 +62,7 @@ Go to **Apps → mylabvault → Edit**, add these environment variables (the com
 | `AWS_ACCESS_KEY_ID` | Access key ID from step 4 |
 | `AWS_SECRET_ACCESS_KEY` | Secret access key from step 4 |
 | `AWS_REGION` | Your Bedrock region, e.g. `us-east-1` |
-| `MYLABVAULT_AI_MODEL` | Optional. Defaults to `anthropic.claude-haiku-4-5`; use `anthropic.claude-sonnet-5-5` for harder reports |
+| `MYLABVAULT_AI_MODEL` | Optional. Bedrock model or inference profile ID. Defaults to `us.anthropic.claude-haiku-4-5-20251001-v1:0` (Claude Haiku 4.5, US regions). For other models or regions, copy the ID from **Bedrock → Cross-region inference** |
 
 AI parsing turns on when the two keys and the region are all set. Remove them to turn it off.
 
@@ -74,7 +74,7 @@ The import screen shows the reason when an AI re-scan fails:
 |---|---|
 | *AWS credentials were rejected* | Check the access key ID and secret. |
 | *not allowed to use this model* | Grant model access in Bedrock, and attach the policy to the user. |
-| *not available in this AWS region* | Use a region where the model is offered, or change `MYLABVAULT_AI_MODEL`. |
+| *not available in this AWS region* / *not a valid Bedrock model* | Use a region where the model is offered, or set `MYLABVAULT_AI_MODEL` to an inference profile ID listed under **Bedrock → Cross-region inference**. |
 | *Could not reach the AI service* | The app needs outbound internet access. |
 
 ## Updating

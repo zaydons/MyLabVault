@@ -18,7 +18,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "anthropic.claude-haiku-4-5"
+# Claude Haiku 4.5 through the US cross-region inference profile (Haiku 4.5 has no on-demand
+# throughput for its plain model ID). Outside the US, use the eu./apac./global. profile instead.
+DEFAULT_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 # Bedrock request payload limit is 20 MB and base64 adds a third, so cap the raw PDF size.
 MAX_PDF_BYTES = 14 * 1024 * 1024
 TOOL_NAME = "record_lab_report"
@@ -212,8 +214,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
         "input_schema": TOOL_INPUT_SCHEMA,
     }
 
-    # Credentials and region come from the standard AWS environment variables.
-    client = anthropic.AsyncAnthropicBedrockMantle(timeout=180.0)
+    # Bedrock runtime (InvokeModel); credentials and region come from the standard AWS environment variables.
+    client = anthropic.AsyncAnthropicBedrock(timeout=180.0)
     report = None
     model = get_model()
     try:
@@ -251,6 +253,12 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
         raise AIParseError("AWS credentials are not allowed to use this model (check Bedrock model access and the IAM policy)")
     except anthropic.NotFoundError:
         raise AIParseError(f"Model {model} is not available in this AWS region")
+    except anthropic.BadRequestError as e:
+        # Bedrock reports an unknown model ID or a missing inference profile as a 400 ValidationException.
+        if "model identifier" in str(e) or "inference profile" in str(e):
+            raise AIParseError(f"Model {model} is not a valid Bedrock model or inference profile ID for this region")
+        logger.error(f"AI parsing failed: HTTP 400 (request {e.request_id})")
+        raise AIParseError("The AI service returned an error")
     except anthropic.RateLimitError:
         raise AIParseError("Bedrock rate limit reached, try again shortly")
     except anthropic.APIStatusError as e:
