@@ -2,6 +2,7 @@
 
 import re
 import io
+from datetime import date
 from typing import Dict, List, Optional, Any
 import pypdf
 import pypdf.errors
@@ -809,21 +810,63 @@ class PDFParser:
 
         return tests
 
-    def extract_date_from_text(self, text: str) -> Optional[str]:
-        """Extract collection date from text."""
+    # A date in the formats lab reports use: 01/15/2026, 1/15/26, 2026-01-15, Jan 15, 2026, 15-Jan-2026
+    _DATE_TOKEN = (r'(\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2}|'
+                   r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}|'
+                   r'\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-\d{2,4})')
+    # Labels that introduce the specimen collection date, most specific first
+    _COLLECTION_LABEL = re.compile(
+        r'(?:date\s*(?:/\s*time)?\s*(?:of\s+)?(?:collected|collection|drawn)|'
+        r'collect(?:ed|ion)\s*(?:date|on|date\s*/\s*time)?|specimen\s+collected|'
+        r'date\s+drawn|drawn\s+(?:on|date)|date\s+of\s+service|service\s+date)'
+        r'\s*[:#]?\s*' + _DATE_TOKEN,
+        re.IGNORECASE)
+    _ANY_DATE = re.compile(_DATE_TOKEN, re.IGNORECASE)
+    # Labels whose dates are never the collection date
+    _BIRTH_LABEL = re.compile(r'(?:d\.?\s*o\.?\s*b\.?|date\s+of\s+birth|birth\s*date|born)\s*[:#]?\s*$', re.IGNORECASE)
+    _OTHER_LABEL = re.compile(r'(?:received|reported|printed|entered|released|final(?:ized)?|resulted)\s*(?:date|on)?\s*[:#]?\s*$', re.IGNORECASE)
 
-        # Look for "Date/Time Collected" section and extract just the date part
-        for pattern in self.date_patterns:
-            match = pattern.search(text, re.IGNORECASE | re.DOTALL)
-            if match:
-                try:
-                    date_str = match.group(1)
-                    parsed_date = date_parser.parse(date_str)
-                    # Return just the date part in ISO format (YYYY-MM-DD)
-                    result = parsed_date.date().isoformat()
-                    return result
-                except Exception as e:
-                    continue
+    @staticmethod
+    def _plausible_date(raw: str) -> Optional[str]:
+        """ISO date for a printed date, or None if unparseable, in the future or before 1900."""
+        try:
+            parsed = date_parser.parse(raw).date()
+        except (ValueError, OverflowError):
+            return None
+        if parsed.year < 1900 or parsed > date.today():
+            return None
+        return parsed.isoformat()
+
+    def extract_date_from_text(self, text: str) -> Optional[str]:
+        """Extract the specimen collection date, never the date of birth.
+
+        Prefers a date introduced by a collection label ("Date Collected", "Collection Date",
+        "Collected:", "Date Drawn", ...). Otherwise takes the first date that is not labelled
+        as a birth date, then falls back to received/reported dates.
+        """
+        if not text:
+            return None
+        for match in self._COLLECTION_LABEL.finditer(text):
+            iso = self._plausible_date(match.group(1))
+            if iso:
+                return iso
+
+        birth_dates = set()
+        unlabelled, other = [], []
+        for match in self._ANY_DATE.finditer(text):
+            iso = self._plausible_date(match.group(1))
+            if not iso:
+                continue
+            before = text[max(0, match.start() - 30):match.start()]
+            if self._BIRTH_LABEL.search(before):
+                birth_dates.add(iso)
+            elif self._OTHER_LABEL.search(before):
+                other.append(iso)
+            else:
+                unlabelled.append(iso)
+        for iso in unlabelled + other:
+            if iso not in birth_dates:
+                return iso
         return None
 
     def extract_physician_from_text(self, text: str) -> Optional[str]:
@@ -979,7 +1022,7 @@ class PDFParser:
     def parse_official_labcorp_report(self, text: str) -> Dict[str, Any]:
         """Parse official LabCorp reports with specific format handling."""
         # Extract collection date specifically for LabCorp format
-        collection_date = self.extract_labcorp_collection_date(text)
+        collection_date = self.extract_labcorp_collection_date(text) or self.extract_date_from_text(text)
         
         # Extract provider specifically for LabCorp format
         provider_name = self.extract_labcorp_provider(text)

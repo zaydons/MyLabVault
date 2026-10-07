@@ -167,10 +167,19 @@ class Lab(Base):
     ref_high = Column(Float, nullable=True)
     ref_type = Column(String(10), nullable=True, default="range")  # 'range', 'greater', 'less'
     ref_value = Column(Float, nullable=True)  # Single value for greater/less than
+    description = Column(Text, nullable=True)  # User's own plain-language description
 
     panel = relationship("Panel", back_populates="labs")
     unit = relationship("Unit", back_populates="labs")
     results = relationship("LabResult", back_populates="lab")
+
+    @property
+    def display_description(self) -> Optional[str]:
+        """The user's description, else a built-in plain-language one for common tests."""
+        if self.description and self.description.strip():
+            return self.description.strip()
+        from .services.test_descriptions import describe
+        return describe(self.name)
 
     def reference_bounds(self) -> tuple:
         """(low, high, inclusive) for this test's reference range; a bound is None when open-ended."""
@@ -226,6 +235,8 @@ class Lab(Base):
             "ref_high": self.ref_high,
             "ref_type": self.ref_type,
             "ref_value": self.ref_value,
+            "description": self.description,
+            "display_description": self.display_description,
             "active": True,
             "result_count": self.get_result_count(),
             "abnormal_results_count": self.get_abnormal_results_count()

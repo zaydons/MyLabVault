@@ -708,6 +708,7 @@ def _lab_to_dict(lab: LabModel) -> dict:
         "ref_high": lab.ref_high,
         "ref_value": lab.ref_value,
         "ref_type": lab.ref_type,
+        "description": lab.description,
         "created_at": getattr(lab, 'created_at', None).isoformat() if hasattr(lab, 'created_at') and getattr(lab, 'created_at') else None
     }
 
@@ -930,7 +931,8 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
                     ref_low=lab_data.get('ref_low'),
                     ref_high=lab_data.get('ref_high'),
                     ref_value=lab_data.get('ref_value'),
-                    ref_type=lab_data.get('ref_type')
+                    ref_type=lab_data.get('ref_type'),
+                    description=lab_data.get('description')
                 )
                 db.add(new_lab)
                 db.flush()

@@ -98,7 +98,9 @@ def update_lab(lab_id: int, lab: LabCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Lab with this name already exists in this panel")
 
-    for key, value in lab.model_dump().items():
+    # Only change the fields the request sent, so a form that doesn't show every field
+    # (such as the range type) doesn't reset them
+    for key, value in lab.model_dump(exclude_unset=True).items():
         setattr(db_lab, key, value)
 
     db.commit()
@@ -138,4 +140,7 @@ def get_lab(lab_id: int, db: Session = Depends(get_db)):
 
     if not lab:
         raise HTTPException(status_code=404, detail="Lab not found")
-    return lab
+    data = lab.to_dict()
+    data["unit"] = {"id": lab.unit.id, "name": lab.unit.name} if lab.unit else None
+    data["panel"] = {"id": lab.panel.id, "name": lab.panel.name} if lab.panel else None
+    return data

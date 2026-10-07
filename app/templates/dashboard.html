@@ -112,6 +112,41 @@
     </div>
     {% endif %}
 
+    {% set bp_badge = {'normal': 'badge-status-normal', 'elevated': 'badge-status-out', 'stage1': 'badge-status-out', 'stage2': 'badge-status-abnormal', 'crisis': 'badge-status-abnormal'} %}
+    <!-- Vitals -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <i class="mdi mdi-heart-pulse mr-2" aria-hidden="true"></i>
+          Vitals
+        </h2>
+        <div class="card-tools">
+          <a href="/vitals" class="btn btn-outline-primary btn-sm mr-1">History</a>
+          <button type="button" class="btn btn-primary btn-sm" onclick="openQuickVitals()">
+            <i class="mdi mdi-plus mr-1" aria-hidden="true"></i>Record vitals
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        {% if dashboard_data.latest_vitals %}
+        <div class="row">
+          {% for v in dashboard_data.latest_vitals %}
+          <div class="col-6 col-md-3 mb-2">
+            <div class="summary-label">{{ v.label }}</div>
+            <div class="result-number" style="font-size: 1.25rem;">{{ v.reading }}</div>
+            {% if v.bp_category %}
+              <span class="badge {{ bp_badge[v.bp_category.level] }}">{{ v.bp_category.name }}</span>
+            {% endif %}
+            <div class="summary-detail" data-date="{{ v.measured_at.isoformat() }}"><span class="format-date">{{ v.measured_at.strftime('%m/%d/%Y') }}</span></div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No vitals yet. Use <strong>Record vitals</strong> to log weight, blood pressure and heart rate in one go.</p>
+        {% endif %}
+      </div>
+    </div>
+
     <!-- Latest result per test -->
     <div class="card">
       <div class="card-header">
@@ -168,10 +203,14 @@
     </div>
   </div>
 </section>
+{% include "components/vitals_quick_add.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+// Reload so the vitals card shows the new readings
+window.onQuickVitalsSaved = () => window.location.reload();
+
 $(document).ready(function() {
     // Initialize date formatting
     initializeDateFormatting().then(() => {

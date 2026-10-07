@@ -22,7 +22,7 @@ except Exception as e:
     print(f"❌ Database imports failed: {e}")
     DB_IMPORTS_SUCCESS = False
 
-from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients, vitals
+from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients, vitals, search
 
 def initialize_database():
     """Create tables, run migrations and seed essential data."""
@@ -110,6 +110,7 @@ app.include_router(results.router, prefix="/api/results", tags=["results"])
 app.include_router(vitals.router, prefix="/api/vitals", tags=["vitals"])
 app.include_router(pdf_import.router, prefix="/api/pdf", tags=["pdf-import"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(search.router, prefix="/api/search", tags=["search"])
 
 @app.get("/health")
 async def health_check():

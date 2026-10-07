@@ -61,6 +61,22 @@ VITAL_TYPES = {
 }
 
 
+def bp_category(systolic: float, diastolic: float) -> dict:
+    """American Heart Association blood pressure category for an adult reading.
+
+    Returns {"name", "level"} where level is normal, elevated, stage1, stage2 or crisis.
+    """
+    if systolic > 180 or diastolic > 120:
+        return {"name": "Hypertensive crisis", "level": "crisis"}
+    if systolic >= 140 or diastolic >= 90:
+        return {"name": "Stage 2 hypertension", "level": "stage2"}
+    if systolic >= 130 or diastolic >= 80:
+        return {"name": "Stage 1 hypertension", "level": "stage1"}
+    if systolic >= 120:
+        return {"name": "Elevated", "level": "elevated"}
+    return {"name": "Normal", "level": "normal"}
+
+
 class VitalCreate(BaseModel):
     """Vital measurement create/update schema."""
     patient_id: int

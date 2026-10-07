@@ -14,8 +14,11 @@
         <p class="text-muted mb-0">Weight, blood pressure and other measurements for the selected patient</p>
       </div>
       <div class="col-sm-4 text-right">
-        <button class="btn btn-primary" type="button" onclick="openVitalModal()">
-          <i class="mdi mdi-plus mr-1"></i> Record Measurement
+        <button class="btn btn-primary" type="button" onclick="openQuickVitals()">
+          <i class="mdi mdi-plus mr-1" aria-hidden="true"></i> Record vitals
+        </button>
+        <button class="btn btn-outline-primary" type="button" onclick="openVitalModal()">
+          Other measurement
         </button>
       </div>
     </div>
@@ -64,6 +67,10 @@
               </thead>
               <tbody id="historyBody"></tbody>
             </table>
+          </div>
+          <div class="card-footer text-center" id="historyMore" style="display: none;">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="showMoreHistory()">Show more</button>
+            <small class="text-muted ml-2" id="historyCount"></small>
           </div>
         </div>
       </div>
@@ -117,6 +124,7 @@
     </div>
   </div>
 </div>
+{% include "components/vitals_quick_add.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
@@ -167,6 +175,8 @@ function isOutsideNormal(v) {
     return (n.low !== undefined && base < n.low) || (n.high !== undefined && base > n.high);
 }
 
+window.onQuickVitalsSaved = () => loadVitals();
+
 async function loadVitals() {
     const response = await fetch(`/api/vitals/?patient_id=${currentPatientId()}`);
     vitals = response.ok ? await response.json() : [];
@@ -206,6 +216,7 @@ function renderLatestCards() {
                     <div class="inner">
                         <h4 class="mb-1">${escapeHtml(formatReading(latest))}</h4>
                         <p class="mb-0">${escapeHtml(vitalTypes[type].label)}${change}</p>
+                        ${type === 'blood_pressure' && latest.value2 ? `<div class="small font-weight-bold">${escapeHtml(bpCategory(latest.value, latest.value2).name)}</div>` : ''}
                         <small class="text-muted">${escapeHtml(formatDate(latest.measured_at))}</small>
                     </div>
                 </div>
@@ -235,37 +246,49 @@ function renderChart() {
 
     const entries = vitals.filter(v => v.vital_type === type).slice().reverse();  // oldest first
     const displayUnit = entries[entries.length - 1].unit;  // chart in the unit of the latest entry
-    const labels = entries.map(v => new Date(v.measured_at).toLocaleDateString());
-    const values = entries.map(v => roundValue(fromBase(type, toBase(type, v.value, v.unit), displayUnit)));
+    // Points sit on a real time axis so uneven gaps between readings look uneven
+    const times = entries.map(v => new Date(v.measured_at).getTime());
+    const values = entries.map((v, i) => ({ x: times[i], y: roundValue(fromBase(type, toBase(type, v.value, v.unit), displayUnit)) }));
     const datasets = [{
         label: (isPaired(type) ? vitalTypes[type].value_label : vitalTypes[type].label) + ` (${displayUnit})`,
         data: values,
-        borderColor: '#007bff',
         backgroundColor: 'rgba(0, 123, 255, 0.1)',
-        pointBackgroundColor: entries.map(v => isOutsideNormal(v) ? '#dc3545' : '#007bff'),
-        tension: 0.3,
+        pointBackgroundColor: entries.map(v => isOutsideNormal(v) ? '#c82333' : '#0062cc'),
+        pointStyle: entries.map(v => isOutsideNormal(v) ? 'triangle' : 'circle'),
+        pointRadius: entries.map(v => isOutsideNormal(v) ? 6 : 4),
+        borderColor: '#0062cc',
+        tension: 0,
         fill: false,
     }];
     if (isPaired(type)) {
         datasets.push({
             label: `${vitalTypes[type].value2_label} (${displayUnit})`,
-            data: entries.map(v => roundValue(v.value2)),
+            data: entries.map((v, i) => ({ x: times[i], y: roundValue(v.value2) })),
             borderColor: '#6f42c1',
             pointBackgroundColor: '#6f42c1',
-            tension: 0.3,
+            borderDash: [6, 4],
+            tension: 0,
             fill: false,
         });
     }
 
     vitalChart = new Chart(document.getElementById('vitalChart').getContext('2d'), {
         type: 'line',
-        data: { labels: labels, datasets: datasets },
+        data: { datasets: datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 300 },
+            scales: {
+                x: {
+                    type: 'linear',
+                    ticks: { maxTicksLimit: 7, maxRotation: 0, callback: v => new Date(v).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) }
+                }
+            },
             plugins: {
                 tooltip: {
                     callbacks: {
+                        title: items => new Date(items[0].parsed.x).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
                         afterLabel: context => entries[context.dataIndex].notes || ''
                     }
                 }
@@ -279,14 +302,35 @@ function vitalLabel(v) {
     return vitalTypes[v.vital_type] ? vitalTypes[v.vital_type].label : v.vital_type;
 }
 
+// Blood pressure gets its AHA category; other types say whether they're outside the typical range
+function readingBadge(v) {
+    if (v.vital_type === 'blood_pressure' && v.value2) {
+        const cat = bpCategory(v.value, v.value2);
+        const cls = { normal: 'badge-status-normal', elevated: 'badge-status-out', stage1: 'badge-status-out', stage2: 'badge-status-abnormal', crisis: 'badge-status-abnormal' }[cat.level];
+        return `<span class="badge ${cls} ml-1">${escapeHtml(cat.name)}</span>`;
+    }
+    return isOutsideNormal(v) ? '<span class="badge badge-status-out ml-1"><i class="mdi mdi-alert-outline" aria-hidden="true"></i> Outside typical range</span>' : '';
+}
+
+const HISTORY_PAGE = 25;
+let historyShown = HISTORY_PAGE;
+
+function showMoreHistory() {
+    historyShown += HISTORY_PAGE;
+    renderHistory();
+}
+
 function renderHistory() {
     const body = document.getElementById('historyBody');
-    body.innerHTML = vitals.map(v => `
+    const visible = vitals.slice(0, historyShown);
+    document.getElementById('historyMore').style.display = vitals.length > historyShown ? '' : 'none';
+    document.getElementById('historyCount').textContent = `Showing ${visible.length} of ${vitals.length}`;
+    body.innerHTML = visible.map(v => `
         <tr>
             <td>${escapeHtml(formatDate(v.measured_at))}</td>
             <td>${escapeHtml(vitalLabel(v))}</td>
             <td>${escapeHtml(formatReading(v))}
-                ${isOutsideNormal(v) ? '<span class="badge badge-status-out ml-1"><i class="mdi mdi-alert-outline" aria-hidden="true"></i> Outside typical range</span>' : ''}</td>
+                ${readingBadge(v)}</td>
             <td class="text-muted">${escapeHtml(v.notes || '')}</td>
             <td class="text-right text-nowrap">
                 <button class="btn btn-sm btn-info" type="button" onclick="openVitalModal(${Number(v.id)})" title="Edit" aria-label="Edit ${escapeHtml(vitalLabel(v))} reading from ${escapeHtml(formatDate(v.measured_at))}"><i class="mdi mdi-pencil" aria-hidden="true"></i></button>
