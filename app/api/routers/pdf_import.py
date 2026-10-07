@@ -29,17 +29,54 @@ router = APIRouter()
 UPLOADS_DIR = Path("/app/data/uploads/pdfs")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Titles and credentials ignored when comparing provider names.
+_NAME_NOISE = {
+    'dr', 'doctor', 'md', 'do', 'np', 'pa', 'pac', 'fnp', 'aprn', 'dnp', 'rn', 'crnp', 'phd',
+    'mph', 'mbbs', 'facp', 'faafp', 'dc', 'od', 'jr', 'sr', 'ii', 'iii', 'npi',
+}
+
+
+def _name_tokens(name: str) -> List[str]:
+    """Normalize a person's name to lowercase tokens without titles, credentials or initials."""
+    name = name.strip()
+    # "Smith, Jane MD" -> "Jane MD Smith"
+    if name.count(',') == 1:
+        last, rest = name.split(',')
+        if last.strip() and rest.strip():
+            name = f"{rest} {last}"
+    tokens = re.findall(r"[a-z][a-z'\-]*", name.lower())
+    return [t for t in tokens if t not in _NAME_NOISE and len(t) > 1]
+
+
+def _match_provider(physician: Optional[str], db: Session) -> Optional[Provider]:
+    """Find the saved provider whose name matches the provider printed on the report."""
+    if not physician:
+        return None
+    wanted = _name_tokens(physician)
+    if not wanted:
+        return None
+    providers = [(p, _name_tokens(p.name)) for p in db.query(Provider).all()]
+
+    # Same name once titles, credentials and middle initials are ignored
+    for provider, tokens in providers:
+        if tokens and set(tokens) == set(wanted):
+            return provider
+    # Same first and last name (ignores middle names)
+    if len(wanted) >= 2:
+        for provider, tokens in providers:
+            if len(tokens) >= 2 and {tokens[0], tokens[-1]} == {wanted[0], wanted[-1]}:
+                return provider
+    # Last name only on the report: accept it only when exactly one provider has that last name
+    if len(wanted) == 1:
+        candidates = [p for p, tokens in providers if tokens and tokens[-1] == wanted[0]]
+        if len(candidates) == 1:
+            return candidates[0]
+    return None
+
+
 def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session) -> PDFImportPreview:
     """Match parsed tests and provider against the database and build the import preview."""
-    # Find matched provider if physician name is available
-    matched_provider = None
-    if parsed_data.get('physician'):
-        # Simple fuzzy matching - in production, use more sophisticated matching
-        providers = db.query(Provider).all()
-        for provider in providers:
-            if parsed_data['physician'].lower() in provider.name.lower():
-                matched_provider = provider
-                break
+    matched_provider = _match_provider(parsed_data.get('physician'), db)
 
     # Convert tests to importable format and identify problematic ones
     importable_tests = []
@@ -140,6 +177,7 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
         importable_tests=importable_tests,
         problematic_tests=problematic_tests,
         matched_provider=matched_provider,
+        physician=parsed_data.get('physician'),
         import_id=str(import_log.id)
     )
 
@@ -376,6 +414,8 @@ async def bulk_upload_pdfs(
                 "date_collected": preview.date_collected,
                 "importable_tests": preview.importable_tests,  # Include parsed test details
                 "parser": preview.parser,
+                "physician": preview.physician,
+                "matched_provider": {"id": preview.matched_provider.id, "name": preview.matched_provider.name} if preview.matched_provider else None,
                 "duplicate_warning": getattr(preview, 'duplicate_warning', None)
             })
             

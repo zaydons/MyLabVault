@@ -324,12 +324,15 @@ async function rescanFileWithAI(index) {
             tests_found: data.total_tests_found,
             date_collected: data.date_collected,
             importable_tests: data.importable_tests,
+            physician: data.physician,
+            matched_provider: data.matched_provider,
         };
 
         // Re-rendering refills every provider dropdown, so keep the other files' choices
+        // (this file's choice too, unless it only came from the earlier scan's match)
         const savedProviders = {};
         document.querySelectorAll('.file-provider-select').forEach(select => {
-            savedProviders[select.id] = select.value;
+            if (select.value !== select.dataset.matchedProviderId) savedProviders[select.id] = select.value;
         });
         const savedDate = document.getElementById(`date-${index}`)?.value || '';
 
@@ -514,7 +517,8 @@ function renderFileCard(file, index) {
                         <label for="provider-${index}" class="mb-1"><small><strong>Provider for this file:</strong></small></label>
                         <div class="input-group input-group-sm">
                             <select class="form-control form-control-sm file-provider-select" 
-                                    id="provider-${index}" data-file-index="${index}" required>
+                                    id="provider-${index}" data-file-index="${index}"
+                                    data-matched-provider-id="${file.matched_provider ? escapeHtml(file.matched_provider.id) : ''}" required>
                                 <option value="">Select provider...</option>
                             </select>
                             <div class="input-group-append">
@@ -523,6 +527,12 @@ function renderFileCard(file, index) {
                                 </button>
                             </div>
                         </div>
+                        ${file.matched_provider ? `
+                        <small class="text-success"><i class="mdi mdi-check mr-1"></i>Selected from the report</small>
+                        ` : file.physician ? `
+                        <small class="text-muted">Report lists <strong>${escapeHtml(file.physician)}</strong> &middot;
+                            <a href="#" onclick="showNewProviderModal(${index}, true); return false;">Add as new provider</a></small>
+                        ` : ''}
                     </div>
                     <div class="form-group mt-1 mb-2">
                         <label for="date-${index}" class="mb-1"><small><strong>Override date (optional):</strong></small></label>
@@ -831,6 +841,8 @@ async function loadProviders() {
                 option.textContent = provider.name;
                 select.appendChild(option);
             });
+            // Preselect the provider matched from the report
+            if (select.dataset.matchedProviderId) select.value = select.dataset.matchedProviderId;
         });
         
     } catch (error) {
@@ -838,9 +850,12 @@ async function loadProviders() {
     }
 }
 
-function showNewProviderModal(fileIndex = null) {
+function showNewProviderModal(fileIndex = null, useReportName = false) {
     // Clear form
     document.getElementById('newProviderForm').reset();
+    const reportName = useReportName && currentBatchData && currentBatchData.files[fileIndex]
+        ? currentBatchData.files[fileIndex].physician : '';
+    if (reportName) document.getElementById('providerName').value = reportName;
     
     // Store which file this provider is for (if any)
     const modal = document.getElementById('newProviderModal');

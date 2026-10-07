@@ -162,6 +162,7 @@ class PDFImportPreview(BaseModel):
     importable_tests: List[Dict[str, Any]] = []
     problematic_tests: List[Dict[str, Any]] = []
     matched_provider: Optional[Provider] = None
+    physician: Optional[str] = None  # Provider name as printed on the report
     import_id: Optional[str] = None
     duplicate_warning: Optional[Dict[str, Any]] = None
     parser: Optional[str] = None  # "standard" or "ai"
