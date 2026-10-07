@@ -29,6 +29,19 @@ RUN apk add --no-cache --virtual .build-deps \
 # Copy application code
 COPY . .
 
+# Build information shown in the app footer and used by the update check (set by CI)
+ARG MYLABVAULT_BUILD=dev
+ARG MYLABVAULT_COMMIT=
+ARG MYLABVAULT_BUILD_DATE=
+ARG MYLABVAULT_REPOSITORY=zaydons/MyLabVault
+ENV MYLABVAULT_BUILD=$MYLABVAULT_BUILD \
+    MYLABVAULT_COMMIT=$MYLABVAULT_COMMIT \
+    MYLABVAULT_BUILD_DATE=$MYLABVAULT_BUILD_DATE \
+    MYLABVAULT_REPOSITORY=$MYLABVAULT_REPOSITORY
+LABEL org.opencontainers.image.version=$MYLABVAULT_BUILD \
+      org.opencontainers.image.revision=$MYLABVAULT_COMMIT \
+      org.opencontainers.image.created=$MYLABVAULT_BUILD_DATE
+
 # Create data directory
 RUN mkdir -p /app/data
 

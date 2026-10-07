@@ -41,14 +41,27 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
         
+    # Build version shown in the app footer: build date plus the run number, e.g. 2026.10.07.32
+    - name: Set build version
+      id: version
+      run: |
+        echo "version=$(date -u +%Y.%m.%d).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+        echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: ./app
         file: ./app/Dockerfile
         push: true
+        build-args: |
+          MYLABVAULT_BUILD=${{ steps.version.outputs.version }}
+          MYLABVAULT_COMMIT=${{ github.sha }}
+          MYLABVAULT_BUILD_DATE=${{ steps.version.outputs.date }}
+          MYLABVAULT_REPOSITORY=${{ github.repository }}
         tags: |
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=max

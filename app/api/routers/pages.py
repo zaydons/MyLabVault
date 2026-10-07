@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
 
+from .. import build_info
 from ..database import get_db
 from ..models import (
     LabResult as LabResultModel, 
@@ -86,6 +87,7 @@ def _render_simple_page(template_name: str, request: Request, db: Session):
     )
 
 # Add the filters to Jinja2
+templates.env.globals['build_info'] = build_info.get_build_info()
 templates.env.filters['number_format'] = number_format
 templates.env.filters['get_result_status'] = get_result_status
 templates.env.filters['is_numeric'] = is_numeric
