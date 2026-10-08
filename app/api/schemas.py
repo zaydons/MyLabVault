@@ -182,6 +182,8 @@ class PDFImportPreview(BaseModel):
     pdf_url: Optional[str] = None
     import_status: Optional[str] = None
     fasting: Optional[bool] = None
+    # Built-in parser vs AI, when both have read this report
+    comparison: Optional[Dict[str, Any]] = None
 
 
 class PDFTestEdit(BaseModel):

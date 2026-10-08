@@ -19,7 +19,7 @@ from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
-from ..services.import_review import apply_edit, find_lab, review_rows, row_status
+from ..services.import_review import apply_edit, compare_parses, find_lab, review_rows, row_status
 import logging
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,7 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
         pdf_url=f"/api/pdf/{import_log.id}/file",
         import_status=import_log.status,
         fasting=parsed_data.get('fasting') if isinstance(parsed_data.get('fasting'), bool) else None,
+        comparison=compare_parses(parsed_data, parsed_data['other_parse'], db) if parsed_data.get('other_parse') else None,
     )
 
 
@@ -307,8 +308,33 @@ async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="PDF file not found")
     content = file_path.read_bytes()
 
+    current = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
     parsed_data = await _parse_content(content, db, use_ai=True)
+    # Keep the built-in parser's reading so the two can be compared and the user can switch back
+    parsed_data['other_parse'] = await _standard_reading(current, content)
+    _save_parse(import_log, parsed_data, db)
 
+    return _build_preview(parsed_data, import_log, import_log.filename, db)
+
+
+async def _standard_reading(current: dict, content: bytes) -> dict:
+    """The built-in parser's reading of a report, without any nested comparison data."""
+    if current.get('parser', 'standard') != 'ai':
+        reading = dict(current)
+    elif current.get('other_parse'):
+        reading = dict(current['other_parse'])
+    else:
+        # The AI read this report on upload (the built-in parser found nothing); read it again to compare
+        try:
+            reading = await PDFParser().parse_pdf_content(content)
+        except (ValueError, pypdf.errors.PdfReadError) as e:
+            reading = {'tests': [], 'error': str(e)}
+    reading.pop('other_parse', None)
+    reading['parser'] = 'standard'
+    return reading
+
+
+def _save_parse(import_log: PDFImportLog, parsed_data: dict, db: Session) -> None:
     import_log.parsed_data = json.dumps(parsed_data)
     import_log.total_tests_found = len(parsed_data.get('tests', []))
     import_log.date_collected = parsed_data.get('date_collected')
@@ -316,7 +342,23 @@ async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(import_log)
 
-    return _build_preview(parsed_data, import_log, import_log.filename, db)
+
+@router.post("/{import_id}/switch-reading", response_model=PDFImportPreview)
+async def switch_reading(import_id: int, db: Session = Depends(get_db)):
+    """Swap between the built-in parser's and the AI's reading of a pending import."""
+    import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+    if not import_log:
+        raise HTTPException(status_code=404, detail="Import not found")
+    parsed_data = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
+    other = parsed_data.pop('other_parse', None)
+    if not other:
+        raise HTTPException(status_code=400, detail="This report has only been read one way")
+    if import_log.tests_imported:
+        # Saved results are tied to row positions in the reading they came from
+        raise HTTPException(status_code=400, detail="Tests from this import have already been saved; the reading can no longer be switched")
+    other['other_parse'] = parsed_data
+    _save_parse(import_log, other, db)
+    return _build_preview(other, import_log, import_log.filename, db)
 
 
 @router.post("/bulk-upload")

@@ -20,6 +20,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Several reports at once**: Each file uploads and is read separately with its own progress, and a summary afterwards lists what was saved and what's out of range
 - **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
+- **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
 ### 📊 **Dashboard and Charts**
 - **Dashboard**: Your latest draw, how many tests are out of range right now, a *Needs attention* list, your latest vitals, and the latest value of every test with the change since the previous result
@@ -207,7 +208,8 @@ GET  /api/results/             # Lab results
 POST /api/results/             # Add a result
 POST /api/pdf/upload           # Upload one PDF (add ?ai=true to use AI parsing)
 POST /api/pdf/bulk-upload      # Upload several PDFs
-POST /api/pdf/rescan-ai/{id}   # Re-parse a pending import with AI
+POST /api/pdf/rescan-ai/{id}   # Re-parse a pending import with AI (keeps the built-in reading to compare)
+POST /api/pdf/{id}/switch-reading  # Switch a pending import between the built-in and AI readings
 GET  /api/pdf/review/{id}      # Review data for an earlier upload (rows, matches, issues)
 GET  /api/pdf/{id}/file        # The uploaded PDF
 POST /api/pdf/confirm          # Import selected rows (with optional edits and test choices)
@@ -227,6 +229,9 @@ GET  /api/update-check         # Whether a newer image has been published
 
 **A PDF imports no tests**
 - Scanned reports have no text to read. Turn on AI parsing and use *Re-scan with AI*, or add the results by hand.
+
+**The AI read some values differently**
+- Open *Compare the built-in reader with the AI* on the review screen to see each difference, check them against the PDF, and correct a row or switch back to the built-in reader's results.
 - Check the logs: `docker logs mylabvault | grep -i pdf`
 
 **The wrong collection date was detected**

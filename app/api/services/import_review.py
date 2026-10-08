@@ -201,3 +201,106 @@ def apply_edit(test: Dict[str, Any], edit: Dict[str, Any]) -> Dict[str, Any]:
         test["is_numeric"] = value is not None
         test["is_qualitative"] = value is None
     return test
+
+
+# ---------- comparing the built-in parser's reading with the AI's ----------
+
+def _name_key(name: Optional[str]) -> str:
+    """Order-insensitive key for a test name: "Cholesterol, Total" == "Total Cholesterol"."""
+    return " ".join(sorted(re.findall(r"[a-z0-9]+", (name or "").lower())))
+
+
+_TITLES = {"dr", "md", "do", "np", "pa", "c", "fnp", "aprn", "rn", "phd", "mph", "facp"}
+
+
+def _person_key(name: Optional[str]) -> str:
+    """Provider name without titles or credentials, word order ignored: "Dr Jane Smith, MD" == "Smith, Jane"."""
+    return " ".join(sorted(w for w in re.findall(r"[a-z]+", (name or "").lower()) if w not in _TITLES))
+
+
+def _same_value(a: Optional[str], b: Optional[str]) -> bool:
+    a, b = (a or "").strip(), (b or "").strip()
+    try:
+        return float(a) == float(b)
+    except ValueError:
+        return a.lower() == b.lower()
+
+
+def _reading(test: Dict[str, Any]) -> Dict[str, str]:
+    result = test.get("result") if test.get("result") not in (None, "") else test.get("result_text")
+    return {
+        "name": (test.get("name") or "").strip(),
+        "result": "" if result is None else str(result),
+        "unit": (test.get("unit") or "").strip(),
+        "range": (_range_of(test).get("text") or "").strip(),
+    }
+
+
+def compare_parses(active: Dict[str, Any], other: Dict[str, Any], db: Session) -> Dict[str, Any]:
+    """Differences between the built-in parser's reading of a report and the AI's.
+
+    Rows are paired when both map to the same saved test, else by name (word order ignored).
+    `active_index` is the row's position in the reading currently used for import.
+    """
+    ai, standard = (active, other) if active.get("parser") == "ai" else (other, active)
+    active_is_ai = ai is active
+
+    def keyed(parse):
+        rows = []
+        for index, test in enumerate(parse.get("tests", [])):
+            lab = find_lab(test.get("name"), db)
+            rows.append({"index": index, "reading": _reading(test), "lab_id": lab.id if lab else None,
+                         "name_key": _name_key(test.get("name"))})
+        return rows
+
+    std_rows, ai_rows = keyed(standard), keyed(ai)
+    unmatched_ai = list(ai_rows)
+    pairs = []
+    for s in std_rows:
+        match = next((a for a in unmatched_ai if s["lab_id"] and a["lab_id"] == s["lab_id"]), None) \
+            or next((a for a in unmatched_ai if s["name_key"] and a["name_key"] == s["name_key"]), None)
+        if match:
+            unmatched_ai.remove(match)
+        pairs.append((s, match))
+    pairs += [(None, a) for a in unmatched_ai]
+
+    rows, summary = [], {"same": 0, "different": 0, "only_ai": 0, "only_standard": 0}
+    for s, a in pairs:
+        if s and a:
+            differences = [field for field in ("result", "unit", "range")
+                           if not (_same_value(s["reading"][field], a["reading"][field]) if field == "result"
+                                   else (normalize_unit(s["reading"][field]) == normalize_unit(a["reading"][field]) if field == "unit"
+                                         else s["reading"][field].replace(" ", "") == a["reading"][field].replace(" ", "")))]
+            change = "different" if differences else "same"
+        else:
+            differences = []
+            change = "only_ai" if a else "only_standard"
+        summary[change] += 1
+        own = a if active_is_ai else s
+        rows.append({
+            "name": (a or s)["reading"]["name"] or (s or a)["reading"]["name"],
+            "standard": s["reading"] if s else None,
+            "ai": a["reading"] if a else None,
+            "change": change,
+            "differences": differences,
+            "active_index": own["index"] if own else None,
+        })
+    order = {"different": 0, "only_ai": 1, "only_standard": 2, "same": 3}
+    rows.sort(key=lambda r: order[r["change"]])
+
+    sd, ad = (standard.get("date_collected") or "")[:10], (ai.get("date_collected") or "")[:10]
+    sp, ap = standard.get("physician") or "", ai.get("physician") or ""
+    fields = [
+        {"field": "Collection date", "standard": sd, "ai": ad, "same": sd == ad},
+        {"field": "Provider", "standard": sp, "ai": ap, "same": _person_key(sp) == _person_key(ap)},
+    ]
+
+    return {
+        "active": "ai" if active_is_ai else "standard",
+        "standard_count": len(std_rows),
+        "ai_count": len(ai_rows),
+        "standard_error": standard.get("error"),
+        "summary": summary,
+        "fields": fields,
+        "rows": rows,
+    }
