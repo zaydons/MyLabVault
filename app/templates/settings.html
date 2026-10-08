@@ -2,54 +2,114 @@
 
 {% block title %}Settings - MyLabVault{% endblock %}
 
+{% block extra_head %}
+<style>
+.settings-layout { display: flex; align-items: flex-start; gap: 1.5rem; }
+.settings-nav { flex: 0 0 13rem; position: sticky; top: 4.5rem; display: flex; flex-direction: column; }
+.settings-nav a { display: flex; align-items: center; padding: .55rem .75rem; border-radius: .375rem; color: #343a40; font-weight: 500; text-decoration: none; }
+.settings-nav a i { font-size: 1.15rem; margin-right: .6rem; width: 1.2rem; text-align: center; }
+.settings-nav a:hover { background: rgba(0, 0, 0, .05); color: #343a40; }
+.settings-nav a[aria-current="page"] { background: #e7f0fb; color: #0056b3; }
+.settings-nav a.settings-nav-danger { color: #b02a37; margin-top: .75rem; }
+.settings-nav a.settings-nav-danger[aria-current="page"] { background: #fbeaec; }
+.settings-panels { flex: 1 1 auto; min-width: 0; max-width: 56rem; }
+.settings-section { background: #fff; border-radius: .5rem; padding: 1.5rem 1.75rem; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); outline: none; }
+.settings-section + .settings-section { margin-top: 1.5rem; }
+.settings-layout.js-sections .settings-section[hidden] { display: none; }
+.settings-section h2 { font-size: 1.35rem; margin-bottom: 1rem; }
+.settings-section h3 { font-size: 1.05rem; margin: 1.75rem 0 .25rem; }
+.section-lead { color: #495057; max-width: 44rem; }
+.setting-row { display: flex; flex-wrap: wrap; gap: .75rem 2rem; justify-content: space-between; align-items: flex-start; padding: 1rem 0; border-top: 1px solid #e9ecef; margin: 0; min-width: 0; }
+.settings-section h2 + .setting-row, .settings-section h3 + form > .setting-row:first-child { border-top: 0; }
+.setting-text { flex: 1 1 16rem; max-width: 30rem; padding: 0; float: none; width: auto; margin: 0; }
+.setting-text label, .setting-text .setting-label { font-weight: 600; margin-bottom: .15rem; display: block; font-size: 1rem; }
+.setting-text p { margin: 0; color: #5a6268; font-size: .9rem; }
+.setting-control { flex: 0 1 18rem; min-width: 12rem; }
+.setting-row-stack .setting-text { flex-basis: 100%; max-width: none; }
+.setting-row-stack .setting-control { flex: 1 1 100%; }
+.setting-actions { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid #e9ecef; }
+.setting-note { color: #495057; font-size: .9rem; flex: 1 1 18rem; }
+.danger-box { border: 2px solid #c82333; border-radius: .5rem; padding: 0 1.25rem; }
+.about-list { margin: 0; }
+.about-list > div { display: flex; flex-wrap: wrap; gap: .25rem 1.5rem; padding: .6rem 0; border-top: 1px solid #e9ecef; }
+.about-list > div:first-child { border-top: 0; }
+.about-list dt { flex: 0 0 8rem; font-weight: 600; }
+.about-list dd { flex: 1 1 16rem; margin: 0; }
+.about-list code { color: inherit; background: rgba(0, 0, 0, .05); padding: 0 .25rem; border-radius: .2rem; }
+.dark-mode .about-list code { background: rgba(255, 255, 255, .08); }
+.data-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .5rem 1.5rem; margin: .5rem 0 0; }
+.data-counts div { display: flex; justify-content: space-between; border-bottom: 1px solid #e9ecef; padding: .35rem 0; }
+.data-counts dt { font-weight: 400; color: #495057; }
+.data-counts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* .nav-link keeps the app's general content-link colours off these; !important beats AdminLTE's nav-link colours */
+.dark-mode .settings-nav a, .dark-mode .settings-nav a:hover, .dark-mode .settings-nav a:focus { color: #f1f3f5 !important; }
+.dark-mode .settings-nav a:hover { background: rgba(255, 255, 255, .06); }
+.dark-mode .settings-nav a[aria-current="page"] { background: #1f3b5c; }
+.dark-mode .settings-nav a.settings-nav-danger, .dark-mode .settings-nav a.settings-nav-danger:hover { color: #ffb3bb !important; }
+.dark-mode .settings-nav a.settings-nav-danger[aria-current="page"] { background: #4a1c22; }
+.dark-mode .danger-box .btn-outline-danger { color: #ff8a95; border-color: #ff8a95; }
+.dark-mode .danger-box .btn-outline-danger:hover { color: #212529; background: #ff8a95; }
+.dark-mode .settings-section { background: #343a40; box-shadow: none; }
+.dark-mode .section-lead, .dark-mode .setting-note, .dark-mode .data-counts dt { color: #ced4da; }
+.dark-mode .setting-text p { color: #c8cdd2; }
+.dark-mode .setting-row, .dark-mode .setting-actions, .dark-mode .about-list > div, .dark-mode .data-counts div { border-color: #4b545c; }
+.dark-mode .danger-box { border-color: #ff8a95; }
+
+@media (max-width: 991.98px) {
+    .settings-layout { flex-direction: column; gap: 1rem; }
+    .settings-nav { position: static; flex: none; width: 100%; flex-direction: row; overflow-x: auto; gap: .25rem; padding-bottom: .25rem; }
+    .settings-nav a { white-space: nowrap; flex: 0 0 auto; }
+    .settings-nav a.settings-nav-danger { margin-top: 0; }
+    .settings-panels { width: 100%; }
+    .settings-section { padding: 1.25rem 1rem; }
+    .setting-control { flex: 1 1 100%; min-width: 0; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- Content Header -->
 <div class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
-      <div class="col-sm-12">
-        <h1 class="m-0">
-          <i class="mdi mdi-cog mr-2"></i>
-          Application Settings
-        </h1>
-      </div>
-    </div>
+    <h1 class="m-0"><i class="mdi mdi-cog mr-2" aria-hidden="true"></i>Settings</h1>
   </div>
 </div>
 
-<!-- Main content -->
 <section class="content">
   <div class="container-fluid">
-    
-    <!-- User Interface Settings -->
-    <div class="row">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-palette mr-2"></i>
-              User Interface
-            </h2>
-          </div>
-          <div class="card-body">
-            <div class="form-group">
-              <label for="darkModeToggle">Theme Preference</label>
-              <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="darkModeToggle" {{ 'checked' if user_settings.dark_mode }}>
-                <label class="custom-control-label" for="darkModeToggle">
-                  <i class="mdi mdi-moon-waxing-crescent mr-1"></i>
-                  Dark Mode
-                </label>
-              </div>
-              <small class="form-text text-muted">Toggle between light and dark theme</small>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="Settings sections">
+        <a href="#general" data-section="general" class="nav-link"><i class="mdi mdi-tune-variant" aria-hidden="true"></i>General</a>
+        <a href="#backup" data-section="backup" class="nav-link"><i class="mdi mdi-backup-restore" aria-hidden="true"></i>Backup &amp; restore</a>
+        <a href="#cleanup" data-section="cleanup" class="nav-link"><i class="mdi mdi-merge" aria-hidden="true"></i>Clean up</a>
+        <a href="#about" data-section="about" class="nav-link"><i class="mdi mdi-information-outline" aria-hidden="true"></i>About</a>
+        <a href="#danger" data-section="danger" class="nav-link settings-nav-danger"><i class="mdi mdi-alert-octagon-outline" aria-hidden="true"></i>Danger zone</a>
+      </nav>
+
+      <div class="settings-panels">
+        <!-- General -->
+        <section class="settings-section" id="general" aria-labelledby="generalTitle" tabindex="-1">
+          <h2 id="generalTitle">General</h2>
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="darkModeToggle">Dark mode</label>
+              <p id="darkModeHelp">Use a dark theme. Remembered on this server for every browser.</p>
             </div>
-            
-            <div class="form-group">
-              <label for="dateFormatSelect">
-                <i class="mdi mdi-calendar mr-1"></i>
-                Date Display Format
-              </label>
-              <select class="form-control" id="dateFormatSelect">
+            <div class="setting-control">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="darkModeToggle" aria-describedby="darkModeHelp" {{ 'checked' if user_settings.dark_mode }}>
+                <label class="custom-control-label" for="darkModeToggle"><span class="sr-only">Dark mode</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <label for="dateFormatSelect">Date format</label>
+              <p>How dates are shown across the app. Today: <strong id="dateFormatPreview">…</strong></p>
+            </div>
+            <div class="setting-control">
+              <select class="custom-select" id="dateFormatSelect">
                 <option value="MM/DD/YYYY" {{ 'selected' if user_settings.date_format == 'MM/DD/YYYY' or not user_settings.date_format }}></option>
                 <option value="DD/MM/YYYY" {{ 'selected' if user_settings.date_format == 'DD/MM/YYYY' }}></option>
                 <option value="YYYY-MM-DD" {{ 'selected' if user_settings.date_format == 'YYYY-MM-DD' }}></option>
@@ -58,305 +118,178 @@
                 <option value="DD-MMM-YYYY" {{ 'selected' if user_settings.date_format == 'DD-MMM-YYYY' }}></option>
                 <option value="YYYY-MMM-DD" {{ 'selected' if user_settings.date_format == 'YYYY-MMM-DD' }}></option>
               </select>
-              <small class="form-text text-muted">Choose how dates are displayed throughout the application</small>
-              <div class="mt-2">
-                <small class="text-info">
-                  <i class="mdi mdi-information mr-1"></i>
-                  Preview: <span id="dateFormatPreview">Loading...</span>
-                </small>
-              </div>
             </div>
           </div>
-        </div>
-      </div>
-      
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-information mr-2"></i>
-              System Information
-            </h2>
-          </div>
-          <div class="card-body">
-            <div id="systemInfo">
-              <!-- System info will be loaded dynamically -->
-              <div class="text-center">
-                <div class="spinner-border text-primary" role="status">
-                  <span class="sr-only">Loading...</span>
-                </div>
-                <div class="mt-2">Loading system information...</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        </section>
 
-    <!-- Data Export & Import Section -->
-    <div class="row mt-4">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-download mr-2"></i>
-              Data Export
-            </h2>
-          </div>
-          <div class="card-body">
-            <p class="text-muted">Export your lab data for backup, analysis, or migration purposes.</p>
-            
-            <form id="exportForm">
-              <div class="form-group">
-                <label for="patientSelection">
-                  <i class="mdi mdi-account-multiple mr-1"></i>
-                  Patient Selection
-                </label>
-                <select class="form-control" id="patientSelection">
-                  <option value="all">All Patients</option>
-                  <option value="select">Select Specific Patients...</option>
+        <!-- Backup & restore -->
+        <section class="settings-section" id="backup" aria-labelledby="backupTitle" tabindex="-1">
+          <h2 id="backupTitle">Backup &amp; restore</h2>
+          <p class="section-lead">Download a copy of your data, or bring one back from an earlier download. Snapshots of the data folder (for example a TrueNAS snapshot task) are the other way to back up.</p>
+
+          <h3>Download a backup</h3>
+          <form id="exportForm">
+            <div class="setting-row">
+              <div class="setting-text"><label for="patientSelection">Patients</label></div>
+              <div class="setting-control">
+                <select class="custom-select" id="patientSelection">
+                  <option value="all">All patients</option>
+                  <option value="select">Choose patients…</option>
                 </select>
+                <div id="specificPatientsGroup" style="display: none;" class="mt-2">
+                  <label class="sr-only" for="specificPatients">Patients to include</label>
+                  <select class="custom-select" id="specificPatients" multiple size="3" aria-describedby="specificPatientsHelp"></select>
+                  <small class="form-text" id="specificPatientsHelp">Hold Ctrl (Cmd on a Mac) to choose several.</small>
+                </div>
               </div>
-              
-              <div class="form-group" id="specificPatientsGroup" style="display: none;">
-                <label for="specificPatients">Select Patients</label>
-                <select class="form-control" id="specificPatients" multiple size="3">
-                  <!-- Patients will be loaded dynamically -->
+            </div>
+            <div class="setting-row">
+              <div class="setting-text"><label for="dateRangeSelection">Results from</label></div>
+              <div class="setting-control">
+                <select class="custom-select" id="dateRangeSelection">
+                  <option value="all">All time</option>
+                  <option value="last-year">The last year</option>
+                  <option value="last-6-months">The last 6 months</option>
+                  <option value="last-3-months">The last 3 months</option>
+                  <option value="custom">Dates I choose…</option>
                 </select>
-                <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple</small>
-              </div>
-              
-              <div class="form-group">
-                <label for="dateRangeSelection">
-                  <i class="mdi mdi-calendar mr-1"></i>
-                  Date Range
-                </label>
-                <select class="form-control" id="dateRangeSelection">
-                  <option value="all">All Time</option>
-                  <option value="last-year">Last Year</option>
-                  <option value="last-6-months">Last 6 Months</option>
-                  <option value="last-3-months">Last 3 Months</option>
-                  <option value="custom">Custom Range...</option>
-                </select>
-              </div>
-              
-              <div class="row" id="customDateRange" style="display: none;">
-                <div class="col-6">
-                  <div class="form-group">
-                    <label for="startDate">From</label>
-                    <input type="date" class="form-control" id="startDate">
-                  </div>
-                </div>
-                <div class="col-6">
-                  <div class="form-group">
-                    <label for="endDate">To</label>
-                    <input type="date" class="form-control" id="endDate">
-                  </div>
+                <div class="form-row mt-2" id="customDateRange" style="display: none;">
+                  <div class="col-6"><label class="small mb-1" for="startDate">From</label><input type="date" class="form-control" id="startDate"></div>
+                  <div class="col-6"><label class="small mb-1" for="endDate">To</label><input type="date" class="form-control" id="endDate"></div>
                 </div>
               </div>
-              
-              <div class="form-group">
-                <div class="custom-control custom-checkbox">
-                  <input type="checkbox" class="custom-control-input" id="includePdfs" checked>
-                  <label class="custom-control-label" for="includePdfs">
-                    <i class="mdi mdi-file-pdf mr-1"></i>
-                    Include PDF Files
-                  </label>
-                </div>
-                <small class="form-text text-muted">Creates a ZIP archive with data and PDF files</small>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <label for="includePdfs">Include uploaded PDFs</label>
+                <p id="includePdfsHelp">Downloads a ZIP with the data and the PDF files; without them, a JSON file.</p>
               </div>
-              
-              <div class="alert alert-info">
-                <i class="mdi mdi-information mr-2"></i>
-                <strong>Export Preview:</strong>
-                <div id="exportPreview">
-                  <span class="text-muted">Configure options above to see preview</span>
+              <div class="setting-control">
+                <div class="custom-control custom-switch">
+                  <input type="checkbox" class="custom-control-input" id="includePdfs" aria-describedby="includePdfsHelp" checked>
+                  <label class="custom-control-label" for="includePdfs"><span class="sr-only">Include uploaded PDFs</span></label>
                 </div>
               </div>
-              
-              <div class="text-center">
-                <button type="button" class="btn btn-outline-info mr-2" id="previewBtn">
-                  <i class="mdi mdi-eye mr-1"></i>
-                  Preview
-                </button>
-                <button type="submit" class="btn btn-success" id="exportBtn" disabled>
-                  <i class="mdi mdi-download mr-1"></i>
-                  Export Data
-                </button>
+            </div>
+            <div class="setting-actions">
+              <div id="exportPreview" class="setting-note" aria-live="polite">Choose <strong>Check contents</strong> to see what will be included.</div>
+              <div>
+                <button type="button" class="btn btn-outline-secondary mr-2 mb-1" id="previewBtn"><i class="mdi mdi-eye-outline mr-1" aria-hidden="true"></i>Check contents</button>
+                <button type="submit" class="btn btn-primary mb-1" id="exportBtn" disabled><i class="mdi mdi-download mr-1" aria-hidden="true"></i>Download</button>
               </div>
-            </form>
-          </div>
-        </div>
-      </div>
-      
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-upload mr-2"></i>
-              Data Import
-            </h2>
-          </div>
-          <div class="card-body">
-            <p class="text-muted">Import previously exported MyLabVault data including JSON data and PDF files.</p>
-            
-            <form id="importForm" enctype="multipart/form-data">
-              <div class="form-group">
-                <label for="importFile">
-                  <i class="mdi mdi-file-import mr-1"></i>
-                  Select Import File
-                </label>
+            </div>
+          </form>
+
+          <h3>Restore from a backup</h3>
+          <form id="importForm" enctype="multipart/form-data">
+            <div class="setting-row">
+              <div class="setting-text">
+                <label for="importFile">Backup file</label>
+                <p id="importFileHelp">A .zip (data and PDFs) or .json (data only) downloaded from this page.</p>
+              </div>
+              <div class="setting-control">
                 <div class="custom-file">
-                  <input type="file" class="custom-file-input" id="importFile" name="import_file" 
-                         accept=".json,.zip" required>
-                  <label class="custom-file-label" for="importFile">Choose file...</label>
-                </div>
-                <small class="form-text text-muted">
-                  Upload a JSON file (data only) or ZIP file (data + PDFs) from a previous export
-                </small>
-              </div>
-              
-              <div class="form-group">
-                <label for="importOptions">
-                  <i class="mdi mdi-cog mr-1"></i>
-                  Import Options
-                </label>
-                
-                <div class="form-group mb-3">
-                  <label class="form-label">Import Mode:</label>
-                  <div class="custom-control custom-radio">
-                    <input type="radio" class="custom-control-input" id="importModeMerge" name="importMode" value="merge" checked>
-                    <label class="custom-control-label" for="importModeMerge">
-                      <i class="mdi mdi-merge mr-1"></i>
-                      <strong>Merge with existing data</strong>
-                    </label>
-                  </div>
-                  <small class="form-text text-muted ml-4">Add imported data to existing records</small>
-                  
-                  <div class="custom-control custom-radio mt-2">
-                    <input type="radio" class="custom-control-input" id="importModeReplace" name="importMode" value="replace">
-                    <label class="custom-control-label" for="importModeReplace">
-                      <i class="mdi mdi-database-remove mr-1"></i>
-                      <strong>Start from scratch</strong>
-                      <span class="badge badge-warning ml-2">Destructive</span>
-                    </label>
-                  </div>
-                  <small class="form-text text-muted ml-4">
-                    <i class="mdi mdi-alert-triangle mr-1 text-warning"></i>
-                    Clear all existing data and replace with imported data only
-                  </small>
-                </div>
-                
-                <div class="custom-control custom-checkbox mt-3">
-                  <input type="checkbox" class="custom-control-input" id="validateData" checked>
-                  <label class="custom-control-label" for="validateData">
-                    <i class="mdi mdi-shield-check mr-1"></i>
-                    Validate data integrity
-                  </label>
-                </div>
-                <small class="form-text text-muted">Verify data format and consistency before importing</small>
-              </div>
-              
-              <div class="alert alert-info" id="importPreview" style="display: none;">
-                <i class="mdi mdi-information mr-2"></i>
-                <strong>Import Preview:</strong>
-                <div id="importPreviewContent">
-                  <span class="text-muted">Upload a file to see import preview</span>
+                  <input type="file" class="custom-file-input" id="importFile" name="import_file" accept=".json,.zip" aria-describedby="importFileHelp" required>
+                  <label class="custom-file-label" for="importFile">Choose file…</label>
                 </div>
               </div>
-              
-              <div class="alert alert-warning" style="display: none;" id="importWarning">
-                <i class="mdi mdi-alert-triangle mr-2"></i>
-                <strong>Warning:</strong> This will modify your existing data. Please ensure you have a backup before proceeding.
+            </div>
+            <div class="setting-row setting-row-stack" role="radiogroup" aria-labelledby="importModeLabel">
+              <div class="setting-text"><span class="setting-label" id="importModeLabel">How to restore</span></div>
+              <div class="setting-control">
+                <div class="custom-control custom-radio">
+                  <input type="radio" class="custom-control-input" id="importModeMerge" name="importMode" value="merge" checked aria-describedby="importModeMergeHelp">
+                  <label class="custom-control-label" for="importModeMerge">Add to my data</label>
+                  <small class="form-text mt-0" id="importModeMergeHelp">Patients, providers and tests with the same name are matched; results are added.</small>
+                </div>
+                <div class="custom-control custom-radio mt-2">
+                  <input type="radio" class="custom-control-input" id="importModeReplace" name="importMode" value="replace" aria-describedby="importModeReplaceHelp">
+                  <label class="custom-control-label" for="importModeReplace">Replace all my data <span class="badge badge-status-out ml-1">Deletes current data</span></label>
+                  <small class="form-text mt-0" id="importModeReplaceHelp">Everything here is deleted first, then the backup is restored.</small>
+                </div>
               </div>
-              
-              <div class="text-center">
-                <button type="button" class="btn btn-outline-info mr-2" id="previewImportBtn" disabled>
-                  <i class="mdi mdi-eye mr-1"></i>
-                  Preview Import
-                </button>
-                <button type="submit" class="btn btn-primary" id="importBtn" disabled>
-                  <i class="mdi mdi-upload mr-1"></i>
-                  Import Data
-                </button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <label for="validateData">Check the file first</label>
+                <p id="validateDataHelp">Refuse files that aren't a complete MyLabVault backup.</p>
               </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
+              <div class="setting-control">
+                <div class="custom-control custom-switch">
+                  <input type="checkbox" class="custom-control-input" id="validateData" aria-describedby="validateDataHelp" checked>
+                  <label class="custom-control-label" for="validateData"><span class="sr-only">Check the file first</span></label>
+                </div>
+              </div>
+            </div>
+            <div class="setting-note" id="importPreview" style="display: none;" aria-live="polite">
+              <div id="importPreviewContent"></div>
+            </div>
+            <div class="alert alert-warning" style="display: none;" id="importWarning">
+              <i class="mdi mdi-alert-outline mr-1" aria-hidden="true"></i><strong>This changes your data.</strong> Download a backup first if you might want to go back.
+            </div>
+            <div class="setting-actions">
+              <div></div>
+              <div>
+                <button type="button" class="btn btn-outline-secondary mr-2 mb-1" id="previewImportBtn" disabled><i class="mdi mdi-eye-outline mr-1" aria-hidden="true"></i>Check file</button>
+                <button type="submit" class="btn btn-primary mb-1" id="importBtn" disabled><i class="mdi mdi-upload mr-1" aria-hidden="true"></i>Restore</button>
+              </div>
+            </div>
+          </form>
+        </section>
 
-    <!-- Merge duplicates -->
-    <div class="row mt-4">
-      <div class="col-12">
-        <section class="card" id="mergeDuplicates" aria-labelledby="mergeDuplicatesTitle">
-          <div class="card-header">
-            <h2 class="card-title" id="mergeDuplicatesTitle">
-              <i class="mdi mdi-merge mr-2" aria-hidden="true"></i>
-              Merge duplicates
-            </h2>
-          </div>
-          <div class="card-body">
-            <p>Find lab tests, panels, units and providers that are saved more than once (for example <em>Albumin</em> and <em>Albumin (g/dL)</em>), review each suggestion, and merge the ones you choose. Results move to the item you keep. <strong>Nothing changes until you confirm.</strong></p>
+        <!-- Clean up -->
+        <section class="settings-section" id="cleanup" aria-labelledby="mergeDuplicatesTitle" tabindex="-1">
+          <div id="mergeDuplicates">
+            <h2 id="mergeDuplicatesTitle">Clean up duplicates</h2>
+            <p class="section-lead">Find lab tests, panels, units and providers saved more than once (for example <em>Albumin</em> and <em>Albumin (g/dL)</em>), review each suggestion, and merge the ones you choose. Results move to the item you keep. <strong>Nothing changes until you confirm.</strong></p>
             <div class="d-flex flex-wrap align-items-center">
               <button type="button" class="btn btn-primary mr-2 mb-2" id="findDuplicates">
                 <i class="mdi mdi-magnify mr-1" aria-hidden="true"></i>Find duplicates</button>
               <button type="button" class="btn btn-outline-primary mr-2 mb-2" id="aiDuplicates" hidden>
                 <i class="mdi mdi-robot-outline mr-1" aria-hidden="true"></i>Ask AI to review</button>
             </div>
-            <small class="form-text text-muted" id="aiDuplicatesHelp" hidden>The AI review sends the names of your tests, panels, units and providers (not your results) to Claude in Amazon Bedrock.</small>
+            <small class="form-text" id="aiDuplicatesHelp" hidden>The AI review sends the names of your tests, panels, units and providers (not your results) to Claude in Amazon Bedrock.</small>
             <div id="duplicatesStatus" class="mt-3" role="status" aria-live="polite"></div>
             <div id="duplicatesList"></div>
             <div class="mt-3" id="duplicatesActions" hidden>
               <button type="button" class="btn btn-warning" id="mergeSelected" disabled>
                 <i class="mdi mdi-merge mr-1" aria-hidden="true"></i><span>Merge selected</span></button>
-              <small class="form-text text-muted">You'll see a summary to confirm before anything is merged.</small>
+              <small class="form-text">You'll see a summary to confirm before anything is merged.</small>
+            </div>
+          </div>
+        </section>
+
+        <!-- About -->
+        <section class="settings-section" id="about" aria-labelledby="aboutTitle" tabindex="-1">
+          <h2 id="aboutTitle">About</h2>
+          <dl class="about-list" id="buildInfo">
+            <div><dt>Version</dt><dd id="aboutVersion">…</dd></div>
+            <div><dt>Updates</dt><dd id="aboutUpdate">…</dd></div>
+            <div><dt>Data</dt><dd>Stored in a SQLite database on this server (<code>/app/data</code> in the container).</dd></div>
+            <div><dt>Help</dt><dd><a href="https://github.com/zaydons/MyLabVault#readme" target="_blank" rel="noopener">Documentation</a> · <a href="/api/docs">API reference</a></dd></div>
+          </dl>
+          <h3>What's stored</h3>
+          <div id="systemInfo" aria-live="polite"><p class="text-muted">Loading…</p></div>
+        </section>
+
+        <!-- Danger zone -->
+        <section class="settings-section" id="danger" aria-labelledby="dangerTitle" tabindex="-1">
+          <h2 id="dangerTitle">Danger zone</h2>
+          <div class="danger-box">
+            <div class="setting-row">
+              <div class="setting-text">
+                <span class="setting-label">Reset all data</span>
+                <p>Permanently deletes every result, vital, test, panel, unit, provider, patient, uploaded PDF and setting, then starts again with the welcome screen. <strong>This can't be undone.</strong> Download a backup first.</p>
+              </div>
+              <div class="setting-control">
+                <button type="button" class="btn btn-outline-danger" id="resetDataBtn" onclick="showResetConfirmation()">
+                  <i class="mdi mdi-delete-forever mr-1" aria-hidden="true"></i>Reset all data…</button>
+              </div>
             </div>
           </div>
         </section>
       </div>
     </div>
-
-    <!-- Data Management Section -->
-    <div class="row mt-4">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-database-remove mr-2"></i>
-              Data Management
-            </h2>
-          </div>
-          <div class="card-body">
-            <div class="alert alert-warning">
-              <i class="mdi mdi-alert-triangle mr-2"></i>
-              <strong>Warning:</strong> The actions below are destructive and cannot be undone. Use with extreme caution!
-            </div>
-            
-            <div class="row">
-              <div class="col-md-8">
-                <h5>Reset All Data</h5>
-                <p class="text-muted">This will permanently delete:</p>
-                <ul class="text-muted">
-                  <li>All lab results and test data</li>
-                  <li>All imported PDF files</li>
-                  <li>All providers, panels, and units</li>
-                  <li>All user settings (except this page will reload with defaults)</li>
-                </ul>
-                <p><strong class="text-danger">This action cannot be undone!</strong></p>
-              </div>
-              <div class="col-md-4 text-right">
-                <button type="button" class="btn btn-danger btn-lg" id="resetDataBtn" onclick="showResetConfirmation()">
-                  <i class="mdi mdi-delete-forever mr-2"></i>
-                  Reset All Data
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
 </section>
 
@@ -497,7 +430,58 @@
 {% block extra_scripts %}
 <script src="/static/js/merge-duplicates.js"></script>
 <script>
+// One section at a time, chosen from the list (and the address, e.g. /settings#backup).
+// Without JavaScript all sections show one after another.
+function initSettingsSections() {
+    const layout = document.querySelector('.settings-layout');
+    const links = Array.from(document.querySelectorAll('.settings-nav a'));
+    const sections = Array.from(document.querySelectorAll('.settings-section'));
+    const ids = sections.map(sec => sec.id);
+    layout.classList.add('js-sections');
+    function show(id, focus) {
+        if (!ids.includes(id)) id = 'general';
+        sections.forEach(sec => { sec.hidden = sec.id !== id; });
+        links.forEach(a => {
+            if (a.dataset.section === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+        });
+        try { localStorage.setItem('settingsSection', id); } catch (e) { /* not remembered */ }
+        if (focus) document.getElementById(id).focus({ preventScroll: true });
+    }
+    links.forEach(a => a.addEventListener('click', e => {
+        e.preventDefault();
+        history.replaceState(null, '', '#' + a.dataset.section);
+        show(a.dataset.section, true);
+        if (window.matchMedia('(max-width: 991.98px)').matches) document.querySelector('.settings-panels').scrollIntoView({ block: 'start' });
+    }));
+    window.addEventListener('hashchange', () => show(location.hash.slice(1), true));
+    let start = location.hash.slice(1);
+    if (!start) { try { start = localStorage.getItem('settingsSection') || ''; } catch (e) { start = ''; } }
+    show(start, false);
+}
+
+function loadBuildInfo() {
+    fetch('/version').then(r => r.ok ? r.json() : null).then(v => {
+        if (!v) return;
+        $('#aboutVersion').text(v.build && v.build !== 'dev'
+            ? `${v.build}${v.commit ? ' (' + v.commit + ')' : ''}${v.build_date ? ', built ' + new Date(v.build_date).toLocaleDateString() : ''}`
+            : `Development build${v.commit ? ' (' + v.commit + ')' : ''}`);
+    }).catch(() => $('#aboutVersion').text('Unknown'));
+    fetch('/api/update-check').then(r => r.ok ? r.json() : null).then(u => {
+        const el = document.getElementById('aboutUpdate');
+        if (!u || u.enabled === false) { el.textContent = 'Update check is off (MYLABVAULT_UPDATE_CHECK=false).'; return; }
+        if (u.update_available) {
+            el.innerHTML = '<span class="badge badge-status-info mr-1">Update available</span> A newer build has been published. <a href="https://github.com/zaydons/MyLabVault/blob/main/deploy/truenas/README.md#updating" target="_blank" rel="noopener">How to update</a>';
+        } else if (u.latest_commit) {
+            el.textContent = 'Up to date with the latest published build.';
+        } else {
+            el.textContent = "Couldn't check for updates right now.";
+        }
+    }).catch(() => { document.getElementById('aboutUpdate').textContent = "Couldn't check for updates right now."; });
+}
+
 $(document).ready(function() {
+    initSettingsSections();
+    loadBuildInfo();
     MergeDuplicates.init();
 
     // Load system information on page load
@@ -540,7 +524,7 @@ $(document).ready(function() {
                     </div>
                 `;
                 $('.content-header .container-fluid').after(alert);
-                setTimeout(() => $('.alert').fadeOut(), 3000);
+                setTimeout(() => $('.alert-dismissible').fadeOut(), 3000);
             },
             error: function(xhr) {
                 const error = xhr.responseJSON?.detail || 'Failed to update date format';
@@ -593,56 +577,13 @@ function loadSystemInfo() {
             const data = response.data;
             const total = response.total_items;
             
-            const systemInfoHtml = `
-                <div class="row">
-                    <div class="col-6">
-                        <small class="text-muted">Lab Results:</small><br>
-                        <strong>${data.lab_results.toLocaleString()}</strong>
-                    </div>
-                    <div class="col-6">
-                        <small class="text-muted">Lab Tests:</small><br>
-                        <strong>${data.labs.toLocaleString()}</strong>
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-6">
-                        <small class="text-muted">Vitals:</small><br>
-                        <strong>${(data.vitals || 0).toLocaleString()}</strong>
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-6">
-                        <small class="text-muted">Panels:</small><br>
-                        <strong>${data.panels.toLocaleString()}</strong>
-                    </div>
-                    <div class="col-6">
-                        <small class="text-muted">Units:</small><br>
-                        <strong>${data.units.toLocaleString()}</strong>
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-6">
-                        <small class="text-muted">Providers:</small><br>
-                        <strong>${data.providers.toLocaleString()}</strong>
-                    </div>
-                    <div class="col-6">
-                        <small class="text-muted">PDF Imports:</small><br>
-                        <strong>${data.pdf_imports.toLocaleString()}</strong>
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-12 text-center">
-                        <small class="text-muted">PDF Files:</small><br>
-                        <strong>${data.pdf_files.toLocaleString()}</strong>
-                    </div>
-                </div>
-                <hr class="my-3">
-                <div class="text-center">
-                    <small class="text-muted">Total Items in System:</small><br>
-                    <h4 class="text-primary">${total.toLocaleString()}</h4>
-                </div>
-            `;
-            
+            const items = [
+                ['Lab results', data.lab_results], ['Lab tests', data.labs], ['Vitals', data.vitals || 0],
+                ['Panels', data.panels], ['Units', data.units], ['Providers', data.providers],
+                ['PDF imports', data.pdf_imports], ['PDF files', data.pdf_files],
+            ];
+            const systemInfoHtml = `<dl class="data-counts">${items.map(([label, n]) =>
+                `<div><dt>${label}</dt><dd>${Number(n).toLocaleString()}</dd></div>`).join('')}</dl>`;
             $('#systemInfo').html(systemInfoHtml);
         }
     }).fail(function() {
@@ -900,7 +841,7 @@ function setPresetDateRange(preset) {
 
 function updateExportPreview() {
     const previewDiv = $('#exportPreview');
-    previewDiv.html('<span class="text-muted">Click Preview to see export details</span>');
+    previewDiv.html('Choose <strong>Check contents</strong> to see what will be included.');
     $('#exportBtn').prop('disabled', true);
 }
 
@@ -925,30 +866,17 @@ function generateExportPreview() {
             $('#exportPreview').html(`<span class="text-danger">Error: ${escapeHtml(error)}</span>`);
         },
         complete: function() {
-            $('#previewBtn').prop('disabled', false).html('<i class="mdi mdi-eye mr-1"></i>Preview');
+            $('#previewBtn').prop('disabled', false).html('<i class="mdi mdi-eye-outline mr-1" aria-hidden="true"></i>Check contents');
         }
     });
 }
 
 function displayExportPreview(preview) {
-    const previewDiv = $('#exportPreview');
-    
-    let previewHtml = '<div class="row">';
-    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${escapeHtml(preview.patients_count)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${escapeHtml(preview.lab_results_count)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Vitals:</strong> ${escapeHtml(preview.vitals_count || 0)}</div>`;
-    previewHtml += '</div><div class="row mt-1">';
-    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${escapeHtml(preview.labs_count)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${escapeHtml(preview.providers_count)}</div>`;
-    previewHtml += '</div>';
-    
-    if (preview.include_pdfs) {
-        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${escapeHtml(preview.pdf_files_count)} (ZIP format)</div></div>`;
-    }
-    
-    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Estimated size: ${escapeHtml(preview.estimated_size)}</small></div></div>`;
-    
-    previewDiv.html(previewHtml);
+    const n = v => Number(v || 0).toLocaleString();
+    const parts = [`${n(preview.lab_results_count)} results`, `${n(preview.vitals_count)} vitals`, `${n(preview.labs_count)} tests`,
+                   `${n(preview.providers_count)} providers`, `${n(preview.patients_count)} patients`];
+    if (preview.include_pdfs) parts.push(`${n(preview.pdf_files_count)} PDFs`);
+    $('#exportPreview').html(`<strong>Will include:</strong> ${parts.join(', ')}. About ${escapeHtml(preview.estimated_size)}${preview.include_pdfs ? ' (ZIP)' : ' (JSON)'}.`);
 }
 
 function getExportConfiguration() {
@@ -1027,7 +955,7 @@ function executeExport() {
                 </div>
             `;
             $('.content-header .container-fluid').after(alert);
-            setTimeout(() => $('.alert').fadeOut(), 5000);
+            setTimeout(() => $('.alert-dismissible').fadeOut(), 5000);
         },
         error: function(xhr) {
             const error = xhr.responseJSON?.detail || 'Failed to export data';
@@ -1043,11 +971,11 @@ function executeExport() {
                 </div>
             `;
             $('.content-header .container-fluid').after(alert);
-            setTimeout(() => $('.alert').fadeOut(), 5000);
+            setTimeout(() => $('.alert-dismissible').fadeOut(), 5000);
         },
         complete: function() {
             // Reset button state
-            $('#exportBtn').prop('disabled', false).html('<i class="mdi mdi-download mr-1"></i>Export Data');
+            $('#exportBtn').prop('disabled', false).html('<i class="mdi mdi-download mr-1" aria-hidden="true"></i>Download');
         }
     });
 }
@@ -1067,7 +995,7 @@ function initializeImportFeature() {
             $('#previewImportBtn').prop('disabled', false);
             updateImportWarning();
         } else {
-            $('.custom-file-label').text('Choose file...');
+            $('.custom-file-label').text('Choose file…');
             $('#previewImportBtn').prop('disabled', true);
             $('#importBtn').prop('disabled', true);
             $('#importPreview').hide();
@@ -1178,45 +1106,24 @@ function previewImportFile() {
                 </div>
             `;
             $('.content-header .container-fluid').after(alert);
-            setTimeout(() => $('.alert').fadeOut(), 5000);
+            setTimeout(() => $('.alert-dismissible').fadeOut(), 5000);
         },
         complete: function() {
-            $('#previewImportBtn').prop('disabled', false).html('<i class="mdi mdi-eye mr-1"></i>Preview Import');
+            $('#previewImportBtn').prop('disabled', false).html('<i class="mdi mdi-eye-outline mr-1" aria-hidden="true"></i>Check file');
         }
     });
 }
 
 function displayImportPreview(preview) {
-    const previewDiv = $('#importPreviewContent');
-    
-    let previewHtml = '<div class="row">';
-    previewHtml += `<div class="col-6"><strong>File Type:</strong> ${escapeHtml(preview.file_type)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Export Version:</strong> ${escapeHtml(preview.export_version || 'N/A')}</div>`;
-    previewHtml += '</div><div class="row mt-1">';
-    previewHtml += `<div class="col-6"><strong>Patients:</strong> ${escapeHtml(preview.patients_count)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Lab Results:</strong> ${escapeHtml(preview.lab_results_count)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Vitals:</strong> ${escapeHtml(preview.vitals_count || 0)}</div>`;
-    previewHtml += '</div><div class="row mt-1">';
-    previewHtml += `<div class="col-6"><strong>Providers:</strong> ${escapeHtml(preview.providers_count)}</div>`;
-    previewHtml += `<div class="col-6"><strong>Lab Tests:</strong> ${escapeHtml(preview.labs_count)}</div>`;
-    previewHtml += '</div>';
-    
-    if (preview.pdf_files_count > 0) {
-        previewHtml += `<div class="row mt-1"><div class="col-12"><strong>PDF Files:</strong> ${escapeHtml(preview.pdf_files_count)}</div></div>`;
+    const n = v => Number(v || 0).toLocaleString();
+    const parts = [`${n(preview.lab_results_count)} results`, `${n(preview.vitals_count)} vitals`, `${n(preview.labs_count)} tests`,
+                   `${n(preview.providers_count)} providers`, `${n(preview.patients_count)} patients`];
+    if (preview.pdf_files_count > 0) parts.push(`${n(preview.pdf_files_count)} PDFs`);
+    let html = `<strong>This backup has:</strong> ${parts.join(', ')} (${escapeHtml(preview.file_type)}, ${escapeHtml(preview.file_size)}).`;
+    if (preview.conflicts && preview.conflicts.length) {
+        html += `<div class="mt-1"><strong>Already here:</strong> ${preview.conflicts.map(c => escapeHtml(c)).join('; ')}</div>`;
     }
-    
-    if (preview.conflicts && preview.conflicts.length > 0) {
-        previewHtml += '<div class="row mt-2"><div class="col-12">';
-        previewHtml += '<small class="text-warning"><strong>Potential Conflicts:</strong></small><br>';
-        preview.conflicts.forEach(conflict => {
-            previewHtml += `<small class="text-muted">• ${escapeHtml(conflict)}</small><br>`;
-        });
-        previewHtml += '</div></div>';
-    }
-    
-    previewHtml += `<div class="row mt-2"><div class="col-12"><small class="text-muted">Total file size: ${escapeHtml(preview.file_size)}</small></div></div>`;
-    
-    previewDiv.html(previewHtml);
+    $('#importPreviewContent').html(html);
 }
 
 function executeDataImport(isStartFromScratch = false) {
@@ -1267,7 +1174,7 @@ function executeDataImport(isStartFromScratch = false) {
             
             // Reset form
             $('#importForm')[0].reset();
-            $('.custom-file-label').text('Choose file...');
+            $('.custom-file-label').text('Choose file…');
             $('#previewImportBtn').prop('disabled', true);
             $('#importBtn').prop('disabled', true);
             $('#importPreview').hide();
@@ -1275,7 +1182,7 @@ function executeDataImport(isStartFromScratch = false) {
             
             // Refresh page data if needed
             setTimeout(() => {
-                $('.alert').fadeOut();
+                $('.alert-dismissible').fadeOut();
                 // Optionally reload the page to show updated data
                 // location.reload();
             }, 5000);
@@ -1293,10 +1200,10 @@ function executeDataImport(isStartFromScratch = false) {
                 </div>
             `;
             $('.content-header .container-fluid').after(alert);
-            setTimeout(() => $('.alert').fadeOut(), 5000);
+            setTimeout(() => $('.alert-dismissible').fadeOut(), 5000);
         },
         complete: function() {
-            $('#importBtn').prop('disabled', false).html('<i class="mdi mdi-upload mr-1"></i>Import Data');
+            $('#importBtn').prop('disabled', false).html('<i class="mdi mdi-upload mr-1" aria-hidden="true"></i>Restore');
         }
     });
 }
