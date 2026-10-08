@@ -14,51 +14,105 @@ router = APIRouter()
 
 # Supported measurement types. Each unit converts to the type's first (base) unit as
 # base = value * factor + offset, so charts can combine entries recorded in different units.
+# "decimals" is how precisely a value in that unit is shown.
 # "normal" is a typical adult reference range in the base unit, shown for orientation only.
 VITAL_TYPES = {
     "weight": {
         "label": "Weight",
-        "units": {"lb": {"factor": 1, "offset": 0}, "kg": {"factor": 2.20462262, "offset": 0}},
+        "units": {"lb": {"factor": 1, "offset": 0, "decimals": 1}, "kg": {"factor": 2.20462262, "offset": 0, "decimals": 1}},
         "normal": None,
     },
     "height": {
         "label": "Height",
-        "units": {"in": {"factor": 1, "offset": 0}, "cm": {"factor": 1 / 2.54, "offset": 0}},
+        "units": {"in": {"factor": 1, "offset": 0, "decimals": 1}, "cm": {"factor": 1 / 2.54, "offset": 0, "decimals": 0}},
         "normal": None,
     },
     "blood_pressure": {
         "label": "Blood Pressure",
-        "units": {"mmHg": {"factor": 1, "offset": 0}},
+        "units": {"mmHg": {"factor": 1, "offset": 0, "decimals": 0}},
         "value_label": "Systolic",
         "value2_label": "Diastolic",
         "normal": {"high": 120, "high2": 80},
     },
     "heart_rate": {
         "label": "Heart Rate",
-        "units": {"bpm": {"factor": 1, "offset": 0}},
+        "units": {"bpm": {"factor": 1, "offset": 0, "decimals": 0}},
         "normal": {"low": 60, "high": 100},
     },
     "temperature": {
         "label": "Temperature",
-        "units": {"°F": {"factor": 1, "offset": 0}, "°C": {"factor": 9 / 5, "offset": 32}},
+        "units": {"°F": {"factor": 1, "offset": 0, "decimals": 1}, "°C": {"factor": 9 / 5, "offset": 32, "decimals": 1}},
         "normal": {"low": 97, "high": 99},
     },
     "oxygen_saturation": {
         "label": "Oxygen Saturation",
-        "units": {"%": {"factor": 1, "offset": 0}},
+        "units": {"%": {"factor": 1, "offset": 0, "decimals": 0}},
         "normal": {"low": 95, "high": 100},
     },
     "respiratory_rate": {
         "label": "Respiratory Rate",
-        "units": {"breaths/min": {"factor": 1, "offset": 0}},
+        "units": {"breaths/min": {"factor": 1, "offset": 0, "decimals": 0}},
         "normal": {"low": 12, "high": 20},
     },
     "blood_glucose": {
         "label": "Blood Glucose",
-        "units": {"mg/dL": {"factor": 1, "offset": 0}, "mmol/L": {"factor": 18.0, "offset": 0}},
+        "units": {"mg/dL": {"factor": 1, "offset": 0, "decimals": 0}, "mmol/L": {"factor": 18.0, "offset": 0, "decimals": 1}},
         "normal": {"low": 70, "high": 99},
     },
 }
+
+
+# ---------- preferred units (Settings → General → Units) ----------
+
+def preferred_units(db: Session) -> dict:
+    """The unit to show each vital type in: the user's choice, else the type's base unit."""
+    from ..models import UserSettings as UserSettingsModel
+    chosen = UserSettingsModel.get_settings(db).get_option("vital_units", {}) or {}
+    return {
+        vital_type: chosen.get(vital_type) if chosen.get(vital_type) in config["units"] else next(iter(config["units"]))
+        for vital_type, config in VITAL_TYPES.items()
+    }
+
+
+def check_unit_preferences(prefs: dict) -> dict:
+    """Validate {vital_type: unit} from Settings; raises 400 for an unknown type or unit."""
+    if not isinstance(prefs, dict):
+        raise HTTPException(status_code=400, detail="vital_units must be an object of vital type to unit")
+    for vital_type, unit in prefs.items():
+        config = VITAL_TYPES.get(vital_type)
+        if not config:
+            raise HTTPException(status_code=400, detail=f"Unknown vital type '{vital_type}'")
+        if unit not in config["units"]:
+            raise HTTPException(status_code=400, detail=f"Unit '{unit}' is not valid for {config['label']}")
+    return prefs
+
+
+def convert(vital_type: str, value: Optional[float], from_unit: Optional[str], to_unit: str) -> Optional[float]:
+    """A value in another unit of the same vital type (through the base unit)."""
+    if value is None:
+        return None
+    units = VITAL_TYPES[vital_type]["units"]
+    src = units.get(from_unit) or next(iter(units.values()))
+    dst = units[to_unit]
+    base = value * src["factor"] + src["offset"]
+    return (base - dst["offset"]) / dst["factor"]
+
+
+def _number(value: float, decimals: int) -> str:
+    text = f"{value:.{decimals}f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def format_reading(vital_type: str, value: float, value2: Optional[float], unit: Optional[str], to_unit: str) -> str:
+    """A reading shown in `to_unit`, rounded for that unit: "154.3 lb", "120/80 mmHg", "5′ 10″"."""
+    decimals = VITAL_TYPES[vital_type]["units"][to_unit].get("decimals", 1)
+    shown = convert(vital_type, value, unit, to_unit)
+    if vital_type == "height" and to_unit == "in":
+        feet, inches = divmod(round(shown), 12)
+        return f"{feet}′ {inches}″"
+    if value2 is not None:
+        return f"{_number(shown, decimals)}/{_number(convert(vital_type, value2, unit, to_unit), decimals)} {to_unit}"
+    return f"{_number(shown, decimals)} {to_unit}"
 
 
 def bp_category(systolic: float, diastolic: float) -> dict:
@@ -119,9 +173,10 @@ def _get_vital_or_404(vital_id: int, db: Session) -> VitalModel:
 
 
 @router.get("/types")
-def get_vital_types():
-    """Supported vital types with their units and typical normal ranges."""
-    return VITAL_TYPES
+def get_vital_types(db: Session = Depends(get_db)):
+    """Supported vital types with their units, typical normal ranges and the preferred unit to show."""
+    preferred = preferred_units(db)
+    return {vital_type: {**config, "preferred_unit": preferred[vital_type]} for vital_type, config in VITAL_TYPES.items()}
 
 
 @router.get("/")

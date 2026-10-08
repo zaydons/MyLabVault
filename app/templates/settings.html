@@ -120,6 +120,15 @@
               </select>
             </div>
           </div>
+
+          <h3 id="unitsTitle">Units for vitals</h3>
+          <p class="section-lead">Readings are shown in these units everywhere, and new readings default to them. Readings keep the unit they were entered in, so changing this never alters your data.</p>
+          <div class="d-flex flex-wrap align-items-center mb-1" role="group" aria-label="Unit presets">
+            <button type="button" class="btn btn-outline-secondary btn-sm mr-2 mb-1" data-unit-preset="us">US units</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm mr-2 mb-1" data-unit-preset="metric">Metric units</button>
+            <span class="small" id="vitalUnitsStatus" role="status" aria-live="polite"></span>
+          </div>
+          <div id="vitalUnitsRows"><p class="text-muted">Loading…</p></div>
         </section>
 
         <!-- Backup & restore -->
@@ -459,6 +468,62 @@ function initSettingsSections() {
     show(start, false);
 }
 
+// ---------- units for vitals ----------
+const UNIT_TYPES = ['weight', 'height', 'temperature', 'blood_glucose'];
+const UNIT_NAMES = {
+    lb: 'Pounds (lb)', kg: 'Kilograms (kg)', in: 'Feet and inches', cm: 'Centimeters (cm)',
+    '°F': 'Fahrenheit (°F)', '°C': 'Celsius (°C)', 'mg/dL': 'mg/dL', 'mmol/L': 'mmol/L',
+};
+const UNIT_PRESETS = {
+    us: { weight: 'lb', height: 'in', temperature: '°F', blood_glucose: 'mg/dL' },
+    metric: { weight: 'kg', height: 'cm', temperature: '°C', blood_glucose: 'mmol/L' },
+};
+
+async function loadVitalUnits() {
+    const rows = document.getElementById('vitalUnitsRows');
+    try {
+        const types = await fetch('/api/vitals/types').then(r => { if (!r.ok) throw new Error(); return r.json(); });
+        rows.innerHTML = UNIT_TYPES.filter(t => types[t]).map(t => `
+            <div class="setting-row">
+              <div class="setting-text"><label for="unit-${t}">${escapeHtml(types[t].label)}</label></div>
+              <div class="setting-control">
+                <select class="custom-select vital-unit" id="unit-${t}" data-type="${t}">
+                  ${Object.keys(types[t].units).map(u => `<option value="${escapeHtml(u)}"${u === types[t].preferred_unit ? ' selected' : ''}>${escapeHtml(UNIT_NAMES[u] || u)}</option>`).join('')}
+                </select>
+              </div>
+            </div>`).join('');
+    } catch (e) {
+        rows.innerHTML = '<p class="text-danger">Couldn\'t load the units. Reload the page to try again.</p>';
+    }
+}
+
+async function saveVitalUnits(message) {
+    const prefs = {};
+    document.querySelectorAll('.vital-unit').forEach(sel => { prefs[sel.dataset.type] = sel.value; });
+    const status = document.getElementById('vitalUnitsStatus');
+    try {
+        const response = await fetch('/api/settings/user', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vital_units: prefs }),
+        });
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || 'Saving failed');
+        status.innerHTML = `<i class="mdi mdi-check" aria-hidden="true"></i> ${escapeHtml(message || 'Saved.')}`;
+    } catch (e) {
+        status.textContent = `Not saved: ${e.message}`;
+    }
+}
+
+function initVitalUnits() {
+    loadVitalUnits();
+    document.getElementById('vitalUnitsRows').addEventListener('change', e => {
+        if (e.target.classList.contains('vital-unit')) saveVitalUnits();
+    });
+    document.querySelectorAll('[data-unit-preset]').forEach(button => button.addEventListener('click', () => {
+        const preset = UNIT_PRESETS[button.dataset.unitPreset];
+        document.querySelectorAll('.vital-unit').forEach(sel => { if (preset[sel.dataset.type]) sel.value = preset[sel.dataset.type]; });
+        saveVitalUnits(`Saved: ${button.textContent.trim()}.`);
+    }));
+}
+
 function loadBuildInfo() {
     fetch('/version').then(r => r.ok ? r.json() : null).then(v => {
         if (!v) return;
@@ -481,6 +546,7 @@ function loadBuildInfo() {
 
 $(document).ready(function() {
     initSettingsSections();
+    initVitalUnits();
     loadBuildInfo();
     MergeDuplicates.init();
 

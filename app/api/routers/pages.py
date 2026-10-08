@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from .. import build_info
 from ..database import get_db
-from .vitals import VITAL_TYPES, bp_category
+from .vitals import VITAL_TYPES, bp_category, format_reading, preferred_units
 from ..models import (
     LabResult as LabResultModel, 
     Lab as LabModel,
@@ -151,8 +151,9 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
         sum(1 for r in results if r.date_collected.date() == last_draw.date_collected.date()) if last_draw else 0
     )
 
-    # Latest reading per vital type, for the dashboard's vitals card
+    # Latest reading per vital type, for the dashboard's vitals card, in the preferred units
     latest_vitals = []
+    units = preferred_units(db)
     seen_types = set()
     for vital in (
         db.query(VitalModel)
@@ -164,11 +165,10 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
         if not config or vital.vital_type in seen_types:
             continue
         seen_types.add(vital.vital_type)
-        reading = f"{vital.value:g}/{vital.value2:g}" if vital.value2 is not None else f"{vital.value:g}"
         latest_vitals.append({
             "type": vital.vital_type,
             "label": config["label"],
-            "reading": f"{reading} {vital.unit}" if vital.unit else reading,
+            "reading": format_reading(vital.vital_type, vital.value, vital.value2, vital.unit, units[vital.vital_type]),
             "measured_at": vital.measured_at,
             "bp_category": bp_category(vital.value, vital.value2)
             if vital.vital_type == "blood_pressure" and vital.value2 is not None else None,
