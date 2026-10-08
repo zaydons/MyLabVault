@@ -93,7 +93,6 @@ def complete_setup(body: SetupRequest, db: Session = Depends(get_db)):
     UserSettingsModel.update_settings(db, setup_complete=True)
     _setup_done = True
 
-    response = JSONResponse({"success": True, "patient": patient.to_dict() if patient else None})
-    if patient:
-        response.set_cookie("selectedPatientId", str(patient.id), path="/", samesite="lax", max_age=60 * 60 * 24 * 365)
-    return response
+    # The welcome page stores the patient choice in the browser (selectedPatientId is read by the
+    # page scripts, so it can't be an HttpOnly cookie set here)
+    return JSONResponse({"success": True, "patient": patient.to_dict() if patient else None})
