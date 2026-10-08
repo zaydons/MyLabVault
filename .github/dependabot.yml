@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Base image (python:<version>-alpine<version>) in app/Dockerfile
+  - package-ecosystem: docker
+    directory: /app
+    schedule:
+      interval: weekly
+  # Actions used by the workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

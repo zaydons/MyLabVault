@@ -1,4 +1,4 @@
-FROM python:3.11-alpine3.19
+FROM python:3.13-alpine3.24
 
 # Install minimal runtime dependencies
 RUN apk add --no-cache \
@@ -7,7 +7,7 @@ RUN apk add --no-cache \
     su-exec \
     && rm -rf /var/cache/apk/*
 
-# Create non-root user (optional, for when user specifies --user)
+# The app runs as this user (see docker-entrypoint.sh); PUID/PGID can change its IDs at start
 RUN addgroup -g 1001 -S appuser && \
     adduser -u 1001 -S appuser -G appuser
 
@@ -42,16 +42,15 @@ LABEL org.opencontainers.image.version=$MYLABVAULT_BUILD \
       org.opencontainers.image.revision=$MYLABVAULT_COMMIT \
       org.opencontainers.image.created=$MYLABVAULT_BUILD_DATE
 
-# Create data directory
-RUN mkdir -p /app/data
+# Data directory, owned by the app user (a mounted volume is fixed up at start)
+RUN mkdir -p /app/data/uploads/pdfs && chown -R appuser:appuser /app/data \
+    && chmod +x /app/docker-entrypoint.sh
 
-# Run as root by default - this eliminates permission issues with mounted volumes
-# Users can still specify --user flag if they want to run as non-root
-# Environment variables
 ENV PYTHONPATH=/app \
     DATABASE_URL=sqlite:///./data/mylabvault.db \
     DOCKER_ENV=true \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Expose port
 EXPOSE 8000
@@ -60,5 +59,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Start application
+# Start as root only to fix data-folder ownership, then run the app as appuser
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["python", "run.py"] 

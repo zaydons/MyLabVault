@@ -14,6 +14,8 @@ Check your version on the TrueNAS **Dashboard** (System Information card). TrueN
 
 This dataset holds everything the app stores: the SQLite database (`mylabvault.db`) and uploaded PDFs (`uploads/pdfs/`).
 
+The app doesn't run as root. On start it makes sure the dataset's files belong to the user set by `PUID`/`PGID` in the YAML (568, TrueNAS's `apps` user, which owns datasets made with the Apps preset), then runs as that user. You don't need to change permissions by hand.
+
 ## 2. Install the app
 
 1. Go to **Apps** → **Discover Apps**, open the **⋮** menu (top right), and choose **Install via YAML**.
@@ -89,6 +91,8 @@ docker pull ghcr.io/zaydons/mylabvault:latest
 ```
 
 Then go to **Apps → mylabvault** and click **Stop**, then **Start**. Your data in the dataset is kept.
+
+**Updating from a build before 2026-10-08:** earlier images ran as root. The first start of a newer image changes the owner of the files in the dataset to the app user (the log shows `Setting ownership of /app/data to ...`). If your YAML has no `PUID`/`PGID`, that's uid 1001; add `PUID: "568"` and `PGID: "568"` under `environment:` to match TrueNAS's `apps` user instead. Check that it runs as that user with `docker top mylabvault`.
 
 To pin a specific build instead of `:latest`, use its version or commit tag, such as `ghcr.io/zaydons/mylabvault:2026.10.07.32` or `ghcr.io/zaydons/mylabvault:<commit-sha>`.
 
