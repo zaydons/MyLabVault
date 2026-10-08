@@ -198,6 +198,23 @@ async def upload_pdf(
 
         # Check for duplicate imports
         existing_import = db.query(PDFImportLog).filter_by(file_hash=file_hash).first()
+        if existing_import and not existing_import.tests_imported:
+            # Nothing saved from it yet: read it again, so improvements to the readers since the
+            # first upload apply. An earlier AI reading is kept to compare with and switch back to.
+            previous = json.loads(existing_import.parsed_data) if existing_import.parsed_data else {}
+            parsed_data = await _parse_content(content, db, use_ai=ai)
+            if previous.get('parser') == 'ai' and parsed_data.get('parser') != 'ai':
+                previous.pop('other_parse', None)
+                parsed_data['other_parse'] = previous
+            stored = Path(existing_import.file_path) if existing_import.file_path else None
+            if not stored or not stored.exists():
+                stored = UPLOADS_DIR / f"{file_hash[:12]}_{secure_filename(file.filename) or 'report.pdf'}"
+                stored.write_bytes(content)
+                existing_import.file_path = str(stored)
+            existing_import.status = "pending"
+            existing_import.error_message = None
+            _save_parse(existing_import, parsed_data, db)
+            return _build_preview(parsed_data, existing_import, existing_import.filename, db)
         if existing_import:
             return PDFImportPreview(
                 filename=file.filename,
@@ -226,7 +243,6 @@ async def upload_pdf(
         parsed_data = await _parse_content(content, db, use_ai=ai)
 
         # Create import log with cached parsed data
-        import json
         import_log = PDFImportLog(
             filename=file.filename,
             file_hash=file_hash,

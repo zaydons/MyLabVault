@@ -20,7 +20,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Correct before importing**: Edit any test name, result, unit or range, choose which saved test a row belongs to, or untick rows you don't want
 - **Nothing silently wrong**: A missing collection date must be entered before import; results in a different unit than the saved test (e.g. mmol/L vs mg/dL) are flagged and kept as a separate test by default; rows that couldn't be read are listed for you to fill in
 - **Several reports at once**: Each file uploads and is read separately with its own progress, and a summary afterwards lists what was saved and what's out of range
-- **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history
+- **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history. A re-uploaded report with nothing saved from it yet is read again, so improvements to the reader apply (an earlier AI reading is kept to compare with)
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
