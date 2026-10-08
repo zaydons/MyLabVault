@@ -186,8 +186,13 @@
         updateCounts();
     }
 
-    function labOptions(selected) {
+    function labOptions(selected, row) {
         let html = `<option value="new"${selected === 'new' ? ' selected' : ''}>New test</option>`;
+        // A test saved after this page loaded (by an earlier import) still has to be selectable;
+        // without its option the browser would quietly fall back to "New test"
+        if (selected !== 'new' && !state.labsById.has(Number(selected)) && row && row.matched_lab_name) {
+            html += `<option value="${Number(selected)}" selected>${esc(row.matched_lab_name)}${row.matched_lab_unit ? ` (${esc(row.matched_lab_unit)})` : ''}</option>`;
+        }
         let panel = null;
         state.labs.forEach(lab => {
             if (lab.panel_name !== panel) {
@@ -226,7 +231,7 @@
                     <input type="text" class="form-control form-control-sm row-name" id="${id}-name" value="${esc(row.name)}" maxlength="255"
                            aria-label="Test name" ${done ? 'disabled' : ''} ${row.issues.length ? `aria-describedby="${id}-issues"` : ''}>
                     <label class="sr-only" for="${id}-lab">Save as</label>
-                    <select class="custom-select custom-select-sm mt-1 row-lab" id="${id}-lab" ${done ? 'disabled' : ''}>${labOptions(choice)}</select>
+                    <select class="custom-select custom-select-sm mt-1 row-lab" id="${id}-lab" ${done ? 'disabled' : ''}>${labOptions(choice, row)}</select>
                     ${marker ? `<span class="badge badge-status-info mt-1"><i class="mdi mdi-compare-horizontal" aria-hidden="true"></i> ${marker}</span>` : ''}
                     ${issues}
                     ${done ? '<div class="small text-muted mt-1">Already imported</div>' : ''}
@@ -623,6 +628,8 @@
         }
         updateCounts();
         if (result.files.length) showSummary(result);
+        // Tests created by this import are choices for the next report
+        loadReferenceData();
         if (typeof refreshHistory === 'function') refreshHistory();
     }
 

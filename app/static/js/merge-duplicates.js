@@ -63,7 +63,11 @@
             return;
         }
         status(`${plural(data.groups.length, 'possible duplicate')} found. Tick the ones to merge and choose what to keep.`);
-        let html = '';
+        let html = data.groups.length > 1 ? `
+            <div class="d-flex flex-wrap mt-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm mr-2 mb-1" data-tick="all">Tick all ${data.groups.length}</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm mb-1" data-tick="none">Untick all</button>
+            </div>` : '';
         Object.keys(KIND_TITLE).forEach(kind => {
             const groups = data.groups.map((g, i) => [g, i]).filter(([g]) => g.kind === kind);
             if (!groups.length) return;
@@ -176,6 +180,12 @@
         $id('mergeSelected').addEventListener('click', confirmMerges);
         $id('mergeConfirmButton').addEventListener('click', merge);
         const list = $id('duplicatesList');
+        list.addEventListener('click', e => {
+            const tick = e.target.closest('[data-tick]');
+            if (!tick) return;
+            list.querySelectorAll('.dup-check').forEach(box => { box.checked = tick.dataset.tick === 'all'; });
+            updateButton();
+        });
         list.addEventListener('change', e => {
             const fieldset = e.target.closest('.dup-group');
             if (e.target.classList.contains('dup-keep')) {

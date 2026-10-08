@@ -31,6 +31,9 @@ def normalize_unit(unit: Optional[str]) -> str:
     """Canonical spelling of a unit for comparison."""
     u = (unit or "").strip().lower().replace(" ", "")
     u = u.replace("µ", "u").replace("μ", "u").replace("mcg", "ug")
+    # A cubic millimetre is a microlitre (K/cumm = K/uL), and "gm" is grams (gm/dL = g/dL)
+    u = re.sub(r"(cumm|cu\.?mm|mm3|mm\^3)$", "ul", u)
+    u = re.sub(r"^gm/", "g/", u)
     for group in _UNIT_GROUPS:
         if u in group:
             return min(group)
@@ -65,6 +68,25 @@ def find_lab(name: Optional[str], db: Session) -> Optional[Lab]:
         rest = saved[len(wanted):]
         if rest[0] in "(),-" or (rest[0] == " " and len(rest) > 1 and rest[1] in "(),-"):
             return lab
+    return None
+
+
+def find_lab_in_unit(name: Optional[str], unit: Optional[str], db: Session) -> Optional[Lab]:
+    """Saved test with this name in the same (or an equivalent) unit.
+
+    Also finds the copy the importer made to keep another unit apart, e.g. "Glucose (mmol/L)"
+    for Glucose in mmol/L when "Glucose" is saved in mg/dL. Used so a test is never saved as a
+    new copy of a test that already exists in that unit.
+    """
+    test_name = (name or "").strip()
+    if not test_name:
+        return None
+    unit = (unit or "").strip()
+    candidates = [test_name] + ([f"{test_name} ({unit})"] if unit else [])
+    for candidate in candidates:
+        for lab in db.query(Lab).filter(Lab.name.ilike(candidate)).all():
+            if units_match(unit, lab.unit.name if lab.unit else None):
+                return lab
     return None
 
 
@@ -176,6 +198,9 @@ def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optio
         lab = find_lab(name, db) if name else None
         ref = _range_of(test)
         unit = (test.get("unit") or "").strip()
+        if lab is not None and not units_match(unit, lab.unit.name if lab.unit else None):
+            # A copy of this test kept for this unit, e.g. "Glucose (mmol/L)"
+            lab = find_lab_in_unit(name, unit, db) or lab
         lab_unit = lab.unit.name if lab is not None and lab.unit else None
         unit_mismatch = lab is not None and not units_match(unit, lab_unit)
 
