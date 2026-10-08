@@ -95,7 +95,7 @@ def configure() -> None:
     # Requests are logged by the app's middleware with an ID and timing, so uvicorn's own access
     # lines would only repeat them (and include query strings, which can hold search terms)
     logging.getLogger("uvicorn.access").disabled = True
-    for noisy in ("httpx", "httpcore", "anthropic", "botocore", "urllib3", "multipart", "pdfminer", "PIL"):
+    for noisy in ("httpx", "httpx2", "httpcore", "anthropic", "botocore", "urllib3", "multipart", "pdfminer", "PIL"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 

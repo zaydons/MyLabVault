@@ -1,0 +1,4 @@
+# Test tools (not part of the Docker image). Install with the app's requirements:
+#   pip install -r app/requirements.txt -r requirements-dev.txt
+pytest==8.4.2
+playwright==1.56.0
