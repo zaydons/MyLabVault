@@ -194,6 +194,7 @@ class PDFTestEdit(BaseModel):
     reference_range: Optional[str] = Field(None, max_length=100)
     lab_id: Optional[int] = None  # Save under this existing lab test
     new_lab: bool = False  # Save as a new lab test even if a saved one matches
+    date_collected: Optional[str] = Field(None, max_length=10)  # YYYY-MM-DD, for reports with several dates
 
 
 class PDFImportConfirm(BaseModel):

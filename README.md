@@ -13,6 +13,8 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 ### 📄 **PDF Lab Report Import**
 - **Automatic parsing**: Extracts test results from LabCorp, Quest and similar reports, including each result's reference range, the lab's flag (H/L), comments and fasting status
 - **Collection date detection**: Uses the date next to "Collected", "Collection Date" or "Date Drawn", never the date of birth
+- **Health summaries with several dates**: Patient-portal exports that list results from many draws in one table (such as an athenahealth *Ambulatory Summary* / *Data Portability* PDF) are read row by row; the review groups results under each collection date, and each date can be corrected before import
+- **Already saved results**: Results already saved with the same value and date are marked and left unticked, so re-importing an updated "all time" summary only adds what's new
 - **Provider matching**: The ordering provider on the report is selected automatically when it matches a saved provider, or offered as a one-click new provider
 - **Review next to the PDF**: Each report's results are shown beside the PDF, with High/Low status, so you can check them before anything is saved
 - **Correct before importing**: Edit any test name, result, unit or range, choose which saved test a row belongs to, or untick rows you don't want
@@ -147,6 +149,8 @@ MyLabVault/
 │   │   ├── routers/              # API and page routes (results, labs, vitals, pdf_import, search, setup, ...)
 │   │   └── services/
 │   │       ├── pdf_parser.py     # Built-in PDF parser
+│   │       ├── summary_parser.py # Results tables with several collection dates (health summaries)
+│   │       ├── import_review.py  # Review rows, test matching, reader comparison
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
 │   ├── templates/                # Jinja2 pages and components
@@ -236,6 +240,10 @@ GET  /api/update-check         # Whether a newer image has been published
 
 **The wrong collection date was detected**
 - Change the *Collection date* field on the review screen before importing. If no date was found, the field is highlighted and import waits until you enter one.
+- For a health summary with several dates, each date is a heading above its results; change it there.
+
+**A PDF has results from many dates (a health summary or results history)**
+- Upload it as usual. Results are grouped by collection date and each is saved on its own date. If the built-in reader doesn't recognise the layout, use *Re-scan with AI*, which also reads a date for each result.
 
 **A result was saved under the wrong test**
 - On the review screen, each row has a *Save as* choice: pick the right saved test, or *New test*. Results in a different unit than the saved test default to a new test.
