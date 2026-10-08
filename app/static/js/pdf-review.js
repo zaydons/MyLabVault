@@ -149,7 +149,8 @@
                 const canReview = preview.import_status === 'pending' ||
                     (preview.duplicate_warning.previous_tests_imported || 0) < (preview.total_tests_found || 0);
                 setProgress(key, `<span><i class="mdi mdi-content-duplicate" aria-hidden="true"></i> Already uploaded${when ? ` on ${esc(when)}` : ''}</span>
-                    ${canReview ? `<button type="button" class="btn btn-link btn-sm p-0 ml-2" data-review-import="${esc(preview.import_id)}">Review it</button>` : ''}`);
+                    ${canReview ? `<button type="button" class="btn btn-link btn-sm p-0 ml-2" data-review-import="${esc(preview.import_id)}">Review it</button>` : ''}
+                    <div class="small text-muted">Results from it are already saved, so it isn't read again. To read it again, delete it from the import history below (its saved results are deleted too) and upload it again.</div>`);
                 continue;
             }
             setProgress(key, `<span class="text-success-strong"><i class="mdi mdi-check-circle" aria-hidden="true"></i> ${plural(preview.total_tests_found, 'test')} found</span>`);
