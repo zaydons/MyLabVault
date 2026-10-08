@@ -286,6 +286,37 @@
       </div>
     </div>
 
+    <!-- Merge duplicates -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <section class="card" id="mergeDuplicates" aria-labelledby="mergeDuplicatesTitle">
+          <div class="card-header">
+            <h2 class="card-title" id="mergeDuplicatesTitle">
+              <i class="mdi mdi-merge mr-2" aria-hidden="true"></i>
+              Merge duplicates
+            </h2>
+          </div>
+          <div class="card-body">
+            <p>Find lab tests, panels, units and providers that are saved more than once (for example <em>Albumin</em> and <em>Albumin (g/dL)</em>), review each suggestion, and merge the ones you choose. Results move to the item you keep. <strong>Nothing changes until you confirm.</strong></p>
+            <div class="d-flex flex-wrap align-items-center">
+              <button type="button" class="btn btn-primary mr-2 mb-2" id="findDuplicates">
+                <i class="mdi mdi-magnify mr-1" aria-hidden="true"></i>Find duplicates</button>
+              <button type="button" class="btn btn-outline-primary mr-2 mb-2" id="aiDuplicates" hidden>
+                <i class="mdi mdi-robot-outline mr-1" aria-hidden="true"></i>Ask AI to review</button>
+            </div>
+            <small class="form-text text-muted" id="aiDuplicatesHelp" hidden>The AI review sends the names of your tests, panels, units and providers (not your results) to Claude in Amazon Bedrock.</small>
+            <div id="duplicatesStatus" class="mt-3" role="status" aria-live="polite"></div>
+            <div id="duplicatesList"></div>
+            <div class="mt-3" id="duplicatesActions" hidden>
+              <button type="button" class="btn btn-warning" id="mergeSelected" disabled>
+                <i class="mdi mdi-merge mr-1" aria-hidden="true"></i><span>Merge selected</span></button>
+              <small class="form-text text-muted">You'll see a summary to confirm before anything is merged.</small>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <!-- Data Management Section -->
     <div class="row mt-4">
       <div class="col-12">
@@ -328,6 +359,26 @@
 
   </div>
 </section>
+
+<!-- Merge duplicates confirmation -->
+<div class="modal fade" id="mergeConfirmModal" tabindex="-1" role="dialog" aria-labelledby="mergeConfirmTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="mergeConfirmTitle"><i class="mdi mdi-merge mr-2" aria-hidden="true"></i>Confirm merges</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p>These items will be merged. Everything that uses a merged item moves to the one you keep, and the merged items are deleted. This can't be undone; export your data first if you want a backup.</p>
+        <ul class="list-group" id="mergeConfirmList"></ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" id="mergeConfirmButton"><i class="mdi mdi-merge mr-1" aria-hidden="true"></i><span>Merge</span></button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Reset Confirmation Modal -->
 <div class="modal fade" id="resetConfirmationModal" tabindex="-1" role="dialog" aria-labelledby="resetConfirmationModalLabel" aria-hidden="true">
@@ -444,8 +495,11 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="/static/js/merge-duplicates.js"></script>
 <script>
 $(document).ready(function() {
+    MergeDuplicates.init();
+
     // Load system information on page load
     loadSystemInfo();
     

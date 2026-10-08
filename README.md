@@ -39,6 +39,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Multiple patients**: Keep results for family members separately and switch between them from the top bar
 - **Reference ranges**: Ranges can be low–high, greater than or less than, and each result can carry the range printed on its own report
 - **Search**: Press `/` anywhere to search for a test or page
+- **Merge duplicates**: *Settings → Merge duplicates* finds lab tests, panels, units and providers saved more than once (such as *Albumin* and *Albumin (g/dL)*, *mg/dl* and *mg/dL*, or a provider with and without a middle initial). With AI enabled, *Ask AI to review* also catches differently worded names. You tick each group to merge, choose which item to keep and its name, and confirm; tests in units that can't be compared are never merged
 - **Backup and restore**: Export and import all data, including uploaded PDFs, from Settings
 
 ### 🎨 **Interface**
@@ -50,7 +51,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 ### 🛡️ **Privacy**
 - **Self-hosted**: Data is stored in a SQLite database on your server
 - **No third-party page requests**: Scripts, styles, icons and fonts are bundled with the app, so pages work without internet access
-- **Outbound connections** happen only for optional AI parsing (Amazon Bedrock, off unless configured) and the update check (GitHub, every few hours; set `MYLABVAULT_UPDATE_CHECK=false` to turn it off)
+- **Outbound connections** happen only for optional AI features (Amazon Bedrock, off unless configured: PDF reading, and the duplicate review, which sends only the names of your tests, panels, units and providers) and the update check (GitHub, every few hours; set `MYLABVAULT_UPDATE_CHECK=false` to turn it off)
 - **No login yet**: Anyone who can reach the app on your network can open it, so keep it on a trusted LAN
 
 ## 🚀 Quick Start
@@ -151,6 +152,7 @@ MyLabVault/
 │   │       ├── pdf_parser.py     # Built-in PDF parser
 │   │       ├── summary_parser.py # Results tables with several collection dates (health summaries)
 │   │       ├── import_review.py  # Review rows, test matching, reader comparison
+│   │       ├── cleanup.py        # Duplicate suggestions and merging
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
 │   ├── templates/                # Jinja2 pages and components
@@ -222,6 +224,9 @@ GET  /api/pdf/history          # Import history
 GET  /api/labs/                # Lab test definitions
 GET  /api/vitals/              # Vitals (filter with patient_id, vital_type)
 GET  /api/search/?q=           # Quick search for tests and pages
+GET  /api/cleanup/suggestions  # Likely duplicate tests, panels, units and providers
+POST /api/cleanup/suggestions/ai  # The same, plus an AI review of the names
+POST /api/cleanup/merge        # Merge the groups the user confirmed
 GET  /api/patients/            # Patients
 GET  /api/providers/           # Providers
 POST /api/settings/export      # Export all data
@@ -244,6 +249,9 @@ GET  /api/update-check         # Whether a newer image has been published
 
 **A PDF has results from many dates (a health summary or results history)**
 - Upload it as usual. Results are grouped by collection date and each is saved on its own date. If the built-in reader doesn't recognise the layout, use *Re-scan with AI*, which also reads a date for each result.
+
+**The same test appears more than once (e.g. "Albumin" and "Albumin (g/dL)")**
+- Use *Settings → Merge duplicates*: tick the group, choose the test to keep and its name, and confirm. All results move to the kept test.
 
 **A result was saved under the wrong test**
 - On the review screen, each row has a *Save as* choice: pick the right saved test, or *New test*. Results in a different unit than the saved test default to a new test.
