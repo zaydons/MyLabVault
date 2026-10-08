@@ -183,6 +183,76 @@ def _to_parser_test(test: ExtractedTest, known_names: Dict[str, str]) -> Dict[st
     }
 
 
+async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str, tool_description: str,
+                    schema, input_schema: Optional[Dict[str, Any]] = None, max_tokens: int = 16000):
+    """Ask Claude (through Bedrock) to answer by calling one tool, and return its input validated as `schema`.
+
+    Retries once when the model doesn't return a valid tool call. Raises AIParseError with a
+    message suitable for the user on any failure.
+    """
+    if not is_enabled():
+        raise AIParseError("AI is not enabled (AWS credentials and AWS_REGION are not set)")
+    tool = {"name": tool_name, "description": tool_description,
+            "input_schema": input_schema or _inline_refs(schema.model_json_schema())}
+    # Bedrock runtime (InvokeModel); credentials and region come from the standard AWS environment variables.
+    client = anthropic.AsyncAnthropicBedrock(timeout=180.0)
+    model = get_model()
+    try:
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            response = await client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                tools=[tool],
+                tool_choice={"type": "auto"},
+                messages=messages,
+            )
+            if response.stop_reason == "refusal":
+                raise AIParseError("The AI service declined to process this request")
+            if response.stop_reason == "max_tokens":
+                raise AIParseError("The request is too long for the AI service")
+            tool_input = next(
+                (block.input for block in response.content
+                 if block.type == "tool_use" and block.name == tool_name),
+                None,
+            )
+            if tool_input is not None:
+                try:
+                    return schema.model_validate(tool_input)
+                except ValidationError as e:
+                    logger.warning(f"AI attempt {attempt}: invalid tool input ({e.error_count()} errors)")
+            else:
+                logger.warning(f"AI attempt {attempt}: no {tool_name} call in response")
+    except AIParseError:
+        raise
+    except anthropic.AuthenticationError:
+        raise AIParseError("AWS credentials were rejected")
+    except anthropic.PermissionDeniedError:
+        raise AIParseError("AWS credentials are not allowed to use this model (check Bedrock model access and the IAM policy)")
+    except anthropic.NotFoundError:
+        raise AIParseError(f"Model {model} is not available in this AWS region")
+    except anthropic.BadRequestError as e:
+        # Bedrock reports an unknown model ID or a missing inference profile as a 400 ValidationException.
+        if "model identifier" in str(e) or "inference profile" in str(e):
+            raise AIParseError(f"Model {model} is not a valid Bedrock model or inference profile ID for this region")
+        logger.error(f"AI request failed: HTTP 400 (request {e.request_id})")
+        raise AIParseError("The AI service returned an error")
+    except anthropic.RateLimitError:
+        raise AIParseError("Bedrock rate limit reached, try again shortly")
+    except anthropic.APIStatusError as e:
+        logger.error(f"AI request failed: HTTP {e.status_code} (request {e.request_id})")
+        raise AIParseError("The AI service returned an error")
+    except anthropic.APIConnectionError:
+        raise AIParseError("Could not reach the AI service")
+    except Exception as e:
+        # e.g. botocore credential/signing errors
+        logger.error(f"AI request failed: {type(e).__name__}")
+        raise AIParseError("AI request failed")
+    finally:
+        await client.close()
+    raise AIParseError("The AI service returned an invalid result")
+
+
 async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[str, Any]:
     """Parse a lab report PDF with Claude.
 
@@ -217,73 +287,15 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
             },
         ],
     }]
-    tool = {
-        "name": TOOL_NAME,
-        "description": "Record every test result extracted from the lab report.",
-        "input_schema": TOOL_INPUT_SCHEMA,
-    }
-
-    # Bedrock runtime (InvokeModel); credentials and region come from the standard AWS environment variables.
-    client = anthropic.AsyncAnthropicBedrock(timeout=180.0)
-    report = None
+    report = await call_tool(
+        system=SYSTEM_PROMPT,
+        messages=messages,
+        tool_name=TOOL_NAME,
+        tool_description="Record every test result extracted from the lab report.",
+        schema=ExtractedReport,
+        input_schema=TOOL_INPUT_SCHEMA,
+    )
     model = get_model()
-    try:
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            response = await client.messages.create(
-                model=model,
-                max_tokens=16000,
-                system=SYSTEM_PROMPT,
-                tools=[tool],
-                tool_choice={"type": "auto"},
-                messages=messages,
-            )
-            if response.stop_reason == "refusal":
-                raise AIParseError("The AI service declined to process this report")
-            if response.stop_reason == "max_tokens":
-                raise AIParseError("Report is too long for AI parsing")
-            tool_input = next(
-                (block.input for block in response.content
-                 if block.type == "tool_use" and block.name == TOOL_NAME),
-                None,
-            )
-            if tool_input is not None:
-                try:
-                    report = ExtractedReport.model_validate(tool_input)
-                    break
-                except ValidationError as e:
-                    logger.warning(f"AI parser attempt {attempt}: invalid tool input ({e.error_count()} errors)")
-            else:
-                logger.warning(f"AI parser attempt {attempt}: no {TOOL_NAME} call in response")
-    except AIParseError:
-        raise
-    except anthropic.AuthenticationError:
-        raise AIParseError("AWS credentials were rejected")
-    except anthropic.PermissionDeniedError:
-        raise AIParseError("AWS credentials are not allowed to use this model (check Bedrock model access and the IAM policy)")
-    except anthropic.NotFoundError:
-        raise AIParseError(f"Model {model} is not available in this AWS region")
-    except anthropic.BadRequestError as e:
-        # Bedrock reports an unknown model ID or a missing inference profile as a 400 ValidationException.
-        if "model identifier" in str(e) or "inference profile" in str(e):
-            raise AIParseError(f"Model {model} is not a valid Bedrock model or inference profile ID for this region")
-        logger.error(f"AI parsing failed: HTTP 400 (request {e.request_id})")
-        raise AIParseError("The AI service returned an error")
-    except anthropic.RateLimitError:
-        raise AIParseError("Bedrock rate limit reached, try again shortly")
-    except anthropic.APIStatusError as e:
-        logger.error(f"AI parsing failed: HTTP {e.status_code} (request {e.request_id})")
-        raise AIParseError("The AI service returned an error")
-    except anthropic.APIConnectionError:
-        raise AIParseError("Could not reach the AI service")
-    except Exception as e:
-        # e.g. botocore credential/signing errors
-        logger.error(f"AI parsing failed: {type(e).__name__}")
-        raise AIParseError("AI parsing failed")
-    finally:
-        await client.close()
-
-    if report is None:
-        raise AIParseError("AI parsing returned an invalid result")
 
     tests = [_to_parser_test(t, known_names) for t in report.tests if t.name and t.name.strip()]
     row_dates = sorted({t["date_collected"] for t in tests if t["date_collected"]})

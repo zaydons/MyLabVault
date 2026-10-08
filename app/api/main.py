@@ -22,7 +22,7 @@ except Exception as e:
     print(f"❌ Database imports failed: {e}")
     DB_IMPORTS_SUCCESS = False
 
-from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients, vitals, search, setup
+from .routers import providers, panels, labs, results, pdf_import, units, settings, pages, patients, vitals, search, setup, cleanup
 
 def initialize_database():
     """Create tables, run migrations and seed essential data."""
@@ -112,6 +112,7 @@ app.include_router(pdf_import.router, prefix="/api/pdf", tags=["pdf-import"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(setup.router, prefix="/api/setup", tags=["setup"])
+app.include_router(cleanup.router, prefix="/api/cleanup", tags=["cleanup"])
 
 # Until the first patient is named, page requests go to the welcome screen
 app.middleware("http")(setup.welcome_redirect_middleware)
