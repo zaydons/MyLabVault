@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 import pypdf
 from werkzeug.utils import secure_filename
 from ..database import get_db
+from .. import paths
 from ..models import PDFImportLog, LabResult, Lab, Provider, Patient, Panel, Unit, ImportTemplate
 from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
@@ -28,7 +29,7 @@ router = APIRouter()
 
 # Ensure uploads directory exists
 # Use absolute path to handle Docker working directory differences
-UPLOADS_DIR = Path("/app/data/uploads/pdfs")
+UPLOADS_DIR = paths.UPLOADS_DIR
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Titles and credentials ignored when comparing provider names.
@@ -902,7 +903,7 @@ async def get_pdf_file(filename: str, download: bool = False, db: Session = Depe
             actual_file_path = Path("/app") / import_log.file_path
 
             # Validate the database file path is also within allowed directories
-            app_data_dir = Path("/app/data")
+            app_data_dir = paths.DATA_DIR
             actual_file_path = validate_file_path(actual_file_path, app_data_dir)
 
             if actual_file_path.exists():

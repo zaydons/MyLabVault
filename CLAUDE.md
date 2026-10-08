@@ -3,6 +3,7 @@
 ## Repository rules
 - **Always open a pull request and merge it** for every change. Work on a branch, push it, open the PR against `main`, and merge it once your checks pass. Every push to `main` publishes a new Docker image.
 - **Track work in GitHub issues.** Open an issue for each piece of outstanding work (bugs, code-scanning alerts, planned features). A PR that resolves one says `Closes #<number>` in its description so merging it closes the issue; mention the issue in commits too.
+- **Test every change.** Add or update tests in `tests/` with each feature or fix and run `python -m pytest` before pushing (see `tests/README.md`). CI runs them on every PR, and an image is only published when they pass. Never commit real lab reports or health data as fixtures; generate test PDFs in `tests/pdfs.py`.
 - **Keep README.md up to date.** When a change affects anything the README describes (features, setup, configuration, endpoints, project structure, data and backups, troubleshooting), update `README.md` in the same PR. Update `deploy/truenas/README.md` too when the change affects running the app on TrueNAS.
 
 ## Project notes

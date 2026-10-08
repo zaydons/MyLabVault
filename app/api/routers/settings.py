@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from .. import paths
 from ..logging_setup import audit
 from .vitals import check_unit_preferences
 from .setup import reset_setup_state
@@ -186,7 +187,7 @@ def reset_data(db: Session = Depends(get_db)):
         db.commit()
 
         # Clean up uploaded PDF files
-        pdf_dir = Path("/app/data/uploads/pdfs")
+        pdf_dir = paths.UPLOADS_DIR
         if pdf_dir.exists():
             for pdf_file in pdf_dir.glob("*.pdf"):
                 try:
@@ -242,7 +243,7 @@ def get_data_counts(db: Session = Depends(get_db)):
         pdf_imports_count = db.query(PDFImportLog).count()
 
         # Count PDF files in the uploads directory
-        pdf_dir = Path("/app/data/uploads/pdfs")
+        pdf_dir = paths.UPLOADS_DIR
         pdf_files_count = 0
         if pdf_dir.exists():
             pdf_files_count = len(list(pdf_dir.glob("*.pdf")))
@@ -314,7 +315,7 @@ def get_export_preview(
         # Count PDF files
         pdf_files_count = 0
         if config.include_pdfs:
-            pdf_dir = Path("/app/data/uploads/pdfs")
+            pdf_dir = paths.UPLOADS_DIR
             if pdf_dir.exists():
                 pdf_files_count = len(list(pdf_dir.glob("*.pdf")))
         
@@ -370,7 +371,7 @@ def export_data(
                 zip_file.writestr("data.json", json.dumps(export_data, indent=2, default=str))
                 
                 # Add PDF files
-                pdf_dir = Path("/app/data/uploads/pdfs")
+                pdf_dir = paths.UPLOADS_DIR
                 if pdf_dir.exists():
                     for pdf_file in pdf_dir.glob("*.pdf"):
                         try:
@@ -858,7 +859,7 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
             if start_from_scratch:
                 db.query(PatientModel).delete()
                 # Also clear PDF files directory
-                pdf_dir = Path("/app/data/uploads/pdfs")
+                pdf_dir = paths.UPLOADS_DIR
                 if pdf_dir.exists():
                     shutil.rmtree(pdf_dir)
                     pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -1000,7 +1001,7 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
         
         # Import PDF files
         if pdf_files:
-            pdf_dir = Path("/app/data/uploads/pdfs")
+            pdf_dir = paths.UPLOADS_DIR
             pdf_dir.mkdir(parents=True, exist_ok=True)
             
             for filename, content in pdf_files.items():

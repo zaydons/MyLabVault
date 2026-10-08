@@ -19,8 +19,13 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/mylabvault
 
 jobs:
+  tests:
+    name: Tests
+    uses: ./.github/workflows/test.yml
+
   build:
     name: Build & Push Docker Image
+    needs: tests    # an image is only published when the tests pass
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:

@@ -222,7 +222,7 @@ function renderLatestCards() {
             <div class="col-lg-3 col-md-4 col-sm-6">
                 <div class="small-box ${isOutsideNormal(latest) ? 'bg-warning' : 'bg-light border'}">
                     <div class="inner">
-                        <h4 class="mb-1">${escapeHtml(formatReading(latest))}</h4>
+                        <p class="h4 mb-1">${escapeHtml(formatReading(latest))}</p>
                         <p class="mb-0">${escapeHtml(vitalTypes[type].label)}${change}</p>
                         ${type === 'blood_pressure' && latest.value2 ? `<div class="small font-weight-bold">${escapeHtml(bpCategory(latest.value, latest.value2).name)}</div>` : ''}
                         <small class="text-muted">${escapeHtml(formatDate(latest.measured_at))}</small>

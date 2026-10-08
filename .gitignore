@@ -72,3 +72,7 @@ Thumbs.db
 # Misc
 docs/
 
+
+# Test tools installed by npm (axe-core for browser tests)
+tests/.node/
+.pytest_cache/

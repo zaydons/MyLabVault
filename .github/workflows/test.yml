@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  pull_request:
+  workflow_call:      # build.yml runs these before publishing an image
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+        cache-dependency-path: |
+          app/requirements.txt
+          requirements-dev.txt
+
+    - name: Install dependencies
+      run: pip install -r app/requirements.txt -r requirements-dev.txt
+
+    - name: Install browser and accessibility checker
+      run: |
+        python -m playwright install --with-deps chromium
+        npm install --no-audit --no-fund --prefix tests/.node axe-core@4.10.2
+
+    - name: Run tests
+      run: python -m pytest

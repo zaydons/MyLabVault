@@ -165,6 +165,7 @@ MyLabVault/
 │   │   └── vendor/               # Bundled front-end libraries and fonts
 │   ├── alembic/                  # Database migrations
 │   └── data/                     # Database and uploaded PDFs (mounted volume)
+├── tests/                        # API and browser tests (pytest, Playwright, axe)
 ├── deploy/truenas/               # TrueNAS SCALE app and guide
 ├── scripts/vendor-assets.sh      # Re-downloads the bundled front-end libraries
 ├── docker-compose.yml            # Local development
@@ -224,6 +225,18 @@ ERROR   app        Unhandled error in POST /api/pdf/upload (error ID 5c2e9f10) r
 - **What's not logged**: results, health values, names and search terms. Lines contain IDs, counts and kinds of change; error messages can mention a file or test name.
 - **AI**: each Bedrock call logs its duration and token use.
 - **Settings**: `MYLABVAULT_LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`; default `INFO`) and `MYLABVAULT_LOG_FORMAT=json` for one JSON object per line (for Loki, Graylog and similar).
+
+### Tests
+API and browser tests live in `tests/` and run on every pull request; an image is only published when they pass.
+
+```bash
+pip install -r app/requirements.txt -r requirements-dev.txt
+python -m playwright install chromium
+npm install --prefix tests/.node axe-core@4.10.2
+python -m pytest
+```
+
+See [tests/README.md](tests/README.md) for what's covered and how test data is generated.
 
 ### Updating bundled front-end libraries
 Versions are pinned in `scripts/vendor-assets.sh`. Change a version, run the script and test the UI; it rewrites `app/static/vendor` and its `SHA256SUMS`.
