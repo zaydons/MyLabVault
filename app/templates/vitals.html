@@ -128,6 +128,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="/static/js/vital-units.js"></script>
 <script>
 let vitalTypes = {};
 let vitals = [];
@@ -142,19 +143,23 @@ function toBase(type, value, unit) {
     const u = vitalTypes[type].units[unit] || { factor: 1, offset: 0 };
     return value * u.factor + u.offset;
 }
-function fromBase(type, value, unit) {
-    const u = vitalTypes[type].units[unit] || { factor: 1, offset: 0 };
-    return (value - u.offset) / u.factor;
-}
-function roundValue(value) {
-    return Math.round(value * 10) / 10;
-}
 function isPaired(type) {
     return !!vitalTypes[type].value2_label;
 }
+// Readings are shown in the preferred unit (Settings → General → Units), whatever they were entered in
+function preferredUnit(type) {
+    return VitalUnits.preferred(vitalTypes, type);
+}
+function inPreferred(type, value, unit) {
+    return VitalUnits.round(vitalTypes, type, preferredUnit(type), VitalUnits.convert(vitalTypes, type, value, unit, preferredUnit(type)));
+}
 function formatReading(v) {
-    const unit = v.unit ? ` ${v.unit}` : '';
-    return isPaired(v.vital_type) ? `${roundValue(v.value)}/${roundValue(v.value2)}${unit}` : `${roundValue(v.value)}${unit}`;
+    return VitalUnits.format(vitalTypes, v.vital_type, v.value, isPaired(v.vital_type) ? v.value2 : null, v.unit);
+}
+// "entered as 70 kg" when the preferred unit differs from the one it was recorded in
+function enteredAs(v) {
+    if (!v.unit || v.unit === preferredUnit(v.vital_type)) return '';
+    return VitalUnits.format(vitalTypes, v.vital_type, v.value, isPaired(v.vital_type) ? v.value2 : null, v.unit, v.unit);
 }
 function formatDate(iso) {
     const d = new Date(iso);
@@ -163,9 +168,10 @@ function formatDate(iso) {
 function normalHintText(type) {
     const n = vitalTypes[type].normal;
     const base = Object.keys(vitalTypes[type].units)[0];
+    const unit = preferredUnit(type);
     if (!n) return '';
-    if (isPaired(type)) return `Typical adult target: below ${n.high}/${n.high2} ${base}`;
-    return `Typical adult range: ${n.low}–${n.high} ${base}`;
+    if (isPaired(type)) return `Typical adult target: below ${inPreferred(type, n.high, base)}/${inPreferred(type, n.high2, base)} ${unit}`;
+    return `Typical adult range: ${inPreferred(type, n.low, base)}–${inPreferred(type, n.high, base)} ${unit}`;
 }
 function isOutsideNormal(v) {
     const n = vitalTypes[v.vital_type].normal;
@@ -203,11 +209,13 @@ function renderLatestCards() {
         let change = '';
         if (entries.length > 1) {
             const prev = entries[1];
-            // Compare in the latest entry's unit, even if the previous one used another unit
-            const diff = latest.value - fromBase(type, toBase(type, prev.value, prev.unit), latest.unit);
-            if (Math.abs(diff) >= 0.05) {
+            // Compared in the preferred unit, whatever units the two readings were entered in
+            const unit = preferredUnit(type);
+            const diff = VitalUnits.round(vitalTypes, type, unit,
+                VitalUnits.convert(vitalTypes, type, latest.value, latest.unit, unit) - VitalUnits.convert(vitalTypes, type, prev.value, prev.unit, unit));
+            if (diff !== 0) {
                 const sign = diff > 0 ? '+' : '';
-                change = `<small class="text-muted ml-1">${escapeHtml(sign + roundValue(diff))} since previous</small>`;
+                change = `<small class="text-muted ml-1">${escapeHtml(sign + diff + ' ' + unit)} since previous</small>`;
             }
         }
         html += `
@@ -245,10 +253,10 @@ function renderChart() {
     if (!type) return;
 
     const entries = vitals.filter(v => v.vital_type === type).slice().reverse();  // oldest first
-    const displayUnit = entries[entries.length - 1].unit;  // chart in the unit of the latest entry
+    const displayUnit = preferredUnit(type);
     // Points sit on a real time axis so uneven gaps between readings look uneven
     const times = entries.map(v => new Date(v.measured_at).getTime());
-    const values = entries.map((v, i) => ({ x: times[i], y: roundValue(fromBase(type, toBase(type, v.value, v.unit), displayUnit)) }));
+    const values = entries.map((v, i) => ({ x: times[i], y: inPreferred(type, v.value, v.unit) }));
     const datasets = [{
         label: (isPaired(type) ? vitalTypes[type].value_label : vitalTypes[type].label) + ` (${displayUnit})`,
         data: values,
@@ -263,7 +271,7 @@ function renderChart() {
     if (isPaired(type)) {
         datasets.push({
             label: `${vitalTypes[type].value2_label} (${displayUnit})`,
-            data: entries.map((v, i) => ({ x: times[i], y: roundValue(v.value2) })),
+            data: entries.map((v, i) => ({ x: times[i], y: inPreferred(type, v.value2, v.unit) })),
             borderColor: '#6f42c1',
             pointBackgroundColor: '#6f42c1',
             borderDash: [6, 4],
@@ -330,6 +338,7 @@ function renderHistory() {
             <td>${escapeHtml(formatDate(v.measured_at))}</td>
             <td>${escapeHtml(vitalLabel(v))}</td>
             <td>${escapeHtml(formatReading(v))}
+                ${enteredAs(v) ? `<span class="small text-muted d-block">entered as ${escapeHtml(enteredAs(v))}</span>` : ''}
                 ${readingBadge(v)}</td>
             <td class="text-muted">${escapeHtml(v.notes || '')}</td>
             <td class="text-right text-nowrap">
@@ -367,9 +376,8 @@ function updateFormForType(selectedUnit) {
         option.textContent = unit;
         unitSelect.appendChild(option);
     });
-    // Default to the unit last used for this type
-    const lastUsed = vitals.find(v => v.vital_type === type);
-    unitSelect.value = selectedUnit || (lastUsed ? lastUsed.unit : Object.keys(config.units)[0]);
+    // A new reading defaults to the preferred unit; an edit keeps the unit it was entered in
+    unitSelect.value = selectedUnit || preferredUnit(type);
 }
 
 function toLocalInputValue(date) {

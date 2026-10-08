@@ -34,7 +34,8 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 ### ❤️ **Vitals**
 - **Record vitals**: Log weight, blood pressure and heart rate in one form from the dashboard or the Vitals page
 - **Blood pressure categories**: Readings are labelled Normal, Elevated, Stage 1, Stage 2 or Hypertensive crisis (AHA adult categories)
-- **More measurements**: Height, temperature, oxygen saturation, respiratory rate and blood glucose, with unit conversion (lb/kg, °F/°C, mg/dL/mmol/L)
+- **More measurements**: Height, temperature, oxygen saturation, respiratory rate and blood glucose
+- **Your units**: Choose lb or kg, feet and inches or cm, °F or °C and mg/dL or mmol/L (or *US units* / *Metric units* in one click) in *Settings → General*. Every reading, chart, change and typical range is shown in those units and new readings default to them; readings keep the unit they were entered in, so switching never alters your data
 
 ### 🏥 **Health Data Management**
 - **Multiple patients**: Keep results for family members separately and switch between them from the top bar
@@ -246,6 +247,7 @@ POST /api/pdf/batch-confirm    # Import several reports at once
 GET  /api/pdf/history          # Import history
 GET  /api/labs/                # Lab test definitions
 GET  /api/vitals/              # Vitals (filter with patient_id, vital_type)
+GET  /api/vitals/types         # Vital types, their units and the preferred unit for each
 GET  /api/search/?q=           # Quick search for tests and pages
 GET  /api/cleanup/suggestions  # Likely duplicate tests, panels, units and providers
 POST /api/cleanup/suggestions/ai  # The same, plus an AI review of the names

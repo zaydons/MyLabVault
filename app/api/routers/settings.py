@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..logging_setup import audit
+from .vitals import check_unit_preferences
 from .setup import reset_setup_state
 from ..models import (
     LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel,
@@ -93,8 +94,12 @@ def update_user_settings(
     """Update user settings in database."""
     try:
         update_data = {k: v for k, v in settings_update.model_dump().items() if v is not None}
+        if "vital_units" in update_data:
+            update_data["vital_units"] = check_unit_preferences(update_data["vital_units"])
         settings = UserSettingsModel.update_settings(db, **update_data)
         return UserSettings.model_validate(settings.to_dict())
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,

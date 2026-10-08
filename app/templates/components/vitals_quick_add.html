@@ -82,10 +82,10 @@ function openQuickVitals() {
     document.getElementById('quickVitalsError').classList.add('d-none');
     document.getElementById('qvBpCategory').textContent = '';
     document.getElementById('qvWhen').value = localDateTimeValue(new Date());
-    try {
-        const unit = localStorage.getItem('mlv.weightUnit');
-        if (unit) document.getElementById('qvWeightUnit').value = unit;
-    } catch (e) { /* storage unavailable */ }
+    // Weight defaults to the preferred unit (Settings → General → Units)
+    fetch('/api/vitals/types').then(r => r.ok ? r.json() : null).then(types => {
+        if (types && types.weight && types.weight.preferred_unit) document.getElementById('qvWeightUnit').value = types.weight.preferred_unit;
+    }).catch(() => { /* keep the form's default */ });
     $('#quickVitalsModal').modal('show');
 }
 
@@ -152,7 +152,6 @@ async function saveQuickVitals(event) {
             }
             saved.push(labels[entry.vital_type]);
         }
-        try { localStorage.setItem('mlv.weightUnit', val('qvWeightUnit')); } catch (e) { /* storage unavailable */ }
         $('#quickVitalsModal').modal('hide');
         if (typeof window.onQuickVitalsSaved === 'function') window.onQuickVitalsSaved();
     } catch (error) {
