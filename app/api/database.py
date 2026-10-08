@@ -4,6 +4,9 @@ import os
 from pathlib import Path
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Auto-configure database URL with fallback to local SQLite
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -41,13 +44,15 @@ def run_migrations():
         alembic_cfg_path = app_dir / "alembic.ini"
         
         if not alembic_cfg_path.exists():
-            print("⚠️  No alembic.ini found, skipping migrations")
+            logger.warning("No alembic.ini found, skipping migrations")
             return False
         
-        print("🔧 Running database migrations...")
+        logger.info("Running database migrations")
         
         # Create Alembic configuration
         alembic_cfg = Config(str(alembic_cfg_path))
+        alembic_cfg.set_main_option("script_location", str(app_dir / "alembic"))
+        alembic_cfg.attributes["app_logging"] = True  # keep the app's logging configuration
         
         # Ensure alembic_version table exists for existing databases
         try:
@@ -75,20 +80,20 @@ def run_migrations():
                         # Alembic migrations are designed to be safe for existing schemas
                         conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('001')"))
                         conn.commit()
-                        print("✅ Marked existing database to start at migration 001")
+                        logger.info("Marked existing database to start at migration 001")
         except Exception as e:
-            print(f"⚠️  Could not check/create alembic_version: {e}")
+            logger.warning(f"Could not check/create alembic_version: {e}")
         
         # Run migrations
         command.upgrade(alembic_cfg, "head")
-        print("✅ Database migrations completed successfully")
+        logger.info("Database migrations completed")
         return True
         
     except ImportError:
-        print("⚠️  Alembic not available, skipping migrations")
+        logger.warning("Alembic not available, skipping migrations")
         return False
     except Exception as e:
-        print(f"❌ Migration failed: {e}")
+        logger.exception("Database migration failed")
         return False
 
 
@@ -110,10 +115,10 @@ def init_essential_data():
         patient = Patient(id=1, name="Default Patient")
         db.add(patient)
         db.commit()
-        print("✅ Default patient initialized successfully!")
+        logger.info("Created the default patient")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Error initializing default patient: {e}")
+        logger.exception("Creating the default patient failed")
     finally:
         db.close()

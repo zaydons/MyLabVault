@@ -148,6 +148,7 @@ MyLabVault/
 │   │   ├── models.py             # SQLAlchemy models
 │   │   ├── schemas.py            # Request/response schemas
 │   │   ├── build_info.py         # Build version and update check
+│   │   ├── logging_setup.py      # Log format, request IDs, audit lines
 │   │   ├── routers/              # API and page routes (results, labs, vitals, pdf_import, search, setup, ...)
 │   │   └── services/
 │   │       ├── pdf_parser.py     # Built-in PDF parser
@@ -201,6 +202,26 @@ docker compose restart mylabvault     # Restart
 docker compose down                   # Stop
 docker exec -it mylabvault /bin/sh    # Shell
 ```
+
+### Logs
+The container log has one line per event:
+
+```
+INFO    app        MyLabVault 2026.10.08.44 (a1b2c3d) ready: database=/app/data/mylabvault.db ai=on model=... update_check=on log_level=INFO
+INFO    request    POST /api/pdf/confirm 200 412ms req=3f9a1c2e
+INFO    audit      import.confirmed import_id=12 saved=37 new_tests=0 dates=3 provider_id=2 patient_id=1 req=3f9a1c2e
+WARNING app        POST /api/pdf/confirm refused (400): report.pdf: Choose the provider for report.pdf. req=8d01b7aa
+ERROR   app        Unhandled error in POST /api/pdf/upload (error ID 5c2e9f10) req=5c2e9f10
+  File "/app/api/routers/pdf_import.py", line 240, in upload_pdf
+    ...
+```
+
+- **request**: every page and API call, with its status and time (static files and health checks only at `DEBUG`).
+- **audit**: every change. Imports, merges, data import/export/reset and deletions get their own line (`import.uploaded`, `import.confirmed`, `import.deleted`, `cleanup.merged`, `data.imported`, `data.exported`, `data.reset`, ...); other edits are logged as `api.change` with the route and IDs.
+- **Errors**: a refused request logs why; an unexpected error logs its traceback and an error ID, which is also shown in the app's error message so the two can be matched. Each response carries the same ID in its `X-Request-ID` header.
+- **What's not logged**: results, health values, names and search terms. Lines contain IDs, counts and kinds of change; error messages can mention a file or test name.
+- **AI**: each Bedrock call logs its duration and token use.
+- **Settings**: `MYLABVAULT_LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`; default `INFO`) and `MYLABVAULT_LOG_FORMAT=json` for one JSON object per line (for Loki, Graylog and similar).
 
 ### Updating bundled front-end libraries
 Versions are pinned in `scripts/vendor-assets.sh`. Change a version, run the script and test the UI; it rewrites `app/static/vendor` and its `SHA256SUMS`.
@@ -262,6 +283,9 @@ GET  /api/update-check         # Whether a newer image has been published
 
 **Start over with an empty database** (⚠️ deletes all data)
 - Use *Settings → Reset All Data*, or stop the app and delete `data/mylabvault.db`.
+
+**An error message shows an error ID**
+- Search the log for it: `docker logs mylabvault 2>&1 | grep -A 15 <error ID>` shows the request and the traceback. On TrueNAS, open the app's **Logs**.
 
 **The application doesn't start**
 ```bash

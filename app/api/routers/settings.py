@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from ..logging_setup import audit
 from .setup import reset_setup_state
 from ..models import (
     LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel,
@@ -160,6 +161,8 @@ def reset_data(db: Session = Depends(get_db)):
     try:
         # Delete all data in correct dependency order to avoid foreign key constraint errors
         # 1. First delete LabResults and Vitals (depend on Lab, Patient, Provider)
+        deleted = {"results": db.query(LabResultModel).count(), "vitals": db.query(VitalModel).count(),
+                   "tests": db.query(LabModel).count(), "imports": db.query(PDFImportLog).count()}
         db.query(LabResultModel).delete()
         db.query(VitalModel).delete()
         db.commit()  # Commit this deletion first
@@ -207,6 +210,7 @@ def reset_data(db: Session = Depends(get_db)):
         # Clear all cache after data reset
         from ..utils.cache import api_cache
         api_cache.clear()
+        audit("data.reset", **deleted)
 
         return APIResponse(
             success=True,
@@ -344,6 +348,8 @@ def export_data(
     try:
         # Generate export data
         export_data = _generate_export_data(config, db)
+        audit("data.exported", results=len(export_data.get('lab_results', [])), vitals=len(export_data.get('vitals', [])),
+              patients=len(export_data.get('patients', [])), include_pdfs=config.include_pdfs)
         
         # Create filename
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -538,6 +544,9 @@ def import_data(
         
         # Perform the import
         import_result = _perform_data_import(export_data, pdf_files, merge_data, start_from_scratch, db)
+        audit("data.imported", mode="start_from_scratch" if start_from_scratch else "merge" if merge_data else "replace",
+              records=import_result['imported_records'], pdfs=import_result['imported_pdfs'],
+              matched_existing=import_result['conflicts_resolved'], warnings=len(import_result['warnings']))
         
         return ImportResponse(
             success=True,

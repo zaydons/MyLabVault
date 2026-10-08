@@ -92,6 +92,10 @@ Then go to **Apps → mylabvault** and click **Stop**, then **Start**. Your data
 
 To pin a specific build instead of `:latest`, use its version or commit tag, such as `ghcr.io/zaydons/mylabvault:2026.10.07.32` or `ghcr.io/zaydons/mylabvault:<commit-sha>`.
 
+## Logs
+
+Open **Apps → mylabvault → Logs** (the container log). Each line is one event: `request` lines for every page and API call, `audit` lines for every change (imports, merges, deletions, data import/export/reset), and errors with their cause. When the app shows an error ID, search the log for it. To see more detail, add `MYLABVAULT_LOG_LEVEL: "DEBUG"` to the app's environment; `MYLABVAULT_LOG_FORMAT: "json"` writes JSON lines for a log collector. Results, health values and names are never written to the log. See [Logs](../../README.md#logs) for the format.
+
 ## Backups
 
 - Set up a **Periodic Snapshot Task** for the dataset (**Data Protection** → **Periodic Snapshot Tasks**). SQLite is a single file, so snapshots are a simple way to roll back.

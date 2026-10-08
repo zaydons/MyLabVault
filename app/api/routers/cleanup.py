@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..services import ai_parser, cleanup
 from ..services.ai_parser import AIParseError
+from ..logging_setup import audit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -65,10 +66,13 @@ def merge(batch: MergeBatch, db: Session = Depends(get_db)):
     except cleanup.MergeError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception:
+    except Exception as e:
         db.rollback()
-        logger.exception("Merging duplicates failed")
-        raise HTTPException(status_code=500, detail="Merging failed; nothing was changed.")
+        raise HTTPException(status_code=500, detail="Merging failed; nothing was changed.") from e
+
+    for m, d in zip(batch.merges, done):
+        audit("cleanup.merged", kind=m.kind, keep_id=d["keep_id"], merged_ids=[i for i in m.merge_ids if i != m.keep_id],
+              moved=d["moved"], renamed=bool(m.name and m.name.strip()))
 
     from ..utils.cache import api_cache
     api_cache.clear()

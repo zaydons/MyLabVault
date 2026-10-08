@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.dirname(__file__) + '/..')
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
+# Interpret the config file for Python logging, except when the app runs the migrations: the app
+# has configured logging already, and fileConfig would switch off every logger that exists
+if config.config_file_name is not None and not config.attributes.get("app_logging"):
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
