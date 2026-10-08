@@ -9,6 +9,8 @@ import pypdf.errors
 from dateutil import parser as date_parser
 import pdfplumber
 
+from . import summary_parser
+
 class PDFParser:
     """
     Enhanced PDF parser for extracting lab results from medical reports.
@@ -165,6 +167,11 @@ class PDFParser:
         """Parse PDF using pdfplumber library for structured table extraction."""
         try:
             pypdf_text = self.extract_text_from_pdf(content)
+            # Health summaries list results from several collection dates in one table
+            if summary_parser.is_health_summary(pypdf_text):
+                summary = summary_parser.parse_results(content, self)
+                if summary and summary['tests']:
+                    return summary
             date_collected = self.extract_date_from_text(pypdf_text)
             physician = self.extract_physician_from_text(pypdf_text)
 

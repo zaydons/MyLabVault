@@ -56,6 +56,12 @@ class ExtractedTest(BaseModel):
         description="Comment or footnote the lab printed for this specific test (e.g. calculation method, "
                     "specimen issues), copied as printed; null if none",
     )
+    collection_date: Optional[str] = Field(
+        None,
+        description="Collection date of this result as YYYY-MM-DD when the report lists results from more "
+                    "than one collection date (a health summary or results history); null when every "
+                    "result on the report shares one collection date",
+    )
 
 
 class ExtractedReport(BaseModel):
@@ -83,7 +89,9 @@ printed; do not convert units or infer missing values. Skip calculated commentar
 notes, and footnotes that are not results.
 
 For collection_date, use the specimen collection date only. Reports usually also show a date of \
-birth and received/reported dates; never use those.
+birth and received/reported dates; never use those. Some documents, such as patient health \
+summaries, list results from several collection dates; then give each test its own \
+collection_date and include every result from every date.
 
 For matched_lab, compare each test with the list of existing test names provided. Fill it in only \
 when it is clearly the same measurement under a different spelling or wording (for example \
@@ -171,6 +179,7 @@ def _to_parser_test(test: ExtractedTest, known_names: Dict[str, str]) -> Dict[st
         "reference_range": {"low": ref_low, "high": ref_high, "text": ref_text or ""},
         "flag": test.flag,
         "lab_comment": test.comment,
+        "date_collected": _normalize_date(test.collection_date),
     }
 
 
@@ -277,8 +286,12 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
         raise AIParseError("AI parsing returned an invalid result")
 
     tests = [_to_parser_test(t, known_names) for t in report.tests if t.name and t.name.strip()]
+    row_dates = sorted({t["date_collected"] for t in tests if t["date_collected"]})
+    report_date = _normalize_date(report.collection_date)
+    if not report_date and row_dates and all(t["date_collected"] for t in tests):
+        report_date = row_dates[-1]
     return {
-        "date_collected": _normalize_date(report.collection_date),
+        "date_collected": report_date,
         "physician": report.ordering_provider,
         "lab_company": report.lab_company,
         "fasting": report.fasting,

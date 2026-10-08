@@ -7,9 +7,10 @@ agree on which saved test a row maps to.
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models import Lab
+from ..models import Lab, LabResult
 
 # Spellings of the same unit that labs use interchangeably. Units in the same group are
 # equal for matching purposes; anything else is a real mismatch (e.g. mg/dL vs mmol/L).
@@ -141,9 +142,31 @@ def _numeric(test: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optional[set] = None) -> List[Dict[str, Any]]:
+def row_date(test: Dict[str, Any]) -> Optional[str]:
+    """The collection date printed on this row (health summaries), as YYYY-MM-DD, else None."""
+    raw = (test.get("date_collected") or "")[:10]
+    return raw if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw) else None
+
+
+def _already_saved(lab: Lab, day: Optional[str], value: Optional[float], text: str, db: Session) -> bool:
+    """A result for this test with the same value is already saved for this collection date."""
+    if lab is None or not day:
+        return False
+    query = db.query(LabResult.id).filter(LabResult.lab_id == lab.id, func.date(LabResult.date_collected) == day)
+    if value is not None:
+        query = query.filter(LabResult.result == value)
+    elif text:
+        query = query.filter(func.lower(LabResult.result_text) == text.lower())
+    else:
+        return False
+    return query.first() is not None
+
+
+def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optional[set] = None,
+                report_date: Optional[str] = None) -> List[Dict[str, Any]]:
     """One row per parsed test (in parsed order, `index` is its position) with match, status and issues."""
     imported = imported or set()
+    report_day = (report_date or "")[:10] or None
     rows = []
     for index, test in enumerate(parsed_tests):
         name = (test.get("name") or "").strip()
@@ -163,6 +186,11 @@ def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optio
             issues.append("The result couldn't be read.")
         if unit_mismatch:
             issues.append(f"The report uses {unit}, but {lab.name} is saved in {lab_unit}.")
+        own_date = row_date(test)
+        saved = index not in imported and readable and _already_saved(
+            lab, own_date or report_day, value, str(result_display or "").strip(), db)
+        if saved:
+            issues.append("This result is already saved for this date.")
 
         rows.append({
             "index": index,
@@ -179,6 +207,8 @@ def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optio
             "status": row_status(value, ref, lab, test.get("flag")),
             "readable": readable,
             "already_imported": index in imported,
+            "already_saved": saved,
+            "date_collected": own_date,
             "issues": issues,
         })
     return rows
@@ -187,6 +217,8 @@ def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optio
 def apply_edit(test: Dict[str, Any], edit: Dict[str, Any]) -> Dict[str, Any]:
     """Copy of a parsed test with the user's corrections from the review screen applied."""
     test = dict(test)
+    if edit.get("date_collected"):
+        test["date_collected"] = edit["date_collected"].strip()
     if edit.get("name") is not None:
         test["name"] = edit["name"].strip()
     if edit.get("unit") is not None:
@@ -233,6 +265,7 @@ def _reading(test: Dict[str, Any]) -> Dict[str, str]:
         "result": "" if result is None else str(result),
         "unit": (test.get("unit") or "").strip(),
         "range": (_range_of(test).get("text") or "").strip(),
+        "date": row_date(test) or "",
     }
 
 
@@ -257,8 +290,14 @@ def compare_parses(active: Dict[str, Any], other: Dict[str, Any], db: Session) -
     unmatched_ai = list(ai_rows)
     pairs = []
     for s in std_rows:
-        match = next((a for a in unmatched_ai if s["lab_id"] and a["lab_id"] == s["lab_id"]), None) \
-            or next((a for a in unmatched_ai if s["name_key"] and a["name_key"] == s["name_key"]), None)
+        # Same test on the same date first (health summaries repeat a test once per date)
+        same_day = [a for a in unmatched_ai if a["reading"]["date"] == s["reading"]["date"]]
+        match = None
+        for pool in (same_day, unmatched_ai):
+            match = next((a for a in pool if s["lab_id"] and a["lab_id"] == s["lab_id"]), None) \
+                or next((a for a in pool if s["name_key"] and a["name_key"] == s["name_key"]), None)
+            if match:
+                break
         if match:
             unmatched_ai.remove(match)
         pairs.append((s, match))
@@ -267,7 +306,7 @@ def compare_parses(active: Dict[str, Any], other: Dict[str, Any], db: Session) -
     rows, summary = [], {"same": 0, "different": 0, "only_ai": 0, "only_standard": 0}
     for s, a in pairs:
         if s and a:
-            differences = [field for field in ("result", "unit", "range")
+            differences = [field for field in ("result", "unit", "range", "date")
                            if not (_same_value(s["reading"][field], a["reading"][field]) if field == "result"
                                    else (normalize_unit(s["reading"][field]) == normalize_unit(a["reading"][field]) if field == "unit"
                                          else s["reading"][field].replace(" ", "") == a["reading"][field].replace(" ", "")))]

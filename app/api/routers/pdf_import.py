@@ -19,7 +19,7 @@ from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
-from ..services.import_review import apply_edit, compare_parses, find_lab, review_rows, row_status
+from ..services.import_review import apply_edit, compare_parses, find_lab, normalize_unit, review_rows, row_date, row_status
 import logging
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ def _imported_indices(import_log: PDFImportLog, db: Session) -> set:
 
 def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session) -> PDFImportPreview:
     """Match parsed tests and provider against the database and build the review data."""
-    rows = review_rows(parsed_data.get('tests', []), db, _imported_indices(import_log, db))
+    rows = review_rows(parsed_data.get('tests', []), db, _imported_indices(import_log, db), parsed_data.get('date_collected'))
     return PDFImportPreview(
         parser=parsed_data.get('parser', 'standard'),
         filename=filename,
@@ -617,18 +617,22 @@ def _create_lab(test: dict, db: Session) -> Lab:
     return lab
 
 
-def _collection_date(confirmation: PDFImportConfirm, import_log: PDFImportLog) -> datetime:
-    """The collection date chosen on the review screen, else the one read from the report."""
-    raw = confirmation.manual_date or import_log.date_collected
+def _parse_collection_date(raw, where: str) -> datetime:
+    """A collection date as a datetime; refuses a missing, invalid or future date."""
     if not raw:
-        raise HTTPException(status_code=400, detail=f"Enter the collection date for {import_log.filename}.")
+        raise HTTPException(status_code=400, detail=f"Enter the collection date for {where}.")
     try:
         collected = datetime.fromisoformat(str(raw)[:10])
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"The collection date for {import_log.filename} isn't a valid date.")
+        raise HTTPException(status_code=400, detail=f"The collection date for {where} isn't a valid date.")
     if collected.date() > datetime.now().date():
-        raise HTTPException(status_code=400, detail=f"The collection date for {import_log.filename} is in the future.")
+        raise HTTPException(status_code=400, detail=f"The collection date for {where} is in the future.")
     return collected
+
+
+def _collection_date(confirmation: PDFImportConfirm, import_log: PDFImportLog) -> datetime:
+    """The collection date chosen on the review screen, else the one read from the report."""
+    return _parse_collection_date(confirmation.manual_date or import_log.date_collected, import_log.filename)
 
 
 @router.post("/confirm", response_model=APIResponse)
@@ -662,7 +666,7 @@ async def confirm_pdf_import(
 
     parsed_data = json.loads(import_log.parsed_data)
     parsed_tests = parsed_data.get('tests', [])
-    collected = _collection_date(confirmation, import_log)
+    report_date = None  # only needed when a selected row has no date of its own
     patient_id = confirmation.patient_id or 1
     already = _imported_indices(import_log, db)
 
@@ -680,18 +684,30 @@ async def confirm_pdf_import(
             problems.append(f"{label}: enter the result")
         if edit and edit.lab_id and not db.query(Lab).filter_by(id=edit.lab_id).first():
             problems.append(f"{label}: the chosen test no longer exists")
-        rows.append((index, test, edit))
+        # Health summaries give each row its own date; other reports use the report's date
+        own = row_date(test) if not (edit and edit.date_collected) else edit.date_collected
+        if own:
+            collected = _parse_collection_date(own, f"{label} in {import_log.filename}")
+        else:
+            report_date = report_date or _collection_date(confirmation, import_log)
+            collected = report_date
+        rows.append((index, test, edit, collected))
     if problems:
         raise HTTPException(status_code=400, detail=f"{import_log.filename}: " + "; ".join(problems))
 
     try:
         saved = []
-        for index, test, edit in rows:
+        # A test can appear once per date (health summaries); rows with the same name and unit
+        # that become a new test all go into that one new test
+        created = {}
+        for index, test, edit, collected in rows:
             if edit and edit.lab_id:
                 lab = db.query(Lab).filter_by(id=edit.lab_id).first()
             else:
-                lab = None if (edit and edit.new_lab) else find_lab(test.get('name'), db)
-                lab = lab or _create_lab(test, db)
+                key = ((test.get('name') or '').strip().lower(), normalize_unit(test.get('unit')))
+                lab = created.get(key) or (None if (edit and edit.new_lab) else find_lab(test.get('name'), db))
+                if lab is None:
+                    lab = created[key] = _create_lab(test, db)
 
             if test.get('numeric_value') is not None:
                 value, text = float(test['numeric_value']), None
@@ -736,13 +752,15 @@ async def confirm_pdf_import(
         "unit": r.lab.unit.name if r.lab.unit else "",
         "status": r.status,
     } for r in saved]
+    dates = sorted({r.date_collected.date().isoformat() for r in saved})
     return APIResponse(
         success=True,
         message=f"Imported {len(saved)} results from {import_log.filename}",
         data={
             "import_id": import_log.id,
             "filename": import_log.filename,
-            "date_collected": collected.date().isoformat(),
+            "date_collected": dates[-1] if dates else None,
+            "dates": dates,
             "imported_count": len(saved),
             "skipped_count": len(parsed_tests) - len(saved) - len(already),
             "results": results,

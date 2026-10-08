@@ -217,6 +217,8 @@ async function refreshHistory() {
         const history = response.ok ? await response.json() : [];
         const table = $('#historyTable').DataTable();
         table.clear().rows.add(history).draw();
+        // Column widths were measured on the empty table; measure again so narrow screens hide the right columns
+        table.columns.adjust().responsive.recalc();
         formatAllDatesOnPage();
         $('#totalImports').text(history.length);
         $('#completedImports').text(history.filter(i => i.status === 'completed').length);
@@ -327,6 +329,9 @@ $(document).ready(async function () {
 .row-issue { color: #6b4300; }
 .dark-mode .row-issue { color: #ffe08a; }
 .review-card .form-text a { text-decoration: underline; }
+.review-table .date-group-heading th { background: #f1f3f5; font-weight: 600; border-top: 2px solid #ced4da; }
+.dark-mode .review-table .date-group-heading th { background: #2b3035; border-top-color: #6c757d; }
+.review-table .date-group-heading .group-date { max-width: 11rem; }
 .compare-readings { border: 1px solid #ced4da; border-radius: .25rem; padding: .5rem .75rem; }
 .compare-readings summary { cursor: pointer; }
 .compare-table th, .compare-table td { vertical-align: top; }
@@ -345,6 +350,8 @@ $(document).ready(async function () {
     .review-table td[data-label]::before { content: attr(data-label); display: block; font-size: .8rem; font-weight: 600; color: #5a6268; }
     .dark-mode .review-table td[data-label]::before { color: #c8cdd2; }
     .review-table td:first-child { text-align: left !important; }
+    .review-table tbody.date-group { display: block; }
+    .review-table .date-group-heading th { display: block; padding: .5rem; }
 }
 </style>
 {% endblock %}

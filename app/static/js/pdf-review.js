@@ -210,10 +210,10 @@
             : change === 'only_ai' ? 'Only the AI found this' : change === 'only_standard' ? 'Only the built-in reader found this' : '';
         const done = row.already_imported;
         const choice = row.unit_mismatch || !row.matched_lab_id ? 'new' : row.matched_lab_id;
-        const checked = row.readable && !done;
+        const checked = row.readable && !done && !row.already_saved;
         const issues = row.issues.length ? `<div class="row-issue small mt-1" id="${id}-issues"><i class="mdi mdi-alert-outline" aria-hidden="true"></i> ${row.issues.map(esc).join(' ')}${row.unit_mismatch ? ' It will be saved as a new test unless you pick the existing one.' : ''}</div>` : '';
         return `
-            <tr data-index="${row.index}" class="${done ? 'row-done' : ''}${row.readable ? '' : ' row-unreadable'}">
+            <tr data-index="${row.index}" ${row.date_collected ? `data-date="${esc(row.date_collected)}"` : ''} class="${done ? 'row-done' : ''}${row.readable ? '' : ' row-unreadable'}">
                 <td class="text-center">
                     <div class="custom-control custom-checkbox">
                         <input type="checkbox" class="custom-control-input row-check" id="${id}-check" ${checked ? 'checked' : ''} ${done ? 'disabled' : ''}
@@ -252,6 +252,7 @@
         let html = part('result', esc(reading.result) || '<span class="text-muted">blank</span>');
         if (reading.unit) html += ' ' + part('unit', esc(reading.unit));
         if (reading.range) html += ` <span class="small">(range ${part('range', esc(reading.range))})</span>`;
+        if (reading.date) html += ` <span class="small d-block">collected ${part('date', esc(displayDate(reading.date)))}</span>`;
         return html;
     }
 
@@ -283,7 +284,7 @@
                 <td>${readingText(r.standard, r.differences)}</td>
                 <td>${readingText(r.ai, r.differences)}</td>
                 <td><span class="badge badge-status-${r.change === 'same' ? 'none' : 'info'}">${CHANGE_LABEL[r.change]}</span>${r.differences.length
-                    ? `<div class="small">${r.differences.map(d => d === 'range' ? 'range' : d === 'result' ? 'value' : 'unit').join(', ')}</div>` : ''}</td>
+                    ? `<div class="small">${r.differences.map(d => d === 'result' ? 'value' : d).join(', ')}</div>` : ''}</td>
             </tr>`).join('');
         const done = (p.tests || []).some(r => r.already_imported);
         return `
@@ -307,6 +308,28 @@
             </details>`;
     }
 
+    function renderDateGroups(key, ordered, rowDates, changes) {
+        const groups = rowDates.map(date => ({ date, rows: ordered.filter(r => r.date_collected === date) }));
+        const undated = ordered.filter(r => !r.date_collected);
+        if (undated.length) groups.push({ date: '', rows: undated });
+        return groups.map((g, i) => {
+            const id = `group-${key}-${i}`;
+            const heading = g.date ? `
+                <label class="mb-0 mr-2" for="${id}">Collected</label>
+                <input type="date" class="form-control form-control-sm d-inline-block w-auto group-date" id="${id}" value="${esc(g.date)}"
+                       max="${today()}" required data-original="${esc(g.date)}" aria-describedby="${id}-count">`
+                : '<span class="mr-2">Collection date from the field above</span>';
+            return `
+                <tbody class="date-group" data-group="${id}">
+                    <tr class="date-group-heading"><th colspan="6" scope="colgroup">
+                        <i class="mdi mdi-calendar mr-1" aria-hidden="true"></i>${heading}
+                        <span class="small ml-1" id="${id}-count">${plural(g.rows.length, 'result')}</span>
+                    </th></tr>
+                    ${g.rows.map(r => renderRow(key, r, changes.get(r.index))).join('')}
+                </tbody>`;
+        }).join('');
+    }
+
     function renderCard(key, p) {
         const rows = p.tests || [];
         const readable = rows.filter(r => r.readable && !r.already_imported);
@@ -317,7 +340,12 @@
         // Readable rows first, unreadable ones at the bottom, rows already imported last
         const ordered = [...readable, ...unreadable, ...done];
         const physician = p.matched_provider ? '' : (p.physician ? `<small class="form-text text-muted">Report lists <strong>${esc(p.physician)}</strong> · <a href="#" data-new-provider="${key}" data-report-name="1">Add as new provider</a></small>` : '');
-        const dateMissing = !p.date_collected;
+        // Health summaries give each row its own collection date; those rows are grouped by date
+        const rowDates = [...new Set(rows.map(r => r.date_collected).filter(Boolean))].sort();
+        const undated = rows.filter(r => !r.date_collected);
+        const needsReportDate = !rowDates.length || undated.length > 0;
+        const dateMissing = needsReportDate && !p.date_collected;
+        const saved = readable.filter(r => r.already_saved);
         const showPdf = window.matchMedia('(min-width: 1200px)').matches;
         const changes = new Map(((p.comparison || {}).rows || []).filter(r => r.active_index !== null).map(r => [r.active_index, r.change]));
 
@@ -338,19 +366,21 @@
             </div>
             <div class="card-body">
                 <p class="review-counts mb-3">
-                    ${plural(readable.length, 'result')} to import${out.length ? ` · <strong>${out.length} out of range</strong>` : ''}${unreadable.length ? ` · ${unreadable.length} couldn't be read` : ''}${done.length ? ` · ${done.length} already imported` : ''}
+                    ${plural(readable.length, 'result')} to import${out.length ? ` · <strong>${out.length} out of range</strong>` : ''}${unreadable.length ? ` · ${unreadable.length} couldn't be read` : ''}${done.length ? ` · ${done.length} already imported` : ''}${saved.length ? ` · ${saved.length} already saved` : ''}
                 </p>
+                ${rowDates.length > 1 ? `<p class="mb-3"><i class="mdi mdi-calendar-multiple mr-1" aria-hidden="true"></i>This report has results from <strong>${rowDates.length} collection dates</strong>. Each date is a heading in the list below; change it there if it's wrong.</p>` : ''}
+                ${saved.length ? `<div class="alert alert-info py-2"><i class="mdi mdi-content-duplicate mr-1" aria-hidden="true"></i>${plural(saved.length, 'result')} ${saved.length === 1 ? 'is' : 'are'} already saved with the same value and date, so ${saved.length === 1 ? 'it isn\'t' : 'they aren\'t'} ticked.</div>` : ''}
                 ${p.comparison ? renderComparison(key, p, !!(state.cards.get(key) || {}).showCompare) : ''}
                 <div class="row">
                     <div class="review-main ${showPdf ? 'col-xl-7' : 'col-12'}">
                         <div class="form-row">
-                            <div class="form-group col-sm-6">
-                                <label for="date-${key}">Collection date <span class="text-danger" aria-hidden="true">*</span></label>
+                            ${needsReportDate ? `<div class="form-group col-sm-6">
+                                <label for="date-${key}">${rowDates.length ? 'Collection date for results without one' : 'Collection date'} <span class="text-danger" aria-hidden="true">*</span></label>
                                 <input type="date" class="form-control${dateMissing ? ' is-invalid' : ''}" id="date-${key}" value="${esc((p.date_collected || '').slice(0, 10))}"
                                        max="${today()}" required aria-describedby="date-${key}-help" ${dateMissing ? 'aria-invalid="true"' : ''}>
                                 <small class="${dateMissing ? 'invalid-feedback d-block' : 'form-text text-muted'}" id="date-${key}-help">
                                     ${dateMissing ? 'No collection date was found on this report. Enter it to import.' : 'Read from the report; change it if it\'s wrong.'}</small>
-                            </div>
+                            </div>` : ''}
                             <div class="form-group col-sm-6">
                                 <label for="provider-${key}">Provider <span class="text-danger" aria-hidden="true">*</span></label>
                                 <div class="input-group">
@@ -377,7 +407,7 @@
                                     </th>
                                     <th scope="col">Test</th><th scope="col">Result</th><th scope="col">Unit</th><th scope="col">Range</th><th scope="col">Status</th>
                                 </tr></thead>
-                                <tbody>${ordered.map(r => renderRow(key, r, changes.get(r.index))).join('')}</tbody>
+                                ${rowDates.length ? renderDateGroups(key, ordered, rowDates, changes) : `<tbody>${ordered.map(r => renderRow(key, r, changes.get(r.index))).join('')}</tbody>`}
                             </table>
                         </div>` : '<p class="text-muted">No results were found in this report.</p>'}
                     </div>
@@ -500,8 +530,11 @@
             if (!selected.length) continue;
 
             const dateEl = $id(`date-${card.key}`);
-            if (!dateEl.value) markInvalid(dateEl, `${esc(p.filename)}: enter the collection date`, errors);
-            else if (dateEl.value > today()) markInvalid(dateEl, `${esc(p.filename)}: the collection date is in the future`, errors);
+            if (selected.some(tr => !tr.dataset.date)) {
+                if (!dateEl.value) markInvalid(dateEl, `${esc(p.filename)}: enter the collection date`, errors);
+                else if (dateEl.value > today()) markInvalid(dateEl, `${esc(p.filename)}: the collection date is in the future`, errors);
+            }
+            const checkedGroups = new Set();
             const providerEl = $id(`provider-${card.key}`);
             if (!providerEl.value) markInvalid(providerEl, `${esc(p.filename)}: choose the provider`, errors);
 
@@ -525,6 +558,15 @@
                 const lab = tr.querySelector('.row-lab').value;
                 if (lab === 'new') edit.new_lab = true;
                 else edit.lab_id = parseInt(lab, 10);
+                const group = tr.dataset.date ? tr.closest('tbody').querySelector('.group-date') : null;
+                if (group) {
+                    if (!checkedGroups.has(group.id)) {
+                        checkedGroups.add(group.id);
+                        if (!group.value) markInvalid(group, `${esc(p.filename)}: enter the collection date for results collected ${esc(displayDate(group.dataset.original))}`, errors);
+                        else if (group.value > today()) markInvalid(group, `${esc(p.filename)}: the collection date ${esc(displayDate(group.value))} is in the future`, errors);
+                    }
+                    if (group.value && group.value !== row.date_collected) edit.date_collected = group.value;
+                }
                 edits[String(index)] = edit;
             });
             confirmations.push({
@@ -532,7 +574,7 @@
                 selected_tests: selected.map(tr => parseInt(tr.dataset.index, 10)),
                 provider_id: parseInt(providerEl.value, 10) || null,
                 patient_id: parseInt(getCookie('selectedPatientId') || '1', 10) || 1,
-                manual_date: dateEl.value || null,
+                manual_date: dateEl ? dateEl.value || null : null,
                 edits,
             });
         }
@@ -593,7 +635,8 @@
             <li class="list-group-item">
                 <div class="d-flex flex-wrap justify-content-between">
                     <strong>${esc(f.filename)}</strong>
-                    <span class="text-muted">${plural(f.imported_count, 'result')} · collected ${esc(displayDate(f.date_collected))}</span>
+                    <span class="text-muted">${plural(f.imported_count, 'result')} · ${(f.dates || []).length > 1
+                        ? `collected on ${f.dates.length} dates (${f.dates.map(d => esc(displayDate(d))).join(', ')})` : `collected ${esc(displayDate(f.date_collected))}`}</span>
                 </div>
                 ${f.out_of_range.length ? `<ul class="list-unstyled mb-0 mt-2">${f.out_of_range.map(r => `
                     <li class="mb-1"><a href="/lab/${Number(r.lab_id)}">${esc(r.name)}</a>
