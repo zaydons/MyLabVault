@@ -71,6 +71,12 @@
         if (!response.ok) {
           throw new Error(typeof data.detail === 'string' ? data.detail : 'Something went wrong. Please try again.');
         }
+        // Which patient the pages show is a browser preference, kept in a cookie the page scripts
+        // read and write (same settings as setCookie in layout.html)
+        if (data.patient && data.patient.id) {
+          document.cookie = 'selectedPatientId=' + encodeURIComponent(data.patient.id) + ';max-age=31536000;path=/;SameSite=Strict'
+            + (location.protocol === 'https:' ? ';Secure' : '');
+        }
         window.location.href = '/dashboard';
       } catch (error) {
         showError(error.message);
