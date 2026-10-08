@@ -89,6 +89,8 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
    docker compose up -d mylabvault
    ```
 
+   The app runs as an unprivileged user (uid 1001) and takes ownership of `./data` on start. To use another user, for example your own so you can read the files, add `environment: { PUID: "1000", PGID: "1000" }`.
+
 #### Option 2: TrueNAS SCALE
 
 Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/README.md](deploy/truenas/README.md).
@@ -135,11 +137,11 @@ Database changes are applied automatically on startup. For TrueNAS, see [Updatin
 ## 🏗️ Architecture
 
 ### Technology Stack
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy
+- **Backend**: Python 3.13, FastAPI, SQLAlchemy
 - **Frontend**: Server-rendered Jinja2 templates with AdminLTE 3.2 (Bootstrap 4), DataTables, Chart.js and Material Design Icons, all served locally from `app/static/vendor`
 - **Database**: SQLite with Alembic migrations
 - **PDF processing**: pdfplumber and pypdf, plus optional Claude through Amazon Bedrock
-- **Container**: Alpine-based Docker image with a health check, built by GitHub Actions
+- **Container**: Alpine-based Docker image with a health check, built by GitHub Actions after the tests pass; the app runs as an unprivileged user
 
 ### Project Structure
 ```

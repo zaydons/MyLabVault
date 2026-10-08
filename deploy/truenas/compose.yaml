@@ -10,13 +10,17 @@ services:
       - "8000:8000"
     volumes:
       - /mnt/POOL/apps/mylabvault:/app/data
-    # Optional AI-assisted PDF parsing through Amazon Bedrock. Leave commented out to keep it off.
-    # See "Optional: AI parsing with Amazon Bedrock" in deploy/truenas/README.md.
-    # environment:
-    #   AWS_ACCESS_KEY_ID: "<access key id>"
-    #   AWS_SECRET_ACCESS_KEY: "<secret access key>"
-    #   AWS_REGION: "us-east-1"
-    #   MYLABVAULT_AI_MODEL: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    environment:
+      # The app runs as this user and group, and owns the files in the dataset.
+      # 568 is TrueNAS's "apps" user, which owns datasets made with the Apps preset.
+      PUID: "568"
+      PGID: "568"
+      # Optional AI-assisted PDF parsing through Amazon Bedrock. Leave commented out to keep it off.
+      # See "Optional: AI parsing with Amazon Bedrock" in deploy/truenas/README.md.
+      # AWS_ACCESS_KEY_ID: "<access key id>"
+      # AWS_SECRET_ACCESS_KEY: "<secret access key>"
+      # AWS_REGION: "us-east-1"
+      # MYLABVAULT_AI_MODEL: "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
