@@ -9,6 +9,7 @@ preview/confirm flow is reused.
 import base64
 import logging
 import os
+import time
 from datetime import date
 from typing import Any, Dict, List, Optional
 
@@ -199,6 +200,7 @@ async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str,
     model = get_model()
     try:
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            started = time.perf_counter()
             response = await client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
@@ -207,6 +209,10 @@ async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str,
                 tool_choice={"type": "auto"},
                 messages=messages,
             )
+            usage = getattr(response, "usage", None)
+            logger.info(f"AI request {tool_name}: model={model} {time.perf_counter() - started:.1f}s "
+                        f"stop={response.stop_reason} input_tokens={getattr(usage, 'input_tokens', '?')} "
+                        f"output_tokens={getattr(usage, 'output_tokens', '?')} attempt={attempt}")
             if response.stop_reason == "refusal":
                 raise AIParseError("The AI service declined to process this request")
             if response.stop_reason == "max_tokens":

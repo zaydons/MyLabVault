@@ -10,6 +10,9 @@ from dateutil import parser as date_parser
 import pdfplumber
 
 from . import summary_parser
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PDFParser:
     """
@@ -160,7 +163,7 @@ class PDFParser:
         except pypdf.errors.PdfReadError as e:
             raise pypdf.errors.PdfReadError(f"Cannot read PDF file: {str(e)}")
         except Exception as e:
-            print(f"Error parsing PDF: {e}")
+            logger.warning(f"PDF parsing failed: {e}")
             raise ValueError(f"PDF parsing failed: {str(e)}")
 
     def parse_with_pdfplumber(self, content: bytes) -> Dict[str, Any]:
@@ -203,7 +206,7 @@ class PDFParser:
                 }
 
         except Exception as e:
-            print(f"pdfplumber parsing failed: {e}")
+            logger.info(f"Table reading failed, using text extraction: {type(e).__name__}")
             return None
 
     def extract_ordered_panels(self, page) -> List[str]:
@@ -1024,7 +1027,7 @@ class PDFParser:
                 text += page.extract_text() + "\n"
             return text
         except Exception as e:
-            print(f"Error extracting text from PDF: {e}")
+            logger.warning(f"Extracting text from the PDF failed: {type(e).__name__}")
             return ""
 
     def parse_labcorp_report(self, text: str) -> Dict[str, Any]:

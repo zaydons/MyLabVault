@@ -6,8 +6,6 @@ import uvicorn
 
 def main():
     """Main entry point for the MyLabVault application."""
-    print("🚀 Starting MyLabVault...")
-
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "8000"))
 
@@ -15,18 +13,17 @@ def main():
     if os.getenv("DOCKER_ENV") == "true":
         host = "0.0.0.0"  # nosec B104
 
-    print(f"🌐 Starting FastAPI server on http://{host}:{port}")
-    print("📚 API Documentation: http://localhost:8000/api/docs")
-
     # Docker environments disable reload to avoid file watcher issues
     reload = os.getenv("DOCKER_ENV") != "true"
-    
+
+    # The app configures logging itself (api/logging_setup.py); log_config=None keeps uvicorn
+    # from installing its own handlers and format
     uvicorn.run(
         "api.main:app",
         host=host,
         port=port,
         reload=reload,
-        log_level="info"
+        log_config=None,
     )
 
 if __name__ == "__main__":

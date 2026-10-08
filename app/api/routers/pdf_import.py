@@ -19,6 +19,7 @@ from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
+from ..logging_setup import audit
 from ..services.import_review import apply_edit, compare_parses, find_lab, find_lab_in_unit, normalize_unit, review_rows, row_date, row_status
 import logging
 
@@ -214,6 +215,8 @@ async def upload_pdf(
             existing_import.status = "pending"
             existing_import.error_message = None
             _save_parse(existing_import, parsed_data, db)
+            audit("import.reread", import_id=existing_import.id, parser=parsed_data.get('parser', 'standard'),
+                  tests=len(parsed_data.get('tests', [])))
             return _build_preview(parsed_data, existing_import, existing_import.filename, db)
         if existing_import:
             return PDFImportPreview(
@@ -255,6 +258,8 @@ async def upload_pdf(
         db.add(import_log)
         db.commit()
         db.refresh(import_log)
+        audit("import.uploaded", import_id=import_log.id, parser=parsed_data.get('parser', 'standard'),
+              tests=len(parsed_data.get('tests', [])), size_kb=len(content) // 1024)
 
         return _build_preview(parsed_data, import_log, file.filename, db)
 
@@ -329,6 +334,8 @@ async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
     # Keep the built-in parser's reading so the two can be compared and the user can switch back
     parsed_data['other_parse'] = await _standard_reading(current, content)
     _save_parse(import_log, parsed_data, db)
+    audit("import.rescanned", import_id=import_log.id, tests=len(parsed_data.get('tests', [])),
+          built_in_tests=len(parsed_data['other_parse'].get('tests', [])))
 
     return _build_preview(parsed_data, import_log, import_log.filename, db)
 
@@ -374,6 +381,7 @@ async def switch_reading(import_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Tests from this import have already been saved; the reading can no longer be switched")
     other['other_parse'] = parsed_data
     _save_parse(import_log, other, db)
+    audit("import.reading_switched", import_id=import_log.id, now_using=other.get('parser', 'standard'))
     return _build_preview(other, import_log, import_log.filename, db)
 
 
@@ -756,10 +764,12 @@ async def confirm_pdf_import(
         import_log.status = "completed"
         import_log.updated_at = datetime.now()
         db.commit()
-    except Exception:
+    except Exception as e:
         db.rollback()
-        logger.exception(f"Saving results for import {import_log.id} failed")
-        raise HTTPException(status_code=500, detail=f"Saving results from {import_log.filename} failed.")
+        raise HTTPException(status_code=500, detail=f"Saving results from {import_log.filename} failed.") from e
+    audit("import.confirmed", import_id=import_log.id, saved=len(saved), new_tests=len(created),
+          dates=len({r.date_collected.date() for r in saved}), provider_id=confirmation.provider_id,
+          patient_id=patient_id)
 
     from ..utils.cache import api_cache
     api_cache.invalidate_pattern('results')
@@ -1035,6 +1045,7 @@ async def delete_pdf_import(
     # Delete the import log
     db.delete(import_log)
     db.commit()
+    audit("import.deleted", import_id=import_id, results_deleted=deleted_results)
 
     return APIResponse(
         success=True,
