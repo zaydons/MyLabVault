@@ -32,7 +32,7 @@ When it's on:
 - Uploads that the built-in parser can't read, or where it finds no tests, are retried with AI automatically.
 - Each uploaded file gets a **Re-scan with AI** button on the import screen. Afterwards a comparison shows what the AI found that the built-in reader didn't (and vice versa), and you can switch back to the built-in results.
 - Results parsed by AI are marked with an **AI** badge. You still review and confirm them before anything is saved.
-- **Settings → Merge duplicates** gets an **Ask AI to review** button that finds lab tests, panels, units and providers saved under different names. It sends only those names, not your results, and nothing is merged until you confirm.
+- **Settings → Clean up** gets an **Ask AI to review** button that finds lab tests, panels, units and providers saved under different names. It sends only those names, not your results, and nothing is merged until you confirm.
 
 The PDF, including your name, date of birth and results, is sent to Claude in Amazon Bedrock in your AWS account. Data handling is covered by Amazon Bedrock's data-protection terms, and Anthropic has no access to the Bedrock inference infrastructure.
 
@@ -99,8 +99,8 @@ Open **Apps → mylabvault → Logs** (the container log). Each line is one even
 ## Backups
 
 - Set up a **Periodic Snapshot Task** for the dataset (**Data Protection** → **Periodic Snapshot Tasks**). SQLite is a single file, so snapshots are a simple way to roll back.
-- You can also use **Settings** → export in the MyLabVault UI for a portable JSON export.
+- You can also use **Settings → Backup & restore** in the MyLabVault UI to download a portable backup (ZIP with PDFs, or JSON).
 
 ## Moving existing data
 
-To move data from another install, stop the app, copy the old `data/` folder contents (`mylabvault.db` and `uploads/`) into the dataset, then start the app again. Or use the export/import feature on the MyLabVault **Settings** page.
+To move data from another install, stop the app, copy the old `data/` folder contents (`mylabvault.db` and `uploads/`) into the dataset, then start the app again. Or download a backup from **Settings → Backup & restore** on the old install and restore it on the new one.

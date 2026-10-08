@@ -40,10 +40,11 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Multiple patients**: Keep results for family members separately and switch between them from the top bar
 - **Reference ranges**: Ranges can be low–high, greater than or less than, and each result can carry the range printed on its own report
 - **Search**: Press `/` anywhere to search for a test or page
-- **Merge duplicates**: *Settings → Merge duplicates* finds lab tests, panels, units and providers saved more than once (such as *Albumin* and *Albumin (g/dL)*, *mg/dl* and *mg/dL*, or a provider with and without a middle initial). With AI enabled, *Ask AI to review* also catches differently worded names. You tick each group to merge (or *Tick all*), choose which item to keep and its name, and confirm; tests in units that can't be compared are never merged
-- **Backup and restore**: Export and import all data, including uploaded PDFs, from Settings
+- **Merge duplicates**: *Settings → Clean up* finds lab tests, panels, units and providers saved more than once (such as *Albumin* and *Albumin (g/dL)*, *mg/dl* and *mg/dL*, or a provider with and without a middle initial). With AI enabled, *Ask AI to review* also catches differently worded names. You tick each group to merge (or *Tick all*), choose which item to keep and its name, and confirm; tests in units that can't be compared are never merged
+- **Backup and restore**: Download all data, including uploaded PDFs, and restore it from *Settings → Backup & restore*
 
 ### 🎨 **Interface**
+- **Settings in one place**: *General* (theme, date format), *Backup & restore*, *Clean up*, *About* (version, update status, what's stored) and a separate *Danger zone*; link straight to one with `/settings#backup` and the like
 - **Responsive**: Works on phones as well as desktops; results tables keep the value, status and date visible on small screens
 - **Accessible**: Meets WCAG AA text contrast in light and dark mode, works with the keyboard and screen readers, and respects the reduced-motion setting
 - **Dark and light mode**, remembered between visits
@@ -183,7 +184,7 @@ MyLabVault/
 
 - **Database**: `data/mylabvault.db` in the mounted volume (`/app/data` in the container)
 - **Uploaded PDFs**: `data/uploads/pdfs/`
-- **Portable backup**: the *Export* section of *Settings* downloads all data, and its *Import* section restores it
+- **Portable backup**: *Settings → Backup & restore* downloads all data (a ZIP with PDFs, or JSON) and restores it, either added to your data or replacing it
 - **File backup**: Copy the whole data folder while the app is stopped, or snapshot the dataset (TrueNAS)
 
 ```bash
@@ -273,7 +274,7 @@ GET  /api/update-check         # Whether a newer image has been published
 - Upload it as usual. Results are grouped by collection date and each is saved on its own date. If the built-in reader doesn't recognise the layout, use *Re-scan with AI*, which also reads a date for each result.
 
 **The same test appears more than once (e.g. "Albumin" and "Albumin (g/dL)")**
-- Use *Settings → Merge duplicates*: tick the group, choose the test to keep and its name, and confirm. All results move to the kept test.
+- Use *Settings → Clean up*: tick the group, choose the test to keep and its name, and confirm. All results move to the kept test.
 
 **A result was saved under the wrong test**
 - On the review screen, each row has a *Save as* choice: pick the right saved test, or *New test*. Results in a different unit than the saved test default to a new test.
@@ -282,7 +283,7 @@ GET  /api/update-check         # Whether a newer image has been published
 - Compare the version in the footer with the latest build. Pull the image again and recreate the container (see [Updating](#-updating)).
 
 **Start over with an empty database** (⚠️ deletes all data)
-- Use *Settings → Reset All Data*, or stop the app and delete `data/mylabvault.db`.
+- Use *Settings → Danger zone → Reset all data*, or stop the app and delete `data/mylabvault.db`.
 
 **An error message shows an error ID**
 - Search the log for it: `docker logs mylabvault 2>&1 | grep -A 15 <error ID>` shows the request and the traceback. On TrueNAS, open the app's **Logs**.

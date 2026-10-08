@@ -67,7 +67,7 @@ def log_startup_summary():
     info = build_info.get_build_info()
     db_url = str(engine.url) if DB_IMPORTS_SUCCESS else "unavailable"
     logger.info(
-        f"MyLabVault {info.get('version') or __version__}"
+        f"MyLabVault {info['build'] if info.get('build') not in (None, 'dev') else 'development build'}"
         + (f" ({info['commit'][:7]})" if info.get('commit') else "")
         + f" ready: database={db_url.replace('sqlite:///', '')}"
         + f" ai={'on model=' + ai_parser.get_model() if ai_parser.is_enabled() else 'off'}"
