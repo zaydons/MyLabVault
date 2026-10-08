@@ -19,6 +19,7 @@ from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
+from ..services.import_review import apply_edit, find_lab, review_rows, row_status
 import logging
 
 logger = logging.getLogger(__name__)
@@ -74,111 +75,33 @@ def _match_provider(physician: Optional[str], db: Session) -> Optional[Provider]
     return None
 
 
+def _imported_indices(import_log: PDFImportLog, db: Session) -> set:
+    """Positions of the parsed rows already saved as results for this import."""
+    indices = set()
+    for (notes,) in db.query(LabResult.notes).filter(LabResult.pdf_import_id == str(import_log.id)).all():
+        match = re.search(r"test index:\s*(\d+)", notes or "")
+        if match:
+            indices.add(int(match.group(1)))
+    return indices
+
+
 def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session) -> PDFImportPreview:
-    """Match parsed tests and provider against the database and build the import preview."""
-    matched_provider = _match_provider(parsed_data.get('physician'), db)
-
-    # Convert tests to importable format and identify problematic ones
-    importable_tests = []
-    problematic_tests = []
-    
-    for test in parsed_data.get('tests', []):
-        # Find matching lab test with improved matching logic
-        lab_test = None
-        if test.get('name'):
-            test_name = test['name'].strip()
-            
-            # 1. Try exact match first (case insensitive)
-            lab_test = db.query(Lab).filter(
-                Lab.name.ilike(test_name)
-            ).first()
-            
-            # 2. If no exact match, try smart matching to avoid incorrect partial matches
-            # This prevents "Hemoglobin" from matching "Hemoglobin A1C"
-            if not lab_test:
-                all_labs = db.query(Lab).all()
-                for lab in all_labs:
-                    # Check if the test name matches the beginning of the lab name followed by space or end
-                    # This allows "TSH" to match "TSH (details)" but prevents "Hemoglobin" from matching "Hemoglobin A1C"
-                    lab_name_lower = lab.name.lower()
-                    test_name_lower = test_name.lower()
-                    
-                    # Match if test name is at start and followed by specific delimiters or end of string
-                    # Allow: parentheses, commas, dashes, but NOT spaces followed by letters
-                    if lab_name_lower.startswith(test_name_lower):
-                        if len(lab_name_lower) == len(test_name_lower):
-                            # Exact match
-                            lab_test = lab
-                            break
-                        else:
-                            next_char = lab_name_lower[len(test_name_lower)]
-                            # Allow punctuation or space followed by punctuation
-                            if next_char in '(),-':
-                                lab_test = lab
-                                break
-                            elif (next_char == ' ' and 
-                                  len(lab_name_lower) > len(test_name_lower) + 1 and
-                                  lab_name_lower[len(test_name_lower) + 1] in '(),-'):
-                                lab_test = lab
-                                break
-            
-            # 3. NO fallback partial matching - if exact and smart matching fail,
-            # it's better to create a new lab test than to incorrectly match
-            # This prevents "Hemoglobin" from matching "Hemoglobin A1c"
-
-        test_data = {
-            'name': test.get('name', 'Unknown Test'),
-            'result': test.get('result'),
-            'result_text': test.get('result_text'),
-            'unit': test.get('unit'),
-            'reference_range': test.get('reference_range'),
-            'flag': test.get('flag'),
-            'lab_comment': test.get('lab_comment'),
-            'is_numeric': test.get('is_numeric', False),
-            'is_qualitative': test.get('is_qualitative', False),
-            'numeric_value': test.get('numeric_value'),
-            'matched_lab_id': lab_test.id if lab_test else None,
-            'matched_lab_name': lab_test.name if lab_test else None,
-            'confidence': 1.0 if lab_test else 0.0
-        }
-        
-        # Identify problematic tests - be more lenient to allow manual review
-        issues = []
-        is_critical_issue = False
-        
-        if not test.get('name'):
-            issues.append("Test name could not be extracted from PDF")
-            is_critical_issue = True
-        if not test.get('result') and not test.get('numeric_value') and not test.get('result_text'):
-            issues.append("No result value could be extracted")
-            is_critical_issue = True
-        
-        # Non-critical issues that shouldn't prevent import
-        if not lab_test:
-            issues.append("No matching lab test found in database - will create new lab test")
-        if test.get('unit') and lab_test and lab_test.unit and test['unit'].lower() != lab_test.unit.name.lower():
-            issues.append(f"Unit mismatch: PDF shows '{test['unit']}', database expects '{lab_test.unit.name}'")
-        
-        # Only mark as problematic if there are critical issues
-        if is_critical_issue:
-            test_data['issues'] = issues
-            problematic_tests.append(test_data)
-        else:
-            # Mark as importable but include non-critical issues as warnings
-            if issues:
-                test_data['warnings'] = issues
-            importable_tests.append(test_data)
-
+    """Match parsed tests and provider against the database and build the review data."""
+    rows = review_rows(parsed_data.get('tests', []), db, _imported_indices(import_log, db))
     return PDFImportPreview(
         parser=parsed_data.get('parser', 'standard'),
         filename=filename,
         date_collected=parsed_data.get('date_collected'),
-        total_tests_found=len(parsed_data.get('tests', [])),
-        importable_tests=importable_tests,
-        problematic_tests=problematic_tests,
-        matched_provider=matched_provider,
+        total_tests_found=len(rows),
+        tests=rows,
+        importable_tests=[r for r in rows if r['readable']],
+        problematic_tests=[r for r in rows if not r['readable']],
+        matched_provider=_match_provider(parsed_data.get('physician'), db),
         physician=parsed_data.get('physician'),
-        import_id=str(import_log.id)
+        import_id=str(import_log.id),
+        pdf_url=f"/api/pdf/{import_log.id}/file",
+        import_status=import_log.status,
+        fasting=parsed_data.get('fasting') if isinstance(parsed_data.get('fasting'), bool) else None,
     )
 
 
@@ -283,6 +206,7 @@ async def upload_pdf(
                 problematic_tests=[],
                 matched_provider=None,
                 import_id=str(existing_import.id),
+                import_status=existing_import.status,
                 duplicate_warning={
                     "message": "This PDF file has already been imported",
                     "previous_import_date": str(existing_import.created_at),
@@ -290,8 +214,10 @@ async def upload_pdf(
                 }
             )
 
-        # Save file
-        file_path = UPLOADS_DIR / (file.filename or "unknown.pdf")
+        # Save under a sanitized name prefixed with the content hash, so different reports
+        # that share a file name don't overwrite each other and the name can't escape the folder
+        safe_name = secure_filename(file.filename) or "report.pdf"
+        file_path = UPLOADS_DIR / f"{file_hash[:12]}_{safe_name}"
         with open(file_path, "wb") as f:
             f.write(content)
 
@@ -334,6 +260,35 @@ async def upload_pdf(
         # Log the actual error for debugging
         logger.error(f"Unexpected PDF processing error: {str(e)}")
         raise HTTPException(status_code=500, detail="Unable to process PDF. This may not be a compatible lab report format.")
+
+@router.get("/review/{import_id}", response_model=PDFImportPreview)
+def get_import_review(import_id: int, db: Session = Depends(get_db)):
+    """Review data for an earlier upload, to finish importing it (rows already saved are marked)."""
+    import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+    if not import_log:
+        raise HTTPException(status_code=404, detail="Import not found")
+    if not import_log.parsed_data:
+        raise HTTPException(status_code=400, detail="This import has no parsed results to review")
+    return _build_preview(json.loads(import_log.parsed_data), import_log, import_log.filename, db)
+
+
+@router.get("/{import_id}/file")
+def get_import_file(import_id: int, download: bool = False, db: Session = Depends(get_db)):
+    """The uploaded PDF for an import, shown inline beside the review (or downloaded)."""
+    import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+    if not import_log or not import_log.file_path:
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    path = Path(import_log.file_path)
+    if not path.is_absolute():
+        path = Path("/app") / path
+    path = validate_file_path(path, UPLOADS_DIR)  # stored uploads only
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    name = secure_filename(import_log.filename) or "report.pdf"
+    disposition = "attachment" if download else "inline"
+    return FileResponse(path=str(path), media_type="application/pdf", filename=name,
+                        headers={"Content-Disposition": f'{disposition}; filename="{name}"'})
+
 
 @router.post("/rescan-ai/{import_id}", response_model=PDFImportPreview)
 async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
@@ -414,6 +369,8 @@ async def bulk_upload_pdfs(
                 "date_collected": preview.date_collected,
                 "importable_tests": preview.importable_tests,  # Include parsed test details
                 "parser": preview.parser,
+                "tests": preview.tests,
+                "pdf_url": preview.pdf_url,
                 "physician": preview.physician,
                 "matched_provider": {"id": preview.matched_provider.id, "name": preview.matched_provider.name} if preview.matched_provider else None,
                 "duplicate_warning": getattr(preview, 'duplicate_warning', None)
@@ -494,63 +451,47 @@ async def confirm_batch_import(
     Returns:
         APIResponse: Success status with import statistics
     """
-    batch_id = batch_confirmation.get("batch_id")
     global_settings = batch_confirmation.get("global_settings", {})
     individual_confirmations = batch_confirmation.get("individual_confirmations", [])
-    
-    if not batch_id:
-        raise HTTPException(status_code=400, detail="Batch ID is required")
-    
-    total_imported = 0
-    total_skipped = 0
-    failed_imports = []
-    
+    if not individual_confirmations:
+        raise HTTPException(status_code=400, detail="Nothing selected to import")
+
+    try:
+        cookie_patient_id = int(request.cookies.get("selectedPatientId", "1"))
+    except (ValueError, TypeError):
+        cookie_patient_id = 1
+
+    files, failed = [], []
     for confirmation in individual_confirmations:
+        import_log = db.query(PDFImportLog).filter_by(id=confirmation.get("import_id")).first()
+        filename = import_log.filename if import_log else "Unknown file"
         try:
-            # Update import log with selected provider before processing
-            import_log = db.query(PDFImportLog).filter_by(id=confirmation.get("import_id")).first()
-            if import_log:
-                import_log.provider_id = confirmation.get("provider_id") or global_settings.get("provider_id")
-                db.commit()
-            
-            # Merge global settings with individual confirmation
-            try:
-                cookie_patient_id = request.cookies.get("selectedPatientId", "1")
-                final_patient_id = confirmation.get("patient_id") or global_settings.get("patient_id") or int(cookie_patient_id)
-            except (ValueError, TypeError):
-                final_patient_id = 1
-            
-            merged_confirmation = PDFImportConfirm(
-                import_id=confirmation.get("import_id"),
+            merged = PDFImportConfirm(
+                import_id=str(confirmation.get("import_id")),
                 selected_tests=confirmation.get("selected_tests", []),
                 provider_id=confirmation.get("provider_id") or global_settings.get("provider_id"),
-                patient_id=final_patient_id,
-                manual_date=confirmation.get("manual_date") or global_settings.get("manual_date")
+                patient_id=confirmation.get("patient_id") or global_settings.get("patient_id") or cookie_patient_id,
+                manual_date=confirmation.get("manual_date") or global_settings.get("manual_date"),
+                edits=confirmation.get("edits") or {},
             )
-            
-            # Use existing confirmation logic
-            result = await confirm_pdf_import(request, merged_confirmation, db)
-            if result.success:
-                total_imported += result.data.get("imported_count", 0)
-                total_skipped += result.data.get("skipped_count", 0)
-            
-        except Exception as e:
-            import_log = db.query(PDFImportLog).filter_by(id=confirmation.get("import_id")).first()
-            filename = import_log.filename if import_log else "Unknown"
-            error_msg = f"{filename}: {str(e)}"
-            failed_imports.append(error_msg)
-            logger.error(f"PDF Batch Import Failed for {filename}: {str(e)}")
-    
+            result = await confirm_pdf_import(request, merged, db)
+            files.append(result.data)
+        except HTTPException as e:
+            failed.append({"import_id": confirmation.get("import_id"), "filename": filename, "error": e.detail})
+        except Exception:
+            logger.exception(f"Batch import failed for {filename}")
+            failed.append({"import_id": confirmation.get("import_id"), "filename": filename, "error": "Import failed."})
+
+    total = sum(f["imported_count"] for f in files)
     return APIResponse(
-        success=len(failed_imports) == 0,
-        message=f"Batch import completed: {total_imported} tests imported, {total_skipped} skipped" + 
-               (f", {len(failed_imports)} files failed" if failed_imports else ""),
+        success=not failed,
+        message=f"Imported {total} results from {len(files)} file{'s' if len(files) != 1 else ''}"
+                + (f"; {len(failed)} file{'s' if len(failed) != 1 else ''} failed" if failed else ""),
         data={
-            "batch_id": batch_id,
-            "total_imported": total_imported,
-            "total_skipped": total_skipped,
-            "failed_count": len(failed_imports),
-            "failed_files": failed_imports
+            "total_imported": total,
+            "files": files,
+            "failed_count": len(failed),
+            "failed_files": failed,
         }
     )
 
@@ -593,6 +534,61 @@ async def cancel_pdf_import(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error cancelling import: {str(e)}")
 
+def _create_lab(test: dict, db: Session) -> Lab:
+    """New lab test for a report row, in the report's panel (or "Imported Tests")."""
+    panel_name = (test.get('panel_name') or '').strip() or "Imported Tests"
+    panel = db.query(Panel).filter_by(name=panel_name).first()
+    if not panel:
+        panel = Panel(name=panel_name)
+        db.add(panel)
+        db.flush()
+
+    unit = None
+    unit_name = (test.get('unit') or '').strip()
+    if unit_name:
+        unit = db.query(Unit).filter_by(name=unit_name).first()
+        if not unit:
+            unit = Unit(name=unit_name)
+            db.add(unit)
+            db.flush()
+
+    ref = test.get('reference_range') if isinstance(test.get('reference_range'), dict) else {}
+    ref_text = (ref.get('text') or '').strip()
+    ref_low, ref_high, ref_type, ref_value = ref.get('low'), ref.get('high'), "range", None
+    if ref_text.startswith('>') and ref_low is not None:
+        ref_type, ref_value, ref_low, ref_high = "greater", ref_low, None, None
+    elif ref_text.startswith('<') and ref_high is not None:
+        ref_type, ref_value, ref_low, ref_high = "less", ref_high, None, None
+
+    # A saved test with the same name (in any panel) means the user chose to keep this one
+    # separate, typically because of a different unit, so give it a distinguishable name
+    base = (test.get('name') or 'Unknown Test').strip()
+    name, n = base, 1
+    while db.query(Lab).filter(Lab.name.ilike(name)).first():
+        n += 1
+        name = f"{base} ({unit_name})" if n == 2 and unit_name else f"{base} ({n})"
+
+    lab = Lab(name=name, panel_id=panel.id, unit_id=unit.id if unit else None,
+              ref_low=ref_low, ref_high=ref_high, ref_type=ref_type, ref_value=ref_value)
+    db.add(lab)
+    db.flush()
+    return lab
+
+
+def _collection_date(confirmation: PDFImportConfirm, import_log: PDFImportLog) -> datetime:
+    """The collection date chosen on the review screen, else the one read from the report."""
+    raw = confirmation.manual_date or import_log.date_collected
+    if not raw:
+        raise HTTPException(status_code=400, detail=f"Enter the collection date for {import_log.filename}.")
+    try:
+        collected = datetime.fromisoformat(str(raw)[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"The collection date for {import_log.filename} isn't a valid date.")
+    if collected.date() > datetime.now().date():
+        raise HTTPException(status_code=400, detail=f"The collection date for {import_log.filename} is in the future.")
+    return collected
+
+
 @router.post("/confirm", response_model=APIResponse)
 async def confirm_pdf_import(
     request: Request,
@@ -600,252 +596,117 @@ async def confirm_pdf_import(
     db: Session = Depends(get_db)
 ):
     """
-    Confirm and execute PDF import with selected tests and provider.
+    Save the selected rows of an uploaded report as lab results.
 
-    Takes the import_id from upload step and saves selected tests to database.
-    Creates LabResult records and associates with provider and patient.
+    selected_tests are row positions in the parsed report. edits holds corrections made on the
+    review screen (name, result, unit, range) and which saved test each row goes to.
 
     Example:
         POST /api/pdf/confirm
-        {
-            "import_id": "123",
-            "selected_test_indices": [0, 1, 2],
-            "provider_id": 5,
-            "manual_date": "2024-01-15"
-        }
-
-    Returns:
-        APIResponse with success status and imported test count
+        {"import_id": "12", "selected_tests": [0, 1, 3], "provider_id": 2, "manual_date": "2026-01-15",
+         "edits": {"3": {"result": "5.6", "lab_id": 7}}}
     """
     try:
-        # Get import log
-        import_log = db.query(PDFImportLog).filter_by(id=int(confirmation.import_id)).first()
-        if not import_log:
-            raise HTTPException(status_code=404, detail="Import not found")
+        import_id = int(confirmation.import_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid import id")
+    import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+    if not import_log:
+        raise HTTPException(status_code=404, detail="Import not found")
+    if not import_log.parsed_data:
+        raise HTTPException(status_code=400, detail="This import has no parsed results")
+    if not confirmation.provider_id or not db.query(Provider).filter_by(id=confirmation.provider_id).first():
+        raise HTTPException(status_code=400, detail=f"Choose the provider for {import_log.filename}.")
 
-        # Use cached parsed data instead of re-parsing PDF
-        import json
-        if import_log.parsed_data:
-            # Use cached parsed data
-            parsed_data = json.loads(import_log.parsed_data)
-        else:
-            # Fallback: re-parse if cached data not available (backward compatibility)
-            file_path = Path(import_log.file_path)
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail="PDF file not found")
+    parsed_data = json.loads(import_log.parsed_data)
+    parsed_tests = parsed_data.get('tests', [])
+    collected = _collection_date(confirmation, import_log)
+    patient_id = confirmation.patient_id or 1
+    already = _imported_indices(import_log, db)
 
-            with open(file_path, "rb") as f:
-                content = f.read()
+    # Apply edits and check every selected row before saving anything
+    rows, problems = [], []
+    for index in dict.fromkeys(confirmation.selected_tests):
+        if index < 0 or index >= len(parsed_tests) or index in already:
+            continue
+        edit = confirmation.edits.get(str(index))
+        test = apply_edit(parsed_tests[index], edit.model_dump(exclude_unset=True)) if edit else parsed_tests[index]
+        label = (test.get('name') or '').strip() or f"Row {index + 1}"
+        if not (test.get('name') or '').strip():
+            problems.append(f"{label}: enter the test name")
+        if test.get('numeric_value') is None and not (test.get('result_text') or test.get('result') or '').strip():
+            problems.append(f"{label}: enter the result")
+        if edit and edit.lab_id and not db.query(Lab).filter_by(id=edit.lab_id).first():
+            problems.append(f"{label}: the chosen test no longer exists")
+        rows.append((index, test, edit))
+    if problems:
+        raise HTTPException(status_code=400, detail=f"{import_log.filename}: " + "; ".join(problems))
 
-            parser = PDFParser()
-            parsed_data = await parser.parse_pdf_content(content)
-
-        imported_count = 0
-        skipped_count = 0
-
-        # Import selected tests
-        for test_index in confirmation.selected_tests:
-            if test_index >= len(parsed_data.get('tests', [])):
-                continue
-
-            test = parsed_data['tests'][test_index]
-
-            # Find or create lab test with improved matching logic
-            test_name = test.get('name', '').strip()
-            
-            # 1. Try exact match first (case insensitive)
-            lab_test = db.query(Lab).filter(
-                Lab.name.ilike(test_name)
-            ).first()
-            
-            # 2. If no exact match, try smart matching to avoid incorrect partial matches
-            # This prevents "Hemoglobin" from matching "Hemoglobin A1C"
-            if not lab_test:
-                all_labs = db.query(Lab).all()
-                for lab in all_labs:
-                    # Check if the test name matches the beginning of the lab name followed by space or end
-                    # This allows "TSH" to match "TSH (details)" but prevents "Hemoglobin" from matching "Hemoglobin A1C"
-                    lab_name_lower = lab.name.lower()
-                    test_name_lower = test_name.lower()
-                    
-                    # Match if test name is at start and followed by specific delimiters or end of string
-                    # Allow: parentheses, commas, dashes, but NOT spaces followed by letters
-                    if lab_name_lower.startswith(test_name_lower):
-                        if len(lab_name_lower) == len(test_name_lower):
-                            # Exact match
-                            lab_test = lab
-                            break
-                        else:
-                            next_char = lab_name_lower[len(test_name_lower)]
-                            # Allow punctuation or space followed by punctuation
-                            if next_char in '(),-':
-                                lab_test = lab
-                                break
-                            elif (next_char == ' ' and 
-                                  len(lab_name_lower) > len(test_name_lower) + 1 and
-                                  lab_name_lower[len(test_name_lower) + 1] in '(),-'):
-                                lab_test = lab
-                                break
-            
-            # 3. NO fallback partial matching - if exact and smart matching fail,
-            # it's better to create a new lab test than to incorrectly match
-            # This prevents "Hemoglobin" from matching "Hemoglobin A1c"
-
-            if not lab_test:
-                # Create a basic lab test if not found - use panel from PDF or default
-                panel_name = test.get('panel_name')
-
-                if panel_name:
-                    # Try to find existing panel or create it
-                    panel = db.query(Panel).filter_by(name=panel_name).first()
-                    if not panel:
-                        panel = Panel(name=panel_name)
-                        db.add(panel)
-                        db.commit()
-                        db.refresh(panel)
-                else:
-                    # Fall back to default panel for imported tests
-                    panel = db.query(Panel).filter_by(name="Imported Tests").first()
-                    if not panel:
-                        panel = Panel(name="Imported Tests")
-                        db.add(panel)
-                        db.commit()
-                        db.refresh(panel)
-
-                # Extract reference range from parsed data and determine type
-                ref_range = test.get('reference_range', {})
-                ref_low = None
-                ref_high = None
-                ref_type = "range"  # Default type
-                ref_value = None
-
-                if isinstance(ref_range, dict):
-                    ref_low = ref_range.get('low')
-                    ref_high = ref_range.get('high')
-
-                    # Check the original text to determine the correct type
-                    ref_text = ref_range.get('text', '').strip()
-
-                    # Determine reference range type based on the original text format
-                    if ref_text.startswith('>'):
-                        # Greater than format: >10.0 (parsed as {low: 10.0, high: None})
-                        ref_type = "greater"
-                        ref_value = ref_low  # The value after >
-                        ref_low = None
-                        ref_high = None
-                    elif ref_text.startswith('<'):
-                        # Less than format: <5.0 (parsed as {low: None, high: 5.0})
-                        ref_type = "less"
-                        ref_value = ref_high  # The value after <
-                        ref_low = None
-                        ref_high = None
-                    elif ref_low is not None and ref_high is not None:
-                        # Range format: 5.0-10.0
-                        ref_type = "range"
-                        ref_value = None
-                        # Keep ref_low and ref_high as they are
-                    else:
-                        # Handle cases where we can't determine the type
-                        ref_type = "range"
-                        ref_value = None
-
-                # Find or create unit based on extracted unit name
-                unit_id = 1  # Default unit
-                unit_name = test.get('unit', '').strip()
-                if unit_name:
-                    unit = db.query(Unit).filter_by(name=unit_name).first()
-                    if not unit:
-                        # Create new unit
-                        unit = Unit(name=unit_name)
-                        db.add(unit)
-                        db.commit()
-                        db.refresh(unit)
-                    unit_id = unit.id
-
-                lab_test = Lab(
-                    name=test.get('name', 'Unknown Test'),
-                    panel_id=panel.id,
-                    unit_id=unit_id,
-                    ref_low=ref_low,
-                    ref_high=ref_high,
-                    ref_type=ref_type,
-                    ref_value=ref_value
-                )
-                db.add(lab_test)
-                db.commit()
-                db.refresh(lab_test)
-
-            # Create lab result - handle both numeric and qualitative results
-            result_value = None
-            result_text = None
-
-            # Check if this is a qualitative result
-            if test.get('is_qualitative', False) or test.get('result_text'):
-                result_text = test.get('result_text') or test.get('result', '')
-                result_value = None  # No numeric value for qualitative results
+    try:
+        saved = []
+        for index, test, edit in rows:
+            if edit and edit.lab_id:
+                lab = db.query(Lab).filter_by(id=edit.lab_id).first()
             else:
-                # Try to parse as numeric result
-                try:
-                    result_value = float(test.get('numeric_value') or test.get('value', 0))
-                except (ValueError, TypeError):
-                    # If parsing fails, treat as qualitative
-                    result_text = str(test.get('result', ''))
-                    result_value = None
+                lab = None if (edit and edit.new_lab) else find_lab(test.get('name'), db)
+                lab = lab or _create_lab(test, db)
 
-            # Get patient ID from confirmation, cookie, or default to 1
-            selected_patient_id = confirmation.patient_id
-            
-            if not selected_patient_id:
-                try:
-                    cookie_patient_id = request.cookies.get("selectedPatientId", "1")
-                    selected_patient_id = int(cookie_patient_id)
-                except (ValueError, TypeError):
-                    selected_patient_id = 1
-            
-            lab_result = LabResult(
-                lab_id=lab_test.id,
-                patient_id=selected_patient_id,
-                provider_id=confirmation.provider_id or 1,  # Default provider
-                result=result_value,
-                result_text=result_text,
-                date_collected=(
-                    datetime.fromisoformat(confirmation.manual_date) if confirmation.manual_date 
-                    else datetime.fromisoformat(import_log.date_collected) if import_log.date_collected 
-                    else datetime.now()
-                ),
-                notes=f"Imported from PDF: {import_log.filename} (test index: {test_index})",
+            if test.get('numeric_value') is not None:
+                value, text = float(test['numeric_value']), None
+            else:
+                value, text = None, (test.get('result_text') or str(test.get('result') or '')).strip()
+
+            result = LabResult(
+                lab_id=lab.id,
+                patient_id=patient_id,
+                provider_id=confirmation.provider_id,
+                result=value,
+                result_text=text,
+                date_collected=collected,
+                notes=f"Imported from PDF: {import_log.filename} (test index: {index})",
                 pdf_import_id=str(import_log.id),
                 **_report_details(test, parsed_data)
             )
-            db.add(lab_result)
-            imported_count += 1
+            result.lab = lab
+            db.add(result)
+            saved.append(result)
 
-        # Update import log
-        import_log.tests_imported = imported_count
-        import_log.tests_skipped = skipped_count
-        import_log.provider_id = confirmation.provider_id  # Save the selected provider
+        db.flush()
+        import_log.tests_imported = len(already) + len(saved)
+        import_log.tests_skipped = max(len(parsed_tests) - import_log.tests_imported, 0)
+        import_log.provider_id = confirmation.provider_id
         import_log.status = "completed"
         import_log.updated_at = datetime.now()
-
         db.commit()
-
-        # Invalidate results cache after importing lab results
-        from ..utils.cache import api_cache
-        api_cache.invalidate_pattern('results')
-        api_cache.invalidate_pattern('dashboard')
-
-        return APIResponse(
-            success=True,
-            message=f"Successfully imported {imported_count} test results",
-            data={
-                "imported_count": imported_count,
-                "skipped_count": skipped_count
-            }
-        )
-
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error importing results: {str(e)}")
+        logger.exception(f"Saving results for import {import_log.id} failed")
+        raise HTTPException(status_code=500, detail=f"Saving results from {import_log.filename} failed.")
+
+    from ..utils.cache import api_cache
+    api_cache.invalidate_pattern('results')
+    api_cache.invalidate_pattern('dashboard')
+
+    results = [{
+        "lab_id": r.lab_id,
+        "name": r.lab.name,
+        "value": f"{r.result:g}" if r.result is not None else r.result_text,
+        "unit": r.lab.unit.name if r.lab.unit else "",
+        "status": r.status,
+    } for r in saved]
+    return APIResponse(
+        success=True,
+        message=f"Imported {len(saved)} results from {import_log.filename}",
+        data={
+            "import_id": import_log.id,
+            "filename": import_log.filename,
+            "date_collected": collected.date().isoformat(),
+            "imported_count": len(saved),
+            "skipped_count": len(parsed_tests) - len(saved) - len(already),
+            "results": results,
+            "out_of_range": [r for r in results if r["status"] in ("high", "low", "abnormal")],
+        }
+    )
 
 def validate_filename(filename: str) -> str:
     """
@@ -1049,8 +910,22 @@ async def get_import_history(db: Session = Depends(get_db)):
     imports = db.query(PDFImportLog).options(
         joinedload(PDFImportLog.provider)
     ).order_by(PDFImportLog.created_at.desc()).all()
-    
-    return [import_log.to_dict() for import_log in imports]
+
+    # Results actually saved per import, counted in one query (the stored counter can be stale)
+    from sqlalchemy import func
+    saved = dict(
+        db.query(LabResult.pdf_import_id, func.count(LabResult.id))
+        .filter(LabResult.pdf_import_id.isnot(None))
+        .group_by(LabResult.pdf_import_id)
+        .all()
+    )
+    history = []
+    for import_log in imports:
+        item = import_log.to_dict()
+        item.pop("parsed_data", None)  # large, and the page loads it per import when needed
+        item["results_saved"] = saved.get(str(import_log.id), 0)
+        history.append(item)
+    return history
 
 @router.delete("/{import_id}")
 async def delete_pdf_import(
@@ -1068,14 +943,14 @@ async def delete_pdf_import(
         LabResult.pdf_import_id == str(import_id)
     ).delete()
 
-    # Delete the PDF file from storage if it exists
-    if import_log.filename:
-        file_path = UPLOADS_DIR / import_log.filename
+    # Delete the stored PDF (only ever inside the uploads folder)
+    if import_log.file_path:
         try:
+            file_path = validate_file_path(Path(import_log.file_path), UPLOADS_DIR)
             if file_path.exists():
                 file_path.unlink()
         except Exception as e:
-            logger.warning(f"Could not delete PDF file {file_path}: {str(e)}")
+            logger.warning(f"Could not delete PDF file for import {import_log.id}: {str(e)}")
 
     # Delete the import log
     db.delete(import_log)

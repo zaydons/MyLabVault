@@ -5,2316 +5,338 @@
 {% block title %}PDF Import - MyLabVault{% endblock %}
 
 {% block content %}
-<!-- Content Header -->
 <div class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
-      <div class="col-sm-12">
-        <h1 class="m-0">
-          <i class="mdi mdi-file-upload mr-2"></i>
-          PDF Lab Report Import
-        </h1>
-      </div>
-    </div>
+    <h1 class="m-0">
+      <i class="mdi mdi-file-upload mr-2" aria-hidden="true"></i>
+      PDF Lab Report Import
+    </h1>
   </div>
 </div>
 
-<!-- Main content -->
 <section class="content">
   <div class="container-fluid">
-    
-    <!-- Upload Section -->
-    <div class="row mb-4">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-cloud-upload mr-2"></i>
-              Upload Lab Reports
-            </h2>
-            <div class="card-tools">
-              <button type="button" class="btn btn-sm btn-info" onclick="showImportHistory()">
-                <i class="mdi mdi-history mr-1"></i>
-                View History
-              </button>
-            </div>
-          </div>
-          <div class="card-body">
-            <!-- Upload Drop Zone -->
-            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-              <div class="upload-content text-center p-3">
-                <i class="mdi mdi-cloud-upload text-primary" style="font-size: 3rem;"></i>
-                <h5 class="mt-2">Drop PDF files here or click to browse</h5>
-                <p class="text-muted mb-2">Supports multiple files • LabCorp, Quest, and other lab formats</p>
-                <input type="file" id="fileInput" multiple accept=".pdf" style="display: none;">
-                <button type="button" class="btn btn-primary">
-                  <i class="mdi mdi-file-plus mr-2"></i>
-                  Choose Files
-                </button>
-                <div class="mt-2">
-                  <small class="text-muted">
-                    <i class="mdi mdi-information mr-1"></i>
-                    Supported formats: PDF lab reports from major providers
-                  </small>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Upload Progress -->
-            <div id="uploadProgress" style="display: none;" class="mt-4">
-              <h5>Upload Progress</h5>
-              <div id="uploadList"></div>
-            </div>
-          </div>
+
+    <!-- Upload -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><i class="mdi mdi-cloud-upload mr-2" aria-hidden="true"></i>Upload lab reports</h2>
+        <div class="card-tools">
+          <a href="#historySection" class="btn btn-outline-primary btn-sm">Import history</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="upload-zone text-center p-4" id="uploadZone">
+          <i class="mdi mdi-cloud-upload text-primary" style="font-size: 3rem;" aria-hidden="true"></i>
+          <p class="h5 mt-2">Drop PDF files here or choose files</p>
+          <p class="text-muted mb-3" id="uploadHelp">Several reports at once are fine. Each one is read separately, and you review the results before anything is saved.</p>
+          <label class="btn btn-primary mb-0 choose-files">
+            <i class="mdi mdi-file-plus mr-1" aria-hidden="true"></i>Choose files
+            <input type="file" id="fileInput" class="sr-only" multiple accept=".pdf,application/pdf" aria-describedby="uploadHelp">
+          </label>
+        </div>
+        <div id="uploadProgress" class="mt-3" hidden>
+          <h3 class="h6">Uploads</h3>
+          <ul class="list-unstyled mb-0" id="uploadList" aria-live="polite"></ul>
         </div>
       </div>
     </div>
 
-    <!-- Batch Confirmation Section -->
-    <div id="batchConfirmationSection" style="display: none;" class="row mb-4">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header bg-warning">
-            <h2 class="card-title">
-              <i class="mdi mdi-check-circle mr-2"></i>
-              Review and Confirm Import
-            </h2>
-          </div>
-          <div class="card-body">
-            <!-- Import Summary -->
-            <div class="row">
-              <div class="col-md-6">
-                <h5>Import Summary</h5>
-                <div id="batchSummary">
-                  <!-- Will be populated dynamically -->
-                </div>
-              </div>
-            </div>
-            
-            <!-- Individual File Details -->
-            <div class="mt-4">
-              <h5>Individual Files</h5>
-              <div id="fileDetailsList">
-                <!-- Will be populated with individual file details -->
-              </div>
-            </div>
-            
-            <div class="mt-4">
-              <button type="button" class="btn btn-success btn-lg" onclick="confirmBatchImport()">
-                <i class="mdi mdi-check-all mr-2"></i>
-                Import All Selected Tests
-              </button>
-              <button type="button" class="btn btn-secondary ml-2" onclick="cancelBatchImport()">
-                <i class="mdi mdi-close mr-2"></i>
-                Cancel Import
-              </button>
-            </div>
-          </div>
-        </div>
+    <div id="reviewMessages"></div>
+
+    <!-- Summary after importing -->
+    <div class="card" id="importSummary" hidden>
+      <div class="card-header">
+        <h2 class="card-title" id="summaryTitle" tabindex="-1">Imported</h2>
+      </div>
+      <div class="card-body">
+        <p id="summaryLead"></p>
+        <ul class="list-group mb-3" id="summaryFiles"></ul>
+        <a href="/dashboard" class="btn btn-primary">Go to dashboard</a>
+        <a href="/results" class="btn btn-outline-primary ml-1">All results</a>
+        <button type="button" class="btn btn-outline-secondary ml-1" id="importMore">Import more reports</button>
       </div>
     </div>
 
-    <!-- Import Statistics -->
-    <div class="row mb-4" id="statisticsSection">
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-info">
-          <span class="info-box-icon">
-            <i class="mdi mdi-file-pdf-box"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number" id="totalImports">0</span>
-            <span class="info-box-text">Total Imports</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-success">
-          <span class="info-box-icon">
-            <i class="mdi mdi-check-circle"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number" id="completedImports">0</span>
-            <span class="info-box-text">Completed</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-warning">
-          <span class="info-box-icon">
-            <i class="mdi mdi-clock-outline"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number" id="pendingImports">0</span>
-            <span class="info-box-text">Pending</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-3 col-6">
-        <div class="info-box bg-danger">
-          <span class="info-box-icon">
-            <i class="mdi mdi-alert-circle"></i>
-          </span>
-          <div class="info-box-content">
-            <span class="info-box-number" id="failedImports">0</span>
-            <span class="info-box-text">Failed</span>
-          </div>
-        </div>
+    <!-- Review -->
+    <div id="reviewSection" hidden>
+      <h2 class="h4 mb-1">Review and import</h2>
+      <p class="text-muted">Check each report against its PDF. You can correct any value, choose which saved test it belongs to, or untick rows you don't want.</p>
+      <div id="reviewFiles"></div>
+      <div class="review-actions">
+        <button type="button" class="btn btn-primary" id="importButton" disabled>
+          <i class="mdi mdi-check-all mr-1" aria-hidden="true"></i><span>Nothing selected</span>
+        </button>
+        <button type="button" class="btn btn-outline-secondary ml-2" id="cancelReview">Cancel</button>
+        <small class="text-muted ml-2 d-none d-md-inline">Reports you don't import stay in the history below.</small>
       </div>
     </div>
 
-    <!-- Import History -->
-    <div class="row" id="historySection">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-history mr-2"></i>
-              Import History
-            </h2>
-          </div>
-          <div class="card-body">
-            <div class="table-responsive">
-              <table id="historyTable" class="table table-bordered table-striped">
-                <thead>
-                  <tr>
-                    <th>Filename</th>
-                    <th>Status</th>
-                    <th>Test Progress</th>
-                    <th>Date Collected</th>
-                    <th>Import Date</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <!-- Will be populated by DataTable -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+    <!-- Statistics -->
+    <div class="row mt-4" id="statisticsSection">
+      <div class="col-6 col-lg-3"><div class="card summary-card"><div class="card-body">
+        <div class="summary-label">Reports</div><div class="summary-value" id="totalImports">0</div></div></div></div>
+      <div class="col-6 col-lg-3"><div class="card summary-card"><div class="card-body">
+        <div class="summary-label">Imported</div><div class="summary-value" id="completedImports">0</div></div></div></div>
+      <div class="col-6 col-lg-3"><div class="card summary-card"><div class="card-body">
+        <div class="summary-label">Waiting for review</div><div class="summary-value" id="pendingImports">0</div></div></div></div>
+      <div class="col-6 col-lg-3"><div class="card summary-card"><div class="card-body">
+        <div class="summary-label">Failed</div><div class="summary-value" id="failedImports">0</div></div></div></div>
+    </div>
+
+    <!-- History -->
+    <div class="card" id="historySection">
+      <div class="card-header">
+        <h2 class="card-title"><i class="mdi mdi-history mr-2" aria-hidden="true"></i>Import history</h2>
+      </div>
+      <div class="card-body">
+        <table id="historyTable" class="table table-striped" style="width: 100%;">
+          <thead>
+            <tr>
+              <th scope="col">File</th>
+              <th scope="col">Status</th>
+              <th scope="col">Results saved</th>
+              <th scope="col">Collected</th>
+              <th scope="col">Uploaded</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
 
   </div>
 </section>
 
-<!-- Import Details Modal -->
+<!-- Import details (read only) -->
 <div class="modal fade" id="importDetailsModal" tabindex="-1" role="dialog" aria-labelledby="importDetailsModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="importDetailsModalLabel">
-          <i class="mdi mdi-file-document-outline mr-2"></i>
-          Import Details
-        </h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
+        <h2 class="modal-title h5" id="importDetailsModalLabel">Import details</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="importDetailsContent"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="detailsReviewBtn" hidden>Review and import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New provider -->
+<div class="modal fade" id="newProviderModal" tabindex="-1" role="dialog" aria-labelledby="newProviderModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form class="modal-content" id="newProviderForm" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="newProviderModalLabel">Add a provider</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
       </div>
       <div class="modal-body">
-        <div id="importDetailsContent">
-          <!-- Content will be loaded dynamically -->
+        <div class="alert alert-danger d-none" id="newProviderError" role="alert"></div>
+        <div class="form-group">
+          <label for="providerName">Name</label>
+          <input type="text" class="form-control" id="providerName" maxlength="255" required placeholder="e.g. Dr. Jane Smith">
+        </div>
+        <div class="form-group mb-0">
+          <label for="providerSpecialty">Specialty <span class="text-muted small">(optional)</span></label>
+          <input type="text" class="form-control" id="providerSpecialty" maxlength="255" placeholder="e.g. Internal Medicine">
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-success" id="processImportBtn" style="display: none;">
-          <i class="mdi mdi-play-circle mr-1"></i>
-          Process Import
-        </button>
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add provider</button>
       </div>
-    </div>
+    </form>
   </div>
 </div>
 
-<!-- New Provider Modal -->
-<div class="modal fade" id="newProviderModal" tabindex="-1" role="dialog" aria-labelledby="newProviderModalLabel" aria-hidden="true">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="newProviderModalLabel">
-          <i class="mdi mdi-office-building mr-2"></i>
-          Add New Provider
-        </h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <form id="newProviderForm">
-          <div class="form-group">
-            <label for="providerName">Provider Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="providerName" required placeholder="Dr. Smith, LabCorp, Quest, etc.">
-            <small class="form-text text-muted">Enter the full name of the healthcare provider or lab</small>
-          </div>
-          <div class="form-group">
-            <label for="providerSpecialty">Specialty (Optional)</label>
-            <input type="text" class="form-control" id="providerSpecialty" placeholder="e.g., Cardiology, Laboratory">
-            <small class="form-text text-muted">Medical specialty or area of expertise</small>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-success" onclick="createNewProvider()">
-          <i class="mdi mdi-plus mr-1"></i>
-          Create Provider
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- Standardized Modals -->
 {{ notification_modal() }}
 {{ confirmation_modal() }}
 {{ pdf_modal() }}
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="/static/js/pdf-review.js"></script>
 <script>
-// Cookie helper function (matches layout.html)
-function getCookie(name) {
-    const nameEQ = name + "=";
-    const ca = document.cookie.split(';');
-    for(let i = 0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
-        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
-    }
-    return null;
-}
-// Global variables
-let currentBatchId = null;
-let currentBatchData = null;
-let uploadQueue = [];
-let aiParsingEnabled = false;
+const STATUS_BADGES = {
+    pending: '<span class="badge badge-status-out">Waiting for review</span>',
+    completed: '<span class="badge badge-status-normal">Imported</span>',
+    failed: '<span class="badge badge-status-abnormal">Failed</span>',
+};
 
-async function checkAiStatus() {
-    try {
-        const response = await fetch('/api/pdf/ai-status');
-        if (response.ok) {
-            aiParsingEnabled = (await response.json()).enabled === true;
-        }
-    } catch (error) {
-        console.error('Error checking AI parsing status:', error);
-    }
-}
-
-async function rescanFileWithAI(index) {
-    const file = currentBatchData && currentBatchData.files[index];
-    if (!file) return;
-
-    const card = document.getElementById(`file-card-${index}`);
-    const button = card.querySelector('.rescan-ai-btn');
-    button.disabled = true;
-    button.innerHTML = '<i class="mdi mdi-loading mdi-spin mr-1"></i> Scanning...';
-
-    try {
-        const response = await fetch(`/api/pdf/rescan-ai/${encodeURIComponent(file.import_id)}`, { method: 'POST' });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.detail || 'AI re-scan failed');
-        }
-
-        currentBatchData.files[index] = {
-            ...file,
-            parser: data.parser,
-            tests_found: data.total_tests_found,
-            date_collected: data.date_collected,
-            importable_tests: data.importable_tests,
-            physician: data.physician,
-            matched_provider: data.matched_provider,
-        };
-
-        // Re-rendering refills every provider dropdown, so keep the other files' choices
-        // (this file's choice too, unless it only came from the earlier scan's match)
-        const savedProviders = {};
-        document.querySelectorAll('.file-provider-select').forEach(select => {
-            if (select.value !== select.dataset.matchedProviderId) savedProviders[select.id] = select.value;
-        });
-        const savedDate = document.getElementById(`date-${index}`)?.value || '';
-
-        card.innerHTML = renderFileCard(currentBatchData.files[index], index);
-        await loadProviders();
-        document.querySelectorAll('.file-provider-select').forEach(select => {
-            if (savedProviders[select.id]) select.value = savedProviders[select.id];
-        });
-        const dateInput = document.getElementById(`date-${index}`);
-        if (dateInput) dateInput.value = savedDate;
-
-        showNotification(`Found ${data.total_tests_found} tests with AI. Review them before importing.`, 'success', 'AI Re-scan Complete');
-    } catch (error) {
-        button.disabled = false;
-        button.innerHTML = '<i class="mdi mdi-robot-outline mr-1"></i> Re-scan with AI';
-        showNotification(error.message, 'error', 'AI Re-scan Failed');
-    }
-}
-
-$(document).ready(async function() {
-    // Initialize date formatting
-    await initializeDateFormatting();
-    
-    // Initialize DataTable
-    initializeHistoryTable();
-    
-    // Load providers for dropdown
-    loadProviders();
-
-    // Show AI re-scan controls only when AI parsing is configured
-    await checkAiStatus();
-    
-    // Load initial history
-    await refreshHistory();
-    
-    // Setup drag and drop
-    setupDragAndDrop();
-    
-    // File input change handler
-    $('#fileInput').on('change', handleFileSelection);
-});
-
-function setupDragAndDrop() {
-    const uploadZone = document.getElementById('uploadZone');
-    
-    uploadZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadZone.classList.add('drag-over');
-    });
-    
-    uploadZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        uploadZone.classList.remove('drag-over');
-    });
-    
-    uploadZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadZone.classList.remove('drag-over');
-        
-        const files = Array.from(e.dataTransfer.files);
-        handleFiles(files);
-    });
-}
-
-function handleFileSelection(event) {
-    const files = Array.from(event.target.files);
-    handleFiles(files);
-}
-
-async function handleFiles(files) {
-    if (files.length === 0) return;
-    
-    // Filter PDF files
-    const pdfFiles = files.filter(file => file.type === 'application/pdf');
-    
-    if (pdfFiles.length !== files.length) {
-        alert(`${files.length - pdfFiles.length} non-PDF files were ignored. Only PDF files are supported.`);
-    }
-    
-    if (pdfFiles.length === 0) {
-        alert('No valid PDF files selected.');
-        return;
-    }
-    
-    // Show upload progress
-    showUploadProgress(pdfFiles);
-    
-    try {
-        // Create FormData for bulk upload
-        const formData = new FormData();
-        pdfFiles.forEach(file => {
-            formData.append('files', file);
-        });
-        
-        const response = await fetch('/api/pdf/bulk-upload', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            currentBatchId = result.batch_id;
-            currentBatchData = result;
-            showBatchConfirmation(result);
-        } else {
-            throw new Error(result.message || 'Upload failed');
-        }
-        
-    } catch (error) {
-        console.error('Upload error:', error);
-        alert('Upload failed: ' + error.message);
-        hideUploadProgress();
-    }
-}
-
-function showUploadProgress(files) {
-    const uploadProgress = document.getElementById('uploadProgress');
-    const uploadList = document.getElementById('uploadList');
-    
-    uploadList.innerHTML = '';
-    files.forEach((file, index) => {
-        const fileDiv = document.createElement('div');
-        fileDiv.className = 'upload-item mb-2';
-        fileDiv.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <span><i class="mdi mdi-file-pdf mr-2"></i>${escapeHtml(file.name)}</span>
-                <span class="upload-status" id="status-${index}">
-                    <i class="mdi mdi-loading mdi-spin text-info"></i> Uploading...
-                </span>
-            </div>
-        `;
-        uploadList.appendChild(fileDiv);
-    });
-    
-    uploadProgress.style.display = 'block';
-}
-
-function hideUploadProgress() {
-    document.getElementById('uploadProgress').style.display = 'none';
-}
-
-function renderFileCard(file, index) {
-    return `
-        <div class="card-header">
-            <h6 class="mb-0">
-                <i class="mdi mdi-file-pdf mr-2"></i>
-                ${escapeHtml(file.filename)}
-                ${file.parser === 'ai' ? '<span class="badge badge-primary ml-2" title="Results extracted with AI - review before importing">AI</span>' : ''}
-                <span class="badge badge-${file.status === 'duplicate' ? 'warning' : 'success'} float-right">
-                    ${escapeHtml(file.status === 'duplicate' ? 'Duplicate' : file.tests_found + ' tests found')}
-                </span>
-            </h6>
-        </div>
-        <div class="card-body py-2">
-            <div class="row">
-                <div class="col-md-8">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <small><strong>Tests Found:</strong> ${escapeHtml(file.tests_found)}</small><br>
-                            <small><strong>Date:</strong> ${escapeHtml(file.date_collected || 'Not detected')}</small>
-                        </div>
-                        <div class="col-md-6">
-                            ${file.status !== 'duplicate' ? `
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input file-checkbox" 
-                                       id="file-${index}" data-import-id="${escapeHtml(file.import_id)}" checked>
-                                <label class="custom-control-label" for="file-${index}">
-                                    Import this file
-                                </label>
-                            </div>
-                            ` : `
-                            <small class="text-warning">
-                                <i class="mdi mdi-alert mr-1"></i>
-                                This file has already been imported previously
-                            </small>
-                            `}
-                        </div>
-                    </div>
-                    ${file.status !== 'duplicate' ? `
-                    <div class="form-group mt-2 mb-1">
-                        <label for="provider-${index}" class="mb-1"><small><strong>Provider for this file:</strong></small></label>
-                        <div class="input-group input-group-sm">
-                            <select class="form-control form-control-sm file-provider-select" 
-                                    id="provider-${index}" data-file-index="${index}"
-                                    data-matched-provider-id="${file.matched_provider ? escapeHtml(file.matched_provider.id) : ''}" required>
-                                <option value="">Select provider...</option>
-                            </select>
-                            <div class="input-group-append">
-                                <button class="btn btn-success btn-sm" type="button" onclick="showNewProviderModal(${index})">
-                                    <i class="mdi mdi-plus"></i>
-                                </button>
-                            </div>
-                        </div>
-                        ${file.matched_provider ? `
-                        <small class="text-success"><i class="mdi mdi-check mr-1"></i>Selected from the report</small>
-                        ` : file.physician ? `
-                        <small class="text-muted">Report lists <strong>${escapeHtml(file.physician)}</strong> &middot;
-                            <a href="#" onclick="showNewProviderModal(${index}, true); return false;">Add as new provider</a></small>
-                        ` : ''}
-                    </div>
-                    <div class="form-group mt-1 mb-2">
-                        <label for="date-${index}" class="mb-1"><small><strong>Override date (optional):</strong></small></label>
-                        <input type="date" class="form-control form-control-sm file-date-input" 
-                               id="date-${index}" data-file-index="${index}"
-                               placeholder="Leave empty to use PDF date">
-                        <small class="form-text text-muted">Leave empty to use date from PDF (${escapeHtml(file.date_collected || 'not detected')})</small>
-                    </div>
-                    ` : ''}
-                </div>
-                <div class="col-md-4 text-right">
-                    ${file.status !== 'duplicate' ? `
-                    <button class="btn btn-sm btn-info" type="button" data-toggle="collapse" 
-                            data-target="#tests-${index}" aria-expanded="false">
-                        <i class="mdi mdi-eye mr-1"></i> View Tests
-                    </button>
-                    ${aiParsingEnabled ? `
-                    <button class="btn btn-sm btn-outline-primary mt-1 rescan-ai-btn" type="button" onclick="rescanFileWithAI(${index})"
-                            title="Re-read this PDF with AI and replace the extracted results">
-                        <i class="mdi mdi-robot-outline mr-1"></i> Re-scan with AI
-                    </button>
-                    ` : ''}
-                    ` : ''}
-                </div>
-            </div>
-            
-            ${file.status !== 'duplicate' && file.importable_tests && file.importable_tests.length > 0 ? `
-            <div class="collapse mt-3" id="tests-${index}">
-                <div class="card card-body">
-                    <h6><i class="mdi mdi-test-tube mr-2"></i>Importable Test Results</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped test-results-table">
-                            <thead>
-                                <tr>
-                                    <th width="5%">
-                                        <div class="custom-control custom-checkbox">
-                                            <input type="checkbox" class="custom-control-input select-all-tests" 
-                                                   id="selectAll-${index}" checked
-                                                   onchange="toggleAllTests(${index})">
-                                            <label class="custom-control-label" for="selectAll-${index}"></label>
-                                        </div>
-                                    </th>
-                                    <th>Test Name</th>
-                                    <th>Result</th>
-                                    <th>Unit</th>
-                                    <th>Reference Range</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${file.importable_tests.map((test, testIndex) => `
-                                    <tr>
-                                        <td>
-                                            <div class="custom-control custom-checkbox">
-                                                <input type="checkbox" class="custom-control-input test-checkbox" 
-                                                       id="test-${index}-${testIndex}" 
-                                                       data-file-index="${index}" 
-                                                       data-test-index="${testIndex}" checked
-                                                       onchange="updateTestSelection(${index})">
-                                                <label class="custom-control-label" for="test-${index}-${testIndex}"></label>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <strong>${escapeHtml(test.name)}</strong>
-                                            ${test.matched_lab_name ? `<br><small class="text-success">Matched: ${escapeHtml(test.matched_lab_name)}</small>` : ''}
-                                        </td>
-                                        <td>
-                                            <span class="${test.is_numeric ? 'badge badge-primary' : 'badge badge-secondary'}">
-                                                ${escapeHtml(test.result || test.result_text || 'N/A')}
-                                            </span>
-                                            ${test.flag ? `<span class="badge badge-danger ml-1" title="Flag printed by the lab">${escapeHtml(test.flag)}</span>` : ''}
-                                            ${test.lab_comment ? `<i class="mdi mdi-comment-text-outline text-muted ml-1" title="${escapeHtml(test.lab_comment)}"></i>` : ''}
-                                        </td>
-                                        <td>${escapeHtml(test.unit || 'N/A')}</td>
-                                        <td>
-                                            ${escapeHtml(test.reference_range ? 
-                                                (typeof test.reference_range === 'string' ? test.reference_range : 
-                                                 test.reference_range.text || 'N/A') : 'N/A')}
-                                        </td>
-                                        <td>
-                                            <span class="badge badge-${getTestStatusBadge(test)}">
-                                                ${getTestStatus(test)}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="text-center">
-                        <small class="text-muted">
-                            <i class="mdi mdi-information mr-1"></i>
-                            Uncheck tests you don't want to import. Tests with green "Matched" labels 
-                            will be linked to existing lab definitions.
-                        </small>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-        </div>
-    `;
-}
-
-function showBatchConfirmation(batchData) {
-    hideUploadProgress();
-    
-    // Update batch summary
-    const summaryDiv = document.getElementById('batchSummary');
-    summaryDiv.innerHTML = `
-        <div class="small-box bg-info">
-            <div class="inner">
-                <h3>${batchData.successful_uploads}</h3>
-                <p>Files Ready to Import</p>
-            </div>
-            <div class="icon"><i class="mdi mdi-check-circle"></i></div>
-        </div>
-        ${batchData.failed_uploads > 0 ? `
-        <div class="small-box bg-danger mt-2">
-            <div class="inner">
-                <h3>${batchData.failed_uploads}</h3>
-                <p>Failed Uploads</p>
-            </div>
-            <div class="icon"><i class="mdi mdi-alert-circle"></i></div>
-        </div>
-        ` : ''}
-        ${batchData.duplicates > 0 ? `
-        <div class="small-box bg-warning mt-2">
-            <div class="inner">
-                <h3>${batchData.duplicates}</h3>
-                <p>Duplicate Files</p>
-            </div>
-            <div class="icon"><i class="mdi mdi-content-duplicate"></i></div>
-        </div>
-        ` : ''}
-    `;
-    
-    // Update file details list
-    const fileDetailsDiv = document.getElementById('fileDetailsList');
-    fileDetailsDiv.innerHTML = '';
-    
-    batchData.files.forEach((file, index) => {
-        const fileCard = document.createElement('div');
-        fileCard.className = 'card mb-2';
-        fileCard.id = `file-card-${index}`;
-        fileCard.innerHTML = renderFileCard(file, index);
-        fileDetailsDiv.appendChild(fileCard);
-    });
-    
-    // Show confirmation section
-    document.getElementById('batchConfirmationSection').style.display = 'block';
-    
-    // Load providers for individual file dropdowns after DOM is updated
-    setTimeout(() => {
-        loadProviders();
-    }, 100);
-}
-
-async function confirmBatchImport() {
-    if (!currentBatchId || !currentBatchData) {
-        alert('No batch to import');
-        return;
-    }
-    
-    // Get individual file selections, their selected tests, and providers
-    const selectedFiles = [];
-    let missingProviders = [];
-    const checkedBoxes = document.querySelectorAll('.file-checkbox:checked');
-
-    checkedBoxes.forEach(checkbox => {
-        const importId = checkbox.getAttribute('data-import-id');
-        const fileData = currentBatchData.files.find(f => f.import_id === importId);
-        if (fileData && fileData.status !== 'duplicate') {
-            // Get file index to find selected tests and provider
-            const fileIndex = currentBatchData.files.indexOf(fileData);
-            
-            // Get provider for this file
-            const providerSelect = document.getElementById(`provider-${fileIndex}`);
-            const selectedProvider = providerSelect ? providerSelect.value : null;
-            
-            if (!selectedProvider) {
-                missingProviders.push(fileData.filename);
-                return;
-            }
-            
-            // Get date override for this file (if any)
-            const dateInput = document.getElementById(`date-${fileIndex}`);
-            const selectedDate = dateInput ? dateInput.value : null;
-            
-            // Get selected test indices for this file
-            const selectedTestIndices = [];
-            const testCheckboxes = document.querySelectorAll(`input[data-file-index="${fileIndex}"]:checked`);
-            testCheckboxes.forEach(testCheckbox => {
-                const testIndex = parseInt(testCheckbox.getAttribute('data-test-index'));
-                selectedTestIndices.push(testIndex);
-            });
-            
-            // Only include files that have at least one test selected
-            if (selectedTestIndices.length > 0) {
-                // Get patient ID from cookie
-                const selectedPatientId = getCookie('selectedPatientId') || '1';
-                
-                const fileConfirmation = {
-                    import_id: importId,
-                    selected_tests: selectedTestIndices,
-                    provider_id: selectedProvider,
-                    patient_id: parseInt(selectedPatientId)
-                };
-                
-                // Add manual date if specified for this file
-                if (selectedDate) {
-                    fileConfirmation.manual_date = selectedDate;
-                }
-                
-                selectedFiles.push(fileConfirmation);
-            }
-        }
-    });
-    
-    // Validate that all files have providers selected
-    if (missingProviders.length > 0) {
-        alert(`Please select providers for the following files:\n${missingProviders.join('\n')}`);
-        return;
-    }
-    
-    if (selectedFiles.length === 0) {
-        alert('No files selected for import');
-        return;
-    }
-    
-    // Prepare batch confirmation data
-    const batchConfirmation = {
-        batch_id: currentBatchId,
-        global_settings: {},
-        individual_confirmations: selectedFiles
-    };
-    
-    try {
-        const response = await fetch('/api/pdf/batch-confirm', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(batchConfirmation)
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // Show success message
-            const alert = `
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <i class="mdi mdi-check mr-2"></i>
-                    ${escapeHtml(result.message)}
-                    <button type="button" class="close" data-dismiss="alert">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-            `;
-            $('.content-header .container-fluid').after(alert);
-            
-            // Reset form
-            resetImportForm();
-            
-            // Refresh history
-            await refreshHistory();
-            
-        } else {
-            throw new Error(result.message || 'Import failed');
-        }
-        
-    } catch (error) {
-        console.error('Import error:', error);
-        alert('Import failed: ' + error.message);
-    }
-}
-
-function cancelBatchImport() {
-    // Hide confirmation section
-    document.getElementById('batchConfirmationSection').style.display = 'none';
-    
-    // Reset global variables
-    currentBatchId = null;
-    currentBatchData = null;
-    
-    // Reset file input
-    document.getElementById('fileInput').value = '';
-}
-
-function resetImportForm() {
-    cancelBatchImport();
-    hideUploadProgress();
-}
-
-
-async function loadProviders() {
-    try {
-        const response = await fetch('/api/providers/');
-        const providers = await response.json();
-        
-        // Load individual file provider dropdowns
-        document.querySelectorAll('.file-provider-select').forEach(select => {
-            select.innerHTML = '<option value="">Select provider...</option>';
-            providers.forEach(provider => {
-                const option = document.createElement('option');
-                option.value = provider.id;
-                option.textContent = provider.name;
-                select.appendChild(option);
-            });
-            // Preselect the provider matched from the report
-            if (select.dataset.matchedProviderId) select.value = select.dataset.matchedProviderId;
-        });
-        
-    } catch (error) {
-        console.error('Error loading providers:', error);
-    }
-}
-
-function showNewProviderModal(fileIndex = null, useReportName = false) {
-    // Clear form
-    document.getElementById('newProviderForm').reset();
-    const reportName = useReportName && currentBatchData && currentBatchData.files[fileIndex]
-        ? currentBatchData.files[fileIndex].physician : '';
-    if (reportName) document.getElementById('providerName').value = reportName;
-    
-    // Store which file this provider is for (if any)
-    const modal = document.getElementById('newProviderModal');
-    modal.setAttribute('data-file-index', fileIndex !== null ? fileIndex : '');
-    
-    $('#newProviderModal').modal('show');
-}
-
-
-async function createNewProvider() {
-    const name = document.getElementById('providerName').value.trim();
-    const specialty = document.getElementById('providerSpecialty').value.trim();
-    
-    if (!name) {
-        alert('Provider name is required');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/providers/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: name,
-                specialty: specialty || null
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success || response.ok) {
-            const provider = result.data || result;
-            const modal = document.getElementById('newProviderModal');
-            const fileIndex = modal.getAttribute('data-file-index');
-            
-            // Add new provider to all file dropdowns
-            const option = document.createElement('option');
-            option.value = provider.id;
-            option.textContent = provider.name;
-            
-            // Add to all file provider dropdowns
-            document.querySelectorAll('.file-provider-select').forEach(select => {
-                const fileOption = option.cloneNode(true);
-                select.appendChild(fileOption);
-            });
-            
-            // If created for specific file, select it for that file
-            if (fileIndex !== null && fileIndex !== '') {
-                const targetSelect = document.getElementById(`provider-${fileIndex}`);
-                if (targetSelect) {
-                    targetSelect.value = provider.id;
-                }
-            }
-            
-            // Close modal
-            $('#newProviderModal').modal('hide');
-            
-            // Show success message
-            const alert = `
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <i class="mdi mdi-check mr-2"></i>
-                    Provider "${escapeHtml(provider.name)}" created successfully${fileIndex ? ` and selected for file ${parseInt(fileIndex) + 1}` : ''}
-                    <button type="button" class="close" data-dismiss="alert">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-            `;
-            $('.content-header .container-fluid').after(alert);
-            
-        } else {
-            throw new Error(result.message || 'Failed to create provider');
-        }
-        
-    } catch (error) {
-        console.error('Error creating provider:', error);
-        alert('Error creating provider: ' + error.message);
-    }
-}
-
-// Helper functions for test display and selection
-function getTestStatus(test) {
-    if (test.matched_lab_id) {
-        return 'Matched';
-    } else {
-        return 'New';
-    }
-}
-
-function getTestStatusBadge(test) {
-    if (test.matched_lab_id) {
-        return 'success';
-    } else {
-        return 'info';
-    }
-}
-
-function toggleAllTests(fileIndex) {
-    const selectAllCheckbox = document.getElementById(`selectAll-${fileIndex}`);
-    const testCheckboxes = document.querySelectorAll(`input[data-file-index="${fileIndex}"]`);
-    
-    testCheckboxes.forEach(checkbox => {
-        checkbox.checked = selectAllCheckbox.checked;
-    });
-    
-    updateTestSelection(fileIndex);
-}
-
-function updateTestSelection(fileIndex) {
-    const testCheckboxes = document.querySelectorAll(`input[data-file-index="${fileIndex}"]`);
-    const selectAllCheckbox = document.getElementById(`selectAll-${fileIndex}`);
-    
-    const checkedCount = Array.from(testCheckboxes).filter(cb => cb.checked).length;
-    const totalCount = testCheckboxes.length;
-    
-    // Update select all checkbox state
-    if (checkedCount === 0) {
-        selectAllCheckbox.checked = false;
-        selectAllCheckbox.indeterminate = false;
-    } else if (checkedCount === totalCount) {
-        selectAllCheckbox.checked = true;
-        selectAllCheckbox.indeterminate = false;
-    } else {
-        selectAllCheckbox.checked = false;
-        selectAllCheckbox.indeterminate = true;
-    }
-    
-    // Update file checkbox label to show selected count
-    const fileCheckbox = document.getElementById(`file-${fileIndex}`);
-    const label = fileCheckbox.nextElementSibling;
-    if (checkedCount > 0) {
-        label.textContent = `Import this file (${checkedCount} tests selected)`;
-        fileCheckbox.checked = true;
-    } else {
-        label.textContent = 'Import this file (no tests selected)';
-        fileCheckbox.checked = false;
-    }
-}
-
-
-async function loadEnrichedHistoryData() {
-    try {
-        // First, get the basic history data
-        const historyResponse = await fetch('/api/pdf/history');
-        const historyData = await historyResponse.json();
-        
-        // For completed imports, fetch import details to get accurate imported test counts
-        const enrichedData = await Promise.all(historyData.map(async (importItem) => {
-            if (importItem.status === 'completed') {
-                try {
-                    const detailsResponse = await fetch(`/api/pdf/import-details/${importItem.id}`);
-                    if (detailsResponse.ok) {
-                        const details = await detailsResponse.json();
-                        // Add the imported_test_indices to the import item
-                        importItem.imported_test_indices = details.imported_test_indices || [];
-                    }
-                } catch (error) {
-                    console.error(`Failed to fetch details for import ${importItem.id}:`, error);
-                }
-            }
-            return importItem;
-        }));
-        
-        return enrichedData;
-    } catch (error) {
-        console.error('Failed to load history data:', error);
-        return [];
-    }
+// Reports with rows still to import can be reopened in the review
+function canReview(row) {
+    return row.status === 'pending' || row.status === 'failed' ||
+        (row.status === 'completed' && (row.results_saved || 0) < (row.total_tests_found || 0));
 }
 
 function initializeHistoryTable() {
     $('#historyTable').DataTable({
-        data: [], // Start with empty data
+        data: [],
         deferRender: true,
-        columns: [
-            { data: 'filename', render: $.fn.dataTable.render.text() },
-            { 
-                data: 'status',
-                className: 'text-center',
-                render: function(data, type, row) {
-                    const statusConfig = {
-                        'pending': {
-                            emoji: '⏳',
-                            title: 'Pending - Ready to Process'
-                        },
-                        'completed': {
-                            emoji: '✅',
-                            title: 'Completed Successfully'
-                        },
-                        'failed': {
-                            emoji: '❌',
-                            title: 'Failed to Process'
-                        }
-                    };
-                    
-                    const config = statusConfig[data] || {
-                        emoji: '❓',
-                        title: data || 'Unknown Status'
-                    };
-                    
-                    return `<span style="font-size: 1.5rem; cursor: help;" title="${escapeHtml(config.title)}">
-                              ${config.emoji}
-                            </span>`;
-                }
-            },
-            { 
-                data: 'total_tests_found',
-                render: function(data, type, row) {
-                    // For completed imports, we need to get the actual imported count from import details
-                    // to handle mixed tracking (index-based + name-based matching)
-                    if (row.status === 'completed' && row.imported_test_indices) {
-                        const imported = Array.isArray(row.imported_test_indices) ? row.imported_test_indices.length : row.tests_imported || 0;
-                        const total = data || 0;
-                        const percentage = total > 0 ? Math.round((imported / total) * 100) : 0;
-                        
-                        let progressClass = 'progress-bar-success'; // Completed imports are green
-                        
-                        return `<div class="test-progress-container">
-                                  <div class="test-count-display">
-                                    <span class="imported-count">${imported}</span>/<span class="total-count">${total}</span>
-                                  </div>
-                                  <div class="progress test-progress">
-                                    <div class="progress-bar ${progressClass}" style="width: ${percentage}%"></div>
-                                  </div>
-                                  <small class="text-muted">${percentage}% imported</small>
-                                </div>`;
-                    } else {
-                        // For pending imports, use the original logic
-                        const imported = row.tests_imported || 0;
-                        const total = data || 0;
-                        const percentage = total > 0 ? Math.round((imported / total) * 100) : 0;
-                        
-                        let progressClass = 'progress-bar-warning';
-                        if (percentage === 100) progressClass = 'progress-bar-success';
-                        else if (percentage > 0) progressClass = 'progress-bar-info';
-                        
-                        return `<div class="test-progress-container">
-                                  <div class="test-count-display">
-                                    <span class="imported-count">${imported}</span>/<span class="total-count">${total}</span>
-                                  </div>
-                                  <div class="progress test-progress">
-                                    <div class="progress-bar ${progressClass}" style="width: ${percentage}%"></div>
-                                  </div>
-                                  <small class="text-muted">${percentage}% imported</small>
-                                </div>`;
-                    }
-                }
-            },
-            { 
-                data: 'date_collected',
-                render: function(data) {
-                    if (!data) return 'Not detected';
-                    // Return HTML with data attribute for JavaScript formatting
-                    return `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>`;
-                }
-            },
-            { 
-                data: 'created_at',
-                render: function(data) {
-                    if (!data) return '';
-                    // Return HTML with data attribute for JavaScript formatting
-                    return `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>`;
-                }
-            },
-            {
-                data: null,
-                orderable: false,
-                width: "200px",
-                render: function(data, type, row) {
-                    // Use simple button group like results page
-                    let actions = '<div class="btn-group btn-group-sm">';
-                    
-                    // Context-aware primary action based on status
-                    if (row.status === 'pending') {
-                        actions += `<button class="btn btn-primary" onclick="processImport(${Number(row.id)})" title="Process ${escapeHtml(row.total_tests_found)} tests">
-                                      <i class="mdi mdi-play-circle"></i>
-                                    </button>`;
-                    } else if (row.status === 'completed') {
-                        actions += `<button class="btn btn-info view-pdf-btn" data-filename="${escapeHtml(row.filename)}" title="View PDF Report">
-                                      📄
-                                    </button>`;
-                    } else if (row.status === 'failed') {
-                        actions += `<button class="btn btn-warning" onclick="processImport(${Number(row.id)})" title="Retry Process">
-                                      <i class="mdi mdi-refresh"></i>
-                                    </button>`;
-                    }
-                    
-                    // Always show details button
-                    actions += `<button class="btn btn-secondary" onclick="viewImportDetails(${Number(row.id)})" title="View Details">
-                                  <i class="mdi mdi-information-outline"></i>
-                                </button>`;
-                    
-                    // Delete button
-                    const deleteDisabled = row.status === 'completed' && row.tests_imported > 0;
-                    const deleteClass = deleteDisabled ? 'btn-outline-secondary disabled' : 'btn-danger';
-                    const deleteTitle = deleteDisabled ? 'Cannot delete - has imported results' : 'Delete Import';
-                    actions += `<button class="btn ${deleteClass}" onclick="deleteImport(${Number(row.id)})" title="${deleteTitle}" ${deleteDisabled ? 'disabled' : ''}>
-                                  <i class="mdi mdi-delete-outline"></i>
-                                </button>`;
-                    
-                    actions += '</div>';
-                    
-                    return actions;
-                }
-            }
-        ],
-        order: [[5, 'desc']], // Sort by import date descending
+        order: [[4, 'desc']],
         pageLength: 25,
-        responsive: true
+        responsive: true,
+        columns: [
+            { data: 'filename', render: $.fn.dataTable.render.text(), responsivePriority: 1 },
+            { data: 'status', responsivePriority: 2, render: (data, type) => type === 'display' ? (STATUS_BADGES[data] || escapeHtml(data)) : data },
+            { data: 'results_saved', responsivePriority: 4, render: (data, type, row) => type === 'display'
+                ? `${Number(data) || 0} of ${Number(row.total_tests_found) || 0}` : data },
+            { data: 'date_collected', responsivePriority: 5, render: (data, type) => {
+                if (type !== 'display') return data || '';
+                return data ? `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(data)}</span>` : '<span class="text-muted">Not found</span>';
+            } },
+            { data: 'created_at', responsivePriority: 6, render: (data, type) => {
+                if (type !== 'display') return data || '';
+                return data ? `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>` : '';
+            } },
+            { data: null, orderable: false, searchable: false, responsivePriority: 3, className: 'text-nowrap', render: (data, type, row) => {
+                const id = Number(row.id);
+                const name = escapeHtml(row.filename);
+                let html = '';
+                if (canReview(row)) {
+                    html += `<button type="button" class="btn btn-primary btn-sm mr-1" data-review-import="${id}">${row.status === 'completed' ? 'Import remaining' : 'Review'}</button>`;
+                }
+                html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportPdf(${id})" aria-label="View PDF ${name}" title="View PDF"><i class="mdi mdi-file-pdf-box" aria-hidden="true"></i></button>`;
+                html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportDetails(${id})" aria-label="Details for ${name}" title="Details"><i class="mdi mdi-information-outline" aria-hidden="true"></i></button>`;
+                const locked = row.results_saved > 0;
+                html += `<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteImport(${id})" ${locked ? 'disabled' : ''}
+                            aria-label="Delete ${name}" title="${locked ? 'Delete its results first' : 'Delete upload'}"><i class="mdi mdi-delete-outline" aria-hidden="true"></i></button>`;
+                return html;
+            } },
+        ],
     });
 }
 
 async function refreshHistory() {
     try {
-        // Load enriched data
-        const enrichedData = await loadEnrichedHistoryData();
-        
-        // Clear and reload table data
+        const response = await fetch('/api/pdf/history');
+        const history = response.ok ? await response.json() : [];
         const table = $('#historyTable').DataTable();
-        table.clear();
-        table.rows.add(enrichedData);
-        table.draw();
-        
-        // Format dates after table is drawn
-        setTimeout(() => {
-            formatAllDatesOnPage();
-        }, 100);
-        
-        // Update statistics
-        updateStatistics(enrichedData);
+        table.clear().rows.add(history).draw();
+        formatAllDatesOnPage();
+        $('#totalImports').text(history.length);
+        $('#completedImports').text(history.filter(i => i.status === 'completed').length);
+        $('#pendingImports').text(history.filter(i => i.status === 'pending').length);
+        $('#failedImports').text(history.filter(i => i.status === 'failed').length);
     } catch (error) {
-        console.error('Failed to refresh history:', error);
+        console.error('Failed to load import history:', error);
     }
 }
 
-function updateStatistics(imports) {
-    const total = imports.length;
-    const completed = imports.filter(imp => imp.status === 'completed').length;
-    const pending = imports.filter(imp => imp.status === 'pending').length;
-    const failed = imports.filter(imp => imp.status === 'failed').length;
-    
-    $('#totalImports').text(total);
-    $('#completedImports').text(completed);
-    $('#pendingImports').text(pending);
-    $('#failedImports').text(failed);
-}
-
-function viewPDF(filename) {
-    // Use the standardized showPDF function from the PDF modal component
-    try {
-        showPDF(filename, filename);
-    } catch (error) {
-        console.error('Error showing PDF modal:', error);
-        showNotification('Unable to display PDF in modal: ' + error.message, 'error', 'PDF Viewer Error');
-    }
-}
-
-
-// Handle PDF view button clicks using event delegation
-$(document).ready(function() {
-    $(document).on('click', '.view-pdf-btn', function() {
-        const filename = $(this).data('filename');
-        if (filename) {
-            viewPDF(filename);
-        }
-    });
-    
-    // Handle "Select All Tests" checkbox
-    $(document).on('change', '#selectAllTests', function() {
-        const isChecked = $(this).is(':checked');
-        
-        // Only affect non-disabled checkboxes (for completed imports)
-        const selectableCheckboxes = $('.test-checkbox:not(:disabled)');
-        
-        selectableCheckboxes.each(function() {
-            $(this).prop('checked', isChecked);
-        });
-        
-        updateProcessButtonText();
-    });
-    
-    // Handle individual test checkbox changes
-    $(document).on('change', '.test-checkbox', function() {
-        updateSelectAllState();
-        updateProcessButtonText();
-    });
-});
-
-// Update the "Select All" checkbox state based on individual checkboxes
-function updateSelectAllState() {
-    // Only consider non-disabled checkboxes (for completed imports)
-    const totalCheckboxes = $('.test-checkbox:not(:disabled)').length;
-    const checkedCheckboxes = $('.test-checkbox:not(:disabled):checked').length;
-    const selectAllCheckbox = $('#selectAllTests');
-    
-    if (totalCheckboxes === 0) {
-        // If no selectable checkboxes, hide the select all checkbox
-        selectAllCheckbox.parent().hide();
-        return;
-    }
-    
-    selectAllCheckbox.parent().show();
-    
-    if (checkedCheckboxes === 0) {
-        selectAllCheckbox.prop('checked', false);
-        selectAllCheckbox.prop('indeterminate', false);
-    } else if (checkedCheckboxes === totalCheckboxes) {
-        selectAllCheckbox.prop('checked', true);
-        selectAllCheckbox.prop('indeterminate', false);
-    } else {
-        selectAllCheckbox.prop('checked', false);
-        selectAllCheckbox.prop('indeterminate', true);
-    }
-}
-
-// Update the process button text to show how many tests are selected
-function updateProcessButtonText() {
-    // Only count selectable (non-disabled) checkboxes
-    const checkedCheckboxes = $('.test-checkbox:not(:disabled):checked').length;
-    const totalSelectableCheckboxes = $('.test-checkbox:not(:disabled)').length;
-    const processBtn = $('#processImportBtn');
-    
-    if (processBtn.length > 0) {
-        if (checkedCheckboxes === 0) {
-            processBtn.text('No Tests Selected').prop('disabled', true);
-        } else if (checkedCheckboxes === totalSelectableCheckboxes) {
-            processBtn.html('<i class="mdi mdi-play-circle mr-1"></i>Process Remaining Tests').prop('disabled', false);
-        } else {
-            processBtn.html(`<i class="mdi mdi-play-circle mr-1"></i>Process ${checkedCheckboxes} Selected Tests`).prop('disabled', false);
-        }
-    }
-}
-
-// Nice notification function to replace plain alerts
-function showNotification(message, type = 'success', title = null) {
-    const modal = document.getElementById('notificationModal');
-    const header = document.getElementById('notificationModalHeader');
-    const icon = document.getElementById('notificationModalIcon');
-    const titleElement = document.getElementById('notificationModalTitle');
-    const messageElement = document.getElementById('notificationModalMessage');
-    const button = document.getElementById('notificationModalBtn');
-    
-    // Configure based on type
-    const config = {
-        success: {
-            headerClass: 'bg-success text-white',
-            icon: 'mdi-check-circle',
-            title: title || 'Success',
-            buttonClass: 'btn-success'
-        },
-        error: {
-            headerClass: 'bg-danger text-white',
-            icon: 'mdi-alert-circle',
-            title: title || 'Error',
-            buttonClass: 'btn-danger'
-        },
-        warning: {
-            headerClass: 'bg-warning text-dark',
-            icon: 'mdi-alert',
-            title: title || 'Warning',
-            buttonClass: 'btn-warning'
-        },
-        info: {
-            headerClass: 'bg-info text-white',
-            icon: 'mdi-information',
-            title: title || 'Information',
-            buttonClass: 'btn-info'
-        }
-    };
-    
-    const settings = config[type] || config.info;
-    
-    // Apply styling
-    header.className = `modal-header ${settings.headerClass}`;
-    icon.className = `mdi ${settings.icon} mr-2`;
-    titleElement.textContent = settings.title;
-    messageElement.textContent = message;
-    button.className = `btn ${settings.buttonClass}`;
-    
-    // Show modal
-    $('#notificationModal').modal('show');
-}
-
-// Nice confirmation function to replace plain confirm dialogs
-function showConfirmation(message, title = 'Confirm Action', confirmText = 'OK', cancelText = 'Cancel') {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('confirmationModal');
-        const header = modal.querySelector('.modal-header');
-        const titleElement = document.getElementById('confirmationModalTitle');
-        const messageElement = document.getElementById('confirmationModalMessage');
-        const confirmBtn = document.getElementById('confirmationModalConfirmBtn');
-        
-        // Set content
-        titleElement.textContent = title;
-        messageElement.textContent = message;
-        confirmBtn.textContent = confirmText;
-        
-        // Style based on action type
-        if (confirmText.toLowerCase().includes('delete')) {
-            header.className = 'modal-header bg-danger text-white';
-            confirmBtn.className = 'btn btn-danger';
-        } else if (confirmText.toLowerCase().includes('process')) {
-            header.className = 'modal-header bg-success text-white';
-            confirmBtn.className = 'btn btn-success';
-        } else {
-            header.className = 'modal-header bg-primary text-white';
-            confirmBtn.className = 'btn btn-primary';
-        }
-        
-        // Handle confirmation
-        const handleConfirm = () => {
-            $('#confirmationModal').modal('hide');
-            confirmBtn.removeEventListener('click', handleConfirm);
-            resolve(true);
-        };
-        
-        // Handle cancel (including backdrop click and ESC)
-        const handleCancel = () => {
-            confirmBtn.removeEventListener('click', handleConfirm);
-            $('#confirmationModal').off('hidden.bs.modal', handleCancel);
-            resolve(false);
-        };
-        
-        // Attach event listeners
-        confirmBtn.addEventListener('click', handleConfirm);
-        $('#confirmationModal').on('hidden.bs.modal', handleCancel);
-        
-        // Show modal
-        $('#confirmationModal').modal('show');
-    });
+function viewImportPdf(importId) {
+    const row = $('#historyTable').DataTable().rows().data().toArray().find(r => r.id === importId);
+    const title = row ? row.filename : 'PDF';
+    // The shared PDF viewer takes a file name; point it at this import's file instead
+    $('#pdfModalTitle').text(title);
+    $('#pdfModalLoadingMessage').hide();
+    $('#pdfModalErrorMessage').hide();
+    $('#pdfModalDownloadBtn').hide();
+    $('#pdfModalIframe').attr('src', `/api/pdf/${importId}/file`).attr('title', `PDF of ${title}`).show();
+    $('#pdfModal').modal('show');
 }
 
 async function viewImportDetails(importId) {
     try {
-        const response = await fetch(`/api/pdf/import-details/${importId}`);
+        const response = await fetch(`/api/pdf/review/${importId}`);
         const data = await response.json();
-        
-        
-        if (!response.ok) {
-            throw new Error(data.detail || 'Failed to load import details');
-        }
-        
-        displayImportDetails(data);
+        if (!response.ok) throw new Error(data.detail || 'The details couldn\'t be loaded.');
+        const rows = data.tests || [];
+        const imported = rows.filter(r => r.already_imported).length;
+        document.getElementById('importDetailsModalLabel').textContent = data.filename;
+        document.getElementById('importDetailsContent').innerHTML = `
+            <dl class="row mb-3">
+                <dt class="col-sm-4">Status</dt><dd class="col-sm-8">${STATUS_BADGES[data.import_status] || escapeHtml(data.import_status)}</dd>
+                <dt class="col-sm-4">Collected</dt><dd class="col-sm-8">${data.date_collected ? `<span class="format-date" data-iso-date="${escapeHtml(data.date_collected)}">${escapeHtml(data.date_collected)}</span>` : 'Not found on the report'}</dd>
+                <dt class="col-sm-4">Provider on report</dt><dd class="col-sm-8">${escapeHtml(data.physician || '—')}</dd>
+                <dt class="col-sm-4">Results saved</dt><dd class="col-sm-8">${imported} of ${rows.length}</dd>
+            </dl>
+            <div class="table-responsive"><table class="table table-sm mb-0">
+                <caption class="sr-only">Rows read from the report</caption>
+                <thead><tr><th scope="col">Test</th><th scope="col">Result</th><th scope="col">Range</th><th scope="col">Saved</th></tr></thead>
+                <tbody>${rows.map(r => `<tr>
+                    <td>${escapeHtml(r.name || '(unreadable)')}</td>
+                    <td>${escapeHtml(r.result)} ${escapeHtml(r.unit)}</td>
+                    <td>${escapeHtml(r.reference_range.text || '')}</td>
+                    <td>${r.already_imported ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody>
+            </table></div>`;
+        const reviewBtn = document.getElementById('detailsReviewBtn');
+        reviewBtn.hidden = imported >= rows.length;
+        reviewBtn.onclick = () => { $('#importDetailsModal').modal('hide'); PdfReview.openReview(importId); };
         $('#importDetailsModal').modal('show');
-        
-        // Format dates after modal is shown
-        setTimeout(() => {
-            formatAllDatesOnPage();
-        }, 100);
-        
+        formatAllDatesOnPage();
     } catch (error) {
-        console.error('Error loading import details:', error);
-        showNotification('Error loading import details: ' + error.message, 'error', 'Load Failed');
+        showNotification(error.message, 'error', 'Details unavailable');
     }
 }
-
-function displayImportDetails(importData) {
-    const content = document.getElementById('importDetailsContent');
-    const processBtn = document.getElementById('processImportBtn');
-    
-    // Determine if there are remaining tests to import
-    let hasRemainingTests = false;
-    let totalTests = 0;
-    let importedTests = 0;
-    
-    if (importData.parsed_data) {
-        const parsedData = typeof importData.parsed_data === 'string' ? JSON.parse(importData.parsed_data) : importData.parsed_data;
-        totalTests = parsedData.tests ? parsedData.tests.length : 0;
-        importedTests = importData.imported_test_indices ? importData.imported_test_indices.length : 0;
-        hasRemainingTests = importedTests < totalTests;
-    }
-    
-    // Show process button for pending imports or completed imports with remaining tests
-    if (importData.status === 'pending') {
-        processBtn.style.display = 'inline-block';
-        processBtn.setAttribute('data-import-id', importData.id);
-        
-        // Set up button text after a short delay to ensure checkboxes are rendered
-        setTimeout(() => {
-            updateProcessButtonText();
-        }, 100);
-    } else if (importData.status === 'completed' && hasRemainingTests) {
-        // There are remaining tests to import
-        processBtn.style.display = 'inline-block';
-        processBtn.setAttribute('data-import-id', importData.id);
-        
-        // Set up button text after a short delay to ensure checkboxes are rendered
-        setTimeout(() => {
-            updateProcessButtonText();
-            updateSelectAllState();
-        }, 100);
-    } else {
-        processBtn.style.display = 'none';
-    }
-    
-    let html = `
-        <div class="row">
-            <div class="col-md-12">
-                <h6><strong>Import Information</strong></h6>
-                <p><strong>Filename:</strong> ${escapeHtml(importData.filename)}</p>
-                <p><strong>Status:</strong> ${getStatusBadge(importData.status)}</p>
-                <p><strong>Tests Found:</strong> ${escapeHtml(importData.total_tests_found)}</p>
-                <p><strong>Tests Imported:</strong> ${importData.imported_test_indices ? importData.imported_test_indices.length : (importData.tests_imported || 0)}</p>
-                <p><strong>Date Collected:</strong> ${importData.date_collected ? `<span class="format-date" data-iso-date="${escapeHtml(importData.date_collected)}">${new Date(importData.date_collected).toLocaleDateString()}</span>` : 'Not detected'}</p>
-                <p><strong>Import Date:</strong> <span class="format-date" data-iso-date="${escapeHtml(importData.created_at)}">${new Date(importData.created_at).toLocaleString()}</span></p>
-                ${importData.provider_name ? `<p><strong>Current Provider:</strong> ${escapeHtml(importData.provider_name)}</p>` : ''}
-                ${importData.error_message ? `<p><strong>Error:</strong> <span class="text-danger">${escapeHtml(importData.error_message)}</span></p>` : ''}
-            </div>
-        </div>`;
-    
-    // Only show Provider Selection section if there are remaining tests to import
-    if (importData.status === 'pending' || hasRemainingTests) {
-        html += `
-        <hr>
-        <div class="row">
-            <div class="col-md-12">
-                <h6><strong>Provider Selection</strong></h6>
-                <div class="form-group">
-                    <label for="modalProviderSelect">Select Provider:</label>
-                    <select class="form-control" id="modalProviderSelect" required>
-                        <option value="">-- Select Provider --</option>
-                    </select>
-                    <small class="form-text text-muted">Choose the provider for this import's lab results</small>
-                </div>
-                
-                <!-- Add New Provider Form (Initially Hidden) -->
-                <div id="modalNewProviderForm" style="display: none;">
-                    <div class="card border-info">
-                        <div class="card-header bg-info text-white">
-                            <h6 class="mb-0">Add New Provider</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="form-group">
-                                <label for="modalNewProviderName">Provider Name:</label>
-                                <input type="text" class="form-control" id="modalNewProviderName" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="modalNewProviderSpecialty">Specialty (Optional):</label>
-                                <input type="text" class="form-control" id="modalNewProviderSpecialty" placeholder="e.g., Family Medicine, Cardiology">
-                            </div>
-                            <div class="d-flex justify-content-end">
-                                <button type="button" class="btn btn-secondary mr-2" onclick="cancelModalNewProvider()">Cancel</button>
-                                <button type="button" class="btn btn-info" onclick="saveModalNewProvider()">Save Provider</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-    }
-    
-    // Add parsed test data if available
-    if (importData.parsed_data) {
-        try {
-            const parsedData = typeof importData.parsed_data === 'string' ? JSON.parse(importData.parsed_data) : importData.parsed_data;
-            if (parsedData.tests && parsedData.tests.length > 0) {
-                html += `
-                    <hr>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="mb-0"><strong>Parsed Test Data</strong></h6>`;
-                
-                // Only show Select All/Remaining Tests checkbox if there are tests that can be imported
-                if (importData.status === 'pending' || hasRemainingTests) {
-                    html += `
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="selectAllTests" ${importData.status === 'pending' ? 'checked' : ''}>
-                            <label class="form-check-label" for="selectAllTests">
-                                ${importData.status === 'completed' ? 'Select Remaining Tests' : 'Select All Tests'}
-                            </label>
-                        </div>`;
-                }
-                
-                html += `
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped">
-                            <thead>
-                                <tr>
-                                    <th width="40">
-                                        <i class="mdi mdi-checkbox-marked text-success" title="Import Selected"></i>
-                                    </th>
-                                    <th>Test Name</th>
-                                    <th>Result</th>
-                                    <th>Unit</th>
-                                    <th>Reference Range</th>
-                                    <th>Result Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                
-                parsedData.tests.forEach((test, testIndex) => {
-                    // Determine if this test was already imported (for completed imports)
-                    const isImported = importData.imported_test_indices && importData.imported_test_indices.includes(testIndex);
-                    const isCompleted = importData.status === 'completed';
-                    
-                    
-                    // Handle reference range properly
-                    let referenceRange = 'N/A';
-                    if (test.reference_range) {
-                        if (typeof test.reference_range === 'object') {
-                            // If it's an object, try to extract meaningful values
-                            if (test.reference_range.low !== undefined && test.reference_range.high !== undefined) {
-                                // Handle cases where one boundary is null
-                                if (test.reference_range.low === null && test.reference_range.high !== null) {
-                                    referenceRange = `< ${test.reference_range.high}`;
-                                } else if (test.reference_range.low !== null && test.reference_range.high === null) {
-                                    referenceRange = `> ${test.reference_range.low}`;
-                                } else if (test.reference_range.low !== null && test.reference_range.high !== null) {
-                                    referenceRange = `${test.reference_range.low} - ${test.reference_range.high}`;
-                                }
-                            } else if (test.reference_range.operator && test.reference_range.value !== undefined) {
-                                // Handle operator-based ranges like "> 5.0" or "< 2.0"
-                                referenceRange = `${test.reference_range.operator} ${test.reference_range.value}`;
-                            } else if (test.reference_range.min !== undefined && test.reference_range.operator) {
-                                // Handle ranges like "> 5.0" stored as min with operator
-                                referenceRange = `${test.reference_range.operator} ${test.reference_range.min}`;
-                            } else if (test.reference_range.max !== undefined && test.reference_range.operator) {
-                                // Handle ranges like "< 5.0" stored as max with operator
-                                referenceRange = `${test.reference_range.operator} ${test.reference_range.max}`;
-                            } else if (test.reference_range.text) {
-                                referenceRange = test.reference_range.text;
-                            } else if (test.reference_range.range) {
-                                referenceRange = test.reference_range.range;
-                            } else if (test.reference_range.greater !== undefined) {
-                                // Handle "greater than" ranges
-                                referenceRange = `> ${test.reference_range.greater}`;
-                            } else if (test.reference_range.less !== undefined) {
-                                // Handle "less than" ranges
-                                referenceRange = `< ${test.reference_range.less}`;
-                            } else {
-                                // Fallback: try to stringify the object meaningfully
-                                referenceRange = JSON.stringify(test.reference_range);
-                            }
-                        } else {
-                            // If it's already a string, use it directly
-                            referenceRange = test.reference_range;
-                        }
-                    }
-                    
-                    // Determine result status
-                    let resultStatus = 'N/A';
-                    if (test.status) {
-                        // If the test already has a status field, use it
-                        resultStatus = test.status;
-                    } else if (test.result_status) {
-                        // Check for result_status field
-                        resultStatus = test.result_status;
-                    } else if (test.flag) {
-                        // Check for flag field (common in lab results)
-                        resultStatus = test.flag;
-                    } else if (test.abnormal_flag) {
-                        // Check for abnormal_flag
-                        resultStatus = test.abnormal_flag;
-                    } else if (test.is_abnormal !== undefined) {
-                        // Check if there's an abnormal indicator
-                        resultStatus = test.is_abnormal ? 'Abnormal' : 'Normal';
-                    } else if (test.is_numeric && test.numeric_value !== undefined && test.reference_range) {
-                        // Try to calculate status for numeric values if we have reference data
-                        const value = parseFloat(test.numeric_value);
-                        if (!isNaN(value) && typeof test.reference_range === 'object') {
-                            // Handle standard low-high ranges
-                            if (test.reference_range.low !== undefined && test.reference_range.high !== undefined) {
-                                const low = test.reference_range.low === null ? null : parseFloat(test.reference_range.low);
-                                const high = test.reference_range.high === null ? null : parseFloat(test.reference_range.high);
-                                
-                                // Handle cases where one boundary is null
-                                if (low === null && high !== null && !isNaN(high)) {
-                                    // "< X" range - normal if value < high, high if value >= high
-                                    resultStatus = value < high ? 'Normal' : 'High';
-                                } else if (low !== null && !isNaN(low) && high === null) {
-                                    // "> X" range - normal if value > low, low if value <= low
-                                    resultStatus = value > low ? 'Normal' : 'Low';
-                                } else if (low !== null && !isNaN(low) && high !== null && !isNaN(high)) {
-                                    // Standard "X - Y" range
-                                    if (value < low) {
-                                        resultStatus = 'Low';
-                                    } else if (value > high) {
-                                        resultStatus = 'High';
-                                    } else {
-                                        resultStatus = 'Normal';
-                                    }
-                                }
-                            }
-                            // Handle operator-based ranges
-                            else if (test.reference_range.operator && test.reference_range.value !== undefined) {
-                                const refValue = parseFloat(test.reference_range.value);
-                                if (!isNaN(refValue)) {
-                                    const op = test.reference_range.operator.trim();
-                                    if (op === '>' || op === 'greater') {
-                                        resultStatus = value > refValue ? 'Normal' : 'Low';
-                                    } else if (op === '<' || op === 'less') {
-                                        resultStatus = value < refValue ? 'Normal' : 'High';
-                                    } else if (op === '>=' || op === 'greater_equal') {
-                                        resultStatus = value >= refValue ? 'Normal' : 'Low';
-                                    } else if (op === '<=' || op === 'less_equal') {
-                                        resultStatus = value <= refValue ? 'Normal' : 'High';
-                                    }
-                                }
-                            }
-                            // Handle "greater than" field
-                            else if (test.reference_range.greater !== undefined) {
-                                const refValue = parseFloat(test.reference_range.greater);
-                                if (!isNaN(refValue)) {
-                                    resultStatus = value > refValue ? 'Normal' : 'Low';
-                                }
-                            }
-                            // Handle "less than" field
-                            else if (test.reference_range.less !== undefined) {
-                                const refValue = parseFloat(test.reference_range.less);
-                                if (!isNaN(refValue)) {
-                                    resultStatus = value < refValue ? 'Normal' : 'High';
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Add status badge styling
-                    let statusDisplay = escapeHtml(resultStatus);
-                    if (resultStatus === 'Normal') {
-                        statusDisplay = '<span class="badge badge-success">Normal</span>';
-                    } else if (resultStatus === 'High' || resultStatus === 'Low' || resultStatus === 'Abnormal') {
-                        statusDisplay = '<span class="badge badge-warning">' + resultStatus + '</span>';
-                    } else if (resultStatus === 'Critical' || resultStatus === 'Panic') {
-                        statusDisplay = '<span class="badge badge-danger">' + resultStatus + '</span>';
-                    }
-                    
-                    const checkboxAttributes = isImported ? 'checked disabled' : (isCompleted ? '' : 'checked');
-                    
-                    html += `
-                        <tr>
-                            <td>
-                                <div class="form-check">
-                                    <input class="form-check-input test-checkbox" 
-                                           type="checkbox" 
-                                           id="test-${testIndex}" 
-                                           ${checkboxAttributes} 
-                                           data-test-index="${testIndex}"
-                                           ${isImported ? 'title="Already imported"' : ''}>
-                                    ${isImported ? '<i class="mdi mdi-check text-success ml-1" title="Already imported"></i>' : ''}
-                                </div>
-                            </td>
-                            <td>${escapeHtml(test.name || 'Unknown Test')}</td>
-                            <td>${escapeHtml(test.result || test.result_text || 'N/A')}</td>
-                            <td>${escapeHtml(test.unit || 'N/A')}</td>
-                            <td>${escapeHtml(referenceRange)}</td>
-                            <td>${statusDisplay}</td>
-                        </tr>
-                    `;
-                });
-                
-                html += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
-                // Add completion notice if all tests are imported
-                if (importData.status === 'completed' && !hasRemainingTests) {
-                    html += `
-                        <div class="alert alert-success mt-3">
-                            <i class="mdi mdi-check-circle mr-2"></i>
-                            <strong>Import Complete!</strong> All ${totalTests} test${totalTests !== 1 ? 's' : ''} from this PDF have been successfully imported.
-                        </div>
-                    `;
-                }
-            }
-        } catch (e) {
-            console.warn('Could not parse test data:', e);
-        }
-    }
-    
-    content.innerHTML = html;
-    
-    // Only load providers if the provider selection section is shown
-    if (importData.status === 'pending' || hasRemainingTests) {
-        loadModalProviders(importData.provider_id);
-    }
-}
-
-async function loadModalProviders(selectedProviderId) {
-    try {
-        const response = await fetch('/api/providers');
-        const providers = await response.json();
-        
-        const select = document.getElementById('modalProviderSelect');
-        if (!select) return;
-        
-        // Clear existing options except the first one
-        select.innerHTML = '<option value="">-- Select Provider --</option>';
-        
-        // Add provider options
-        providers.forEach(provider => {
-            const option = document.createElement('option');
-            option.value = provider.id;
-            option.textContent = `${provider.name}${provider.specialty ? ` (${provider.specialty})` : ''}`;
-            
-            // Select the current provider if it matches
-            if (selectedProviderId && provider.id === selectedProviderId) {
-                option.selected = true;
-            }
-            
-            select.appendChild(option);
-        });
-        
-        // Add "Add New Provider" option
-        const addNewOption = document.createElement('option');
-        addNewOption.value = 'add_new';
-        addNewOption.textContent = '+ Add New Provider';
-        addNewOption.style.fontStyle = 'italic';
-        addNewOption.style.color = '#007bff';
-        select.appendChild(addNewOption);
-        
-        // Set up change handler for the dropdown
-        select.onchange = function() {
-            if (this.value === 'add_new') {
-                showModalNewProviderForm();
-            } else {
-                hideModalNewProviderForm();
-            }
-        };
-    } catch (error) {
-        console.error('Error loading providers for modal:', error);
-    }
-}
-
-function showModalNewProviderForm() {
-    document.getElementById('modalNewProviderForm').style.display = 'block';
-    // Clear any previous values
-    document.getElementById('modalNewProviderName').value = '';
-    document.getElementById('modalNewProviderSpecialty').value = '';
-    // Focus on the name input
-    document.getElementById('modalNewProviderName').focus();
-}
-
-function hideModalNewProviderForm() {
-    document.getElementById('modalNewProviderForm').style.display = 'none';
-}
-
-function cancelModalNewProvider() {
-    hideModalNewProviderForm();
-    // Reset dropdown to first option
-    const select = document.getElementById('modalProviderSelect');
-    if (select) {
-        select.selectedIndex = 0;
-    }
-}
-
-async function saveModalNewProvider() {
-    const nameInput = document.getElementById('modalNewProviderName');
-    const specialtyInput = document.getElementById('modalNewProviderSpecialty');
-    
-    const name = nameInput.value.trim();
-    if (!name) {
-        showNotification('Provider name is required', 'warning', 'Validation Error');
-        nameInput.focus();
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/providers', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: name,
-                specialty: specialtyInput.value.trim() || null
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok && result.success) {
-            showNotification(`Provider "${name}" created successfully`, 'success', 'Provider Created');
-            
-            // Hide the form
-            hideModalNewProviderForm();
-            
-            // Reload providers and select the new one
-            await loadModalProviders(result.data.id);
-            
-        } else {
-            throw new Error(result.message || 'Failed to create provider');
-        }
-        
-    } catch (error) {
-        console.error('Error creating provider:', error);
-        showNotification('Failed to create provider: ' + error.message, 'error', 'Creation Failed');
-    }
-}
-
-function getStatusBadge(status) {
-    const badges = {
-        'pending': '<span class="badge badge-warning">Pending</span>',
-        'completed': '<span class="badge badge-success">Completed</span>',
-        'failed': '<span class="badge badge-danger">Failed</span>'
-    };
-    return badges[status] || escapeHtml(status);
-}
-
-async function processImport(importId) {
-    try {
-        // First get the import details to set up processing
-        const response = await fetch(`/api/pdf/import-details/${importId}`);
-        const importData = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(importData.detail || 'Failed to load import details');
-        }
-        
-        if (importData.status !== 'pending') {
-            showNotification('Only pending imports can be processed', 'warning', 'Cannot Process');
-            return;
-        }
-        
-        // Show processing modal with import details
-        displayImportDetails(importData);
-        $('#importDetailsModal').modal('show');
-        
-    } catch (error) {
-        console.error('Error processing import:', error);
-        showNotification('Error processing import: ' + error.message, 'error', 'Processing Failed');
-    }
-}
-
-// Handle process import button click from modal
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('processImportBtn').addEventListener('click', async function() {
-        const importId = this.getAttribute('data-import-id');
-        if (!importId) return;
-        
-        // Get count of selected tests for confirmation message (only non-disabled)
-        const selectedCount = $('.test-checkbox:not(:disabled):checked').length;
-        const totalCount = $('.test-checkbox:not(:disabled)').length;
-        
-        let confirmMessage = `Process this import? This will create lab results for ${selectedCount} selected test${selectedCount !== 1 ? 's' : ''}.`;
-        if (selectedCount < totalCount) {
-            confirmMessage += ` ${totalCount - selectedCount} test${totalCount - selectedCount !== 1 ? 's' : ''} will remain unimported and can be processed later.`;
-        }
-        
-        const confirmed = await showConfirmation(
-            confirmMessage,
-            'Confirm Import Processing',
-            'Process',
-            'Cancel'
-        );
-        if (!confirmed) {
-            return;
-        }
-        
-        try {
-            this.disabled = true;
-            this.innerHTML = '<i class="mdi mdi-loading mdi-spin mr-1"></i>Processing...';
-            
-            // Get the parsed data to select all tests for processing
-            const detailsResponse = await fetch(`/api/pdf/import-details/${importId}`);
-            const importData = await detailsResponse.json();
-            
-            if (!detailsResponse.ok) {
-                throw new Error('Failed to get import details');
-            }
-            
-            // Create confirmation payload with only selected tests
-            const parsedData = JSON.parse(importData.parsed_data || '{}');
-            const selectedTests = [];
-            
-            // Get only the checked tests (exclude disabled ones)
-            $('.test-checkbox:not(:disabled):checked').each(function() {
-                const testIndex = parseInt($(this).data('test-index'));
-                if (!isNaN(testIndex)) {
-                    selectedTests.push(testIndex);
-                }
-            });
-            
-            if (selectedTests.length === 0) {
-                showNotification('Please select at least one test to import', 'warning', 'No Tests Selected');
-                return;
-            }
-            
-            // Get the selected provider from the modal dropdown
-            const selectedProviderId = document.getElementById('modalProviderSelect')?.value;
-            if (!selectedProviderId || selectedProviderId === 'add_new') {
-                showNotification('Please select a provider before processing the import', 'warning', 'Provider Required');
-                return;
-            }
-            
-            const confirmationData = {
-                import_id: importId,
-                selected_tests: selectedTests,
-                provider_id: parseInt(selectedProviderId),
-                patient_id: getCookie('selectedPatientId') || '1'
-            };
-            
-            const response = await fetch('/api/pdf/confirm', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(confirmationData)
-            });
-            
-            const result = await response.json();
-            
-            if (response.ok && result.success) {
-                const testsImported = result.data ? result.data.imported_count : 0;
-                const testsSkipped = result.data ? result.data.skipped_count : 0;
-                
-                let message = `Import processed successfully! ${testsImported} tests imported.`;
-                if (testsSkipped > 0) {
-                    message += ` ${testsSkipped} tests were skipped.`;
-                }
-                
-                showNotification(message, 'success', 'Import Complete');
-                $('#importDetailsModal').modal('hide');
-                await refreshHistory();
-            } else {
-                throw new Error(result.detail || result.message || 'Processing failed');
-            }
-            
-        } catch (error) {
-            console.error('Processing error:', error);
-            showNotification('Error processing import: ' + error.message, 'error', 'Processing Failed');
-        } finally {
-            this.disabled = false;
-            this.innerHTML = '<i class="mdi mdi-play-circle mr-1"></i>Process Import';
-        }
-    });
-});
 
 async function deleteImport(importId) {
-    const confirmed = await showConfirmation(
-        'Are you sure you want to delete this import and all associated lab results?',
-        'Confirm Delete',
-        'Delete',
-        'Cancel'
-    );
-    if (!confirmed) {
-        return;
-    }
-    
+    const confirmed = await showConfirmation('Delete this upload? The PDF and what was read from it are removed.',
+        'Delete upload', 'Delete', 'Cancel');
+    if (!confirmed) return;
     try {
-        const response = await fetch(`/api/pdf/${importId}`, {
-            method: 'DELETE'
-        });
-        
+        const response = await fetch(`/api/pdf/${importId}`, { method: 'DELETE' });
         const result = await response.json();
-        
-        if (result.success) {
-            showNotification(result.message, 'success', 'Import Deleted');
-            await refreshHistory();
-        } else {
-            throw new Error(result.message || 'Delete failed');
-        }
-        
+        if (!response.ok || !result.success) throw new Error(result.detail || result.message || 'Delete failed.');
+        await refreshHistory();
     } catch (error) {
-        console.error('Delete error:', error);
-        showNotification('Delete failed: ' + error.message, 'error', 'Delete Failed');
+        showNotification(error.message, 'error', 'Delete failed');
     }
 }
 
-
-function showImportHistory() {
-    document.getElementById('historySection').scrollIntoView({ behavior: 'smooth' });
-}
-
-/**
- * Format all dates on the page according to user preference
- */
 async function formatAllDatesOnPage() {
     try {
-        const dateElements = document.querySelectorAll('.format-date');
-        const userFormat = await getUserDateFormat();
-        
-        for (const element of dateElements) {
-            let isoDate = null;
-            
-            // Try to get ISO date from data attribute
-            if (element.dataset.isoDate) {
-                isoDate = element.dataset.isoDate;
-            }
-            // Fallback: try to get from parent row data attribute
-            else {
-                const row = element.closest('tr');
-                if (row && row.dataset.date) {
-                    isoDate = row.dataset.date;
-                }
-            }
-            
-            if (isoDate) {
-                const formattedDate = formatDateSync(isoDate, userFormat);
-                element.textContent = formattedDate;
-            }
-        }
+        const format = await getUserDateFormat();
+        document.querySelectorAll('.format-date[data-iso-date]').forEach(el => {
+            const iso = el.dataset.isoDate;
+            el.textContent = formatDateSync(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso, format);
+        });
     } catch (error) {
         console.error('Error formatting dates:', error);
     }
 }
+
+$(document).ready(async function () {
+    initializeHistoryTable();
+    refreshHistory();
+    await PdfReview.init();
+});
 </script>
 
 <style>
-.upload-zone {
-    border: 3px dashed #007bff;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background: var(--bs-body-bg, #f8f9ff);
-}
+.upload-zone { border: 2px dashed #6c8ebf; border-radius: .5rem; cursor: pointer; background: #f8faff; }
+.upload-zone:hover, .upload-zone.dragover { border-color: #0062cc; background: #eef4ff; }
+.dark-mode .upload-zone { background: #343a40; border-color: #8ec5ff; }
+.dark-mode .upload-zone:hover, .dark-mode .upload-zone.dragover { background: #3f4a56; }
+.choose-files:focus-within { outline: 3px solid #0b6bcb; outline-offset: 2px; }
+.text-success-strong { color: #1b5e2f; }
+.dark-mode .text-success-strong { color: #b9ecc8; }
 
-.upload-zone:hover {
-    border-color: #0056b3;
-    background: var(--bs-secondary-bg, #e7f1ff);
-}
+.review-card .card-tools { margin-top: .25rem; }
+.review-pdf-inner { position: sticky; top: 4.5rem; }
+.review-pdf iframe { width: 100%; height: 75vh; border: 1px solid #ced4da; border-radius: .375rem; background: #fff; }
+.review-table th, .review-table td { vertical-align: top; }
+.review-table td { min-width: 5.5rem; }
+.review-table td[data-label="Test"] { min-width: 13rem; }
+.review-table tr.row-done { opacity: .7; }
+.review-table tr.row-unreadable { background: #fff8e1; }
+.dark-mode .review-table tr.row-unreadable { background: #4a3a10; }
+.row-issue { color: #6b4300; }
+.dark-mode .row-issue { color: #ffe08a; }
+.review-actions { position: sticky; bottom: 0; z-index: 10; background: #f4f6f9; padding: .75rem 0; margin-bottom: 1rem; border-top: 1px solid #dee2e6; }
+.dark-mode .review-actions { background: #454d55; border-color: #6c757d; }
 
-.upload-zone.drag-over {
-    border-color: #28a745;
-    background: var(--bs-success-bg-subtle, #e7ffe7);
-}
-
-/* Dark mode support */
-.dark-mode .upload-zone {
-    background: #343a40;
-    border-color: #6f9fff;
-    color: #fff;
-}
-
-.dark-mode .upload-zone:hover {
-    background: #495057;
-    border-color: #4d7fff;
-}
-
-.dark-mode .upload-zone.drag-over {
-    background: #28a745;
-    border-color: #28a745;
-}
-
-.upload-item {
-    padding: 10px;
-    border: 1px solid var(--bs-border-color, #dee2e6);
-    border-radius: 5px;
-    background: var(--bs-secondary-bg, #f8f9fa);
-}
-
-.dark-mode .upload-item {
-    background: #343a40;
-    border-color: #6c757d;
-    color: #fff;
-}
-
-.small-box {
-    border-radius: 8px;
-    padding: 15px;
-    color: white;
-}
-
-.small-box h3 {
-    font-size: 2rem;
-    margin: 0;
-}
-
-.small-box p {
-    margin: 0;
-}
-
-.small-box .icon {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    font-size: 2rem;
-    opacity: 0.3;
-}
-
-.test-results-table {
-    font-size: 0.9rem;
-}
-
-.test-results-table th {
-    background-color: var(--bs-secondary-bg, #f8f9fa);
-    border-top: none;
-    font-weight: 600;
-}
-
-.test-results-table .badge {
-    font-size: 0.8rem;
-}
-
-.collapse.show .card-body {
-    border: 1px solid var(--bs-border-color, #dee2e6);
-    border-radius: 0.25rem;
-    background-color: var(--bs-body-bg, #fdfdfe);
-}
-
-/* Dark mode support for test table */
-.dark-mode .test-results-table th {
-    background-color: #495057;
-    color: #fff;
-}
-
-.dark-mode .collapse.show .card-body {
-    background-color: #343a40;
-    border-color: #6c757d;
-    color: #fff;
-}
-
-.dark-mode .test-results-table {
-    color: #fff;
-}
-
-.dark-mode .test-results-table td {
-    border-color: #6c757d;
-}
-
-/* Keep actions on one line */
-#historyTable td:last-child {
-    white-space: nowrap;
-    min-width: 150px;
-}
-
-/* Enhanced Status Badges */
-.status-badge {
-    font-size: 0.875rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.5rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    min-width: 120px;
-    justify-content: center;
-}
-
-.badge-warning-enhanced {
-    background: linear-gradient(135deg, #ffc107, #ffb300);
-    color: #212529;
-    border: 1px solid #ffb300;
-}
-
-.badge-success-enhanced {
-    background: linear-gradient(135deg, #28a745, #20c997);
-    color: white;
-    border: 1px solid #20c997;
-}
-
-.badge-danger-enhanced {
-    background: linear-gradient(135deg, #dc3545, #e74c3c);
-    color: white;
-    border: 1px solid #e74c3c;
-}
-
-/* Test Progress Display */
-.test-progress-container {
-    min-width: 120px;
-}
-
-.test-count-display {
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-}
-
-.imported-count {
-    color: #28a745;
-    font-size: 1.1em;
-}
-
-.total-count {
-    color: #6c757d;
-}
-
-.test-progress {
-    height: 6px;
-    margin-bottom: 0.25rem;
-    background-color: #e9ecef;
-    border-radius: 3px;
-}
-
-.test-progress .progress-bar {
-    transition: width 0.3s ease;
-}
-
-/* Row Hover Effects */
-#historyTable tbody tr {
-    transition: all 0.2s ease;
-}
-
-#historyTable tbody tr:hover {
-    background-color: #f8f9fa;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-/* Dark mode support for Import History table */
-.dark-mode #historyTable tbody tr:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-}
-
-/* Responsive Adjustments */
-@media (max-width: 768px) {
-    .import-action-primary {
-        min-width: 80px;
-        font-size: 0.875rem;
-    }
-    
-    .import-secondary-group {
-        display: none;
-    }
-    
-    .status-badge {
-        min-width: 100px;
-        font-size: 0.75rem;
-        padding: 0.375rem 0.5rem;
-    }
-    
-    .test-progress-container {
-        min-width: 100px;
-    }
-}
-
-/* Loading States */
-.btn.loading {
-    pointer-events: none;
-    opacity: 0.6;
-}
-
-.btn.loading .mdi::before {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Improved Table Styling */
-#historyTable {
-    border-collapse: separate;
-    border-spacing: 0;
-}
-
-#historyTable th {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.875rem;
-    letter-spacing: 0.5px;
-}
-
-/* Dark mode support for Import History table header */
-.dark-mode #historyTable th {
-    background: linear-gradient(135deg, #454d55, #3a424a);
-    border-bottom: 2px solid #6c757d;
-    color: #ffffff;
-}
-
-#historyTable td {
-    vertical-align: middle;
-    padding: 1rem 0.75rem;
+/* Phones: each review row becomes a stacked block with its field labels */
+@media (max-width: 767.98px) {
+    .review-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .review-table tr { display: block; border-bottom: 1px solid #dee2e6; padding: .5rem 0; }
+    .review-table td { display: block; border: 0; padding: .25rem 0; min-width: 0; }
+    .review-table td[data-label]::before { content: attr(data-label); display: block; font-size: .8rem; font-weight: 600; color: #5a6268; }
+    .dark-mode .review-table td[data-label]::before { color: #c8cdd2; }
+    .review-table td:first-child { text-align: left !important; }
 }
 </style>
 {% endblock %}
