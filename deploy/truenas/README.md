@@ -30,7 +30,7 @@ MyLabVault can use Claude through Amazon Bedrock to read lab reports the built-i
 
 When it's on:
 - Uploads that the built-in parser can't read, or where it finds no tests, are retried with AI automatically.
-- Each uploaded file gets a **Re-scan with AI** button on the import screen.
+- Each uploaded file gets a **Re-scan with AI** button on the import screen. Afterwards a comparison shows what the AI found that the built-in reader didn't (and vice versa), and you can switch back to the built-in results.
 - Results parsed by AI are marked with an **AI** badge. You still review and confirm them before anything is saved.
 
 The PDF, including your name, date of birth and results, is sent to Claude in Amazon Bedrock in your AWS account. Data handling is covered by Amazon Bedrock's data-protection terms, and Anthropic has no access to the Bedrock inference infrastructure.

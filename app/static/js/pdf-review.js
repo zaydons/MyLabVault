@@ -175,9 +175,9 @@
         }
     }
 
-    function addCard(preview, replaceKey) {
+    function addCard(preview, replaceKey, showCompare) {
         const key = replaceKey || state.nextKey++;
-        state.cards.set(key, { key, preview });
+        state.cards.set(key, { key, preview, showCompare: !!showCompare });
         const html = renderCard(key, preview);
         const existing = $id(`card-${key}`);
         if (existing) existing.outerHTML = html; else $id('reviewFiles').insertAdjacentHTML('beforeend', html);
@@ -204,8 +204,10 @@
             `<option value="${p.id}"${String(selected) === String(p.id) ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
     }
 
-    function renderRow(key, row) {
+    function renderRow(key, row, change) {
         const id = `r-${key}-${row.index}`;
+        const marker = change === 'different' ? 'Read differently by the other reader'
+            : change === 'only_ai' ? 'Only the AI found this' : change === 'only_standard' ? 'Only the built-in reader found this' : '';
         const done = row.already_imported;
         const choice = row.unit_mismatch || !row.matched_lab_id ? 'new' : row.matched_lab_id;
         const checked = row.readable && !done;
@@ -224,6 +226,7 @@
                            aria-label="Test name" ${done ? 'disabled' : ''} ${row.issues.length ? `aria-describedby="${id}-issues"` : ''}>
                     <label class="sr-only" for="${id}-lab">Save as</label>
                     <select class="custom-select custom-select-sm mt-1 row-lab" id="${id}-lab" ${done ? 'disabled' : ''}>${labOptions(choice)}</select>
+                    ${marker ? `<span class="badge badge-status-info mt-1"><i class="mdi mdi-compare-horizontal" aria-hidden="true"></i> ${marker}</span>` : ''}
                     ${issues}
                     ${done ? '<div class="small text-muted mt-1">Already imported</div>' : ''}
                 </td>
@@ -239,6 +242,71 @@
             </tr>`;
     }
 
+    // ---------- built-in reader vs AI ----------
+    const READER = { standard: 'Built-in reader', ai: 'AI' };
+    const CHANGE_LABEL = { different: 'Different', only_ai: 'Only AI', only_standard: 'Only built-in', same: 'Same' };
+
+    function readingText(reading, differences) {
+        if (!reading) return '<span class="text-muted">Not found</span>';
+        const part = (field, text) => differences.includes(field) ? `<strong>${text}</strong>` : text;
+        let html = part('result', esc(reading.result) || '<span class="text-muted">blank</span>');
+        if (reading.unit) html += ' ' + part('unit', esc(reading.unit));
+        if (reading.range) html += ` <span class="small">(range ${part('range', esc(reading.range))})</span>`;
+        return html;
+    }
+
+    function comparisonSummary(c) {
+        const s = c.summary;
+        const parts = [];
+        if (s.only_ai) parts.push(`AI found ${plural(s.only_ai, 'result')} the built-in reader missed`);
+        if (s.only_standard) parts.push(`the built-in reader found ${plural(s.only_standard, 'result')} the AI didn't`);
+        if (s.different) parts.push(`${plural(s.different, 'result')} read differently`);
+        const fields = c.fields.filter(f => !f.same).map(f => f.field.toLowerCase());
+        if (fields.length) parts.push(`different ${fields.join(' and ')}`);
+        if (!parts.length) return `Both read the same ${plural(s.same, 'result')}.`;
+        const text = parts.join(', ');
+        return text.charAt(0).toUpperCase() + text.slice(1) + (s.same ? `; ${s.same} the same.` : '.');
+    }
+
+    function renderComparison(key, p, open) {
+        const c = p.comparison;
+        const other = c.active === 'ai' ? 'standard' : 'ai';
+        const fieldRows = c.fields.map(f => `
+            <tr><th scope="row">${esc(f.field)}</th>
+                <td>${f.field === 'Collection date' ? esc(displayDate(f.standard)) : esc(f.standard)}${f.standard ? '' : '<span class="text-muted">Not found</span>'}</td>
+                <td>${f.field === 'Collection date' ? esc(displayDate(f.ai)) : esc(f.ai)}${f.ai ? '' : '<span class="text-muted">Not found</span>'}</td>
+                <td>${f.same ? 'Same' : '<strong>Different</strong>'}</td></tr>`).join('');
+        const rows = c.rows.map(r => `
+            <tr class="compare-${r.change}">
+                <th scope="row">${esc(r.name)}${r.standard && r.ai && r.standard.name.toLowerCase() !== r.ai.name.toLowerCase()
+                    ? `<div class="small text-muted">Built-in: ${esc(r.standard.name)}</div>` : ''}</th>
+                <td>${readingText(r.standard, r.differences)}</td>
+                <td>${readingText(r.ai, r.differences)}</td>
+                <td><span class="badge badge-status-${r.change === 'same' ? 'none' : 'info'}">${CHANGE_LABEL[r.change]}</span>${r.differences.length
+                    ? `<div class="small">${r.differences.map(d => d === 'range' ? 'range' : d === 'result' ? 'value' : 'unit').join(', ')}</div>` : ''}</td>
+            </tr>`).join('');
+        const done = (p.tests || []).some(r => r.already_imported);
+        return `
+            <details class="compare-readings mb-3" id="compare-${key}" ${open ? 'open' : ''}>
+                <summary><i class="mdi mdi-compare-horizontal mr-1" aria-hidden="true"></i><strong>Compare the built-in reader with the AI</strong>
+                    <span class="d-block small mt-1">${esc(comparisonSummary(c))} Using: <strong>${READER[c.active]}</strong>.</span></summary>
+                <div class="pt-2">
+                    ${c.standard_error ? `<p class="small mb-2">The built-in reader couldn't read this report: ${esc(c.standard_error)}</p>` : ''}
+                    <div class="table-responsive" tabindex="0" role="region" aria-label="Comparison of the two readings">
+                        <table class="table table-sm compare-table mb-2">
+                            <caption class="sr-only">What the built-in reader and the AI read from ${esc(p.filename)}. Values that differ are in bold.</caption>
+                            <thead><tr><th scope="col">Test</th><th scope="col">Built-in reader (${c.standard_count})</th><th scope="col">AI (${c.ai_count})</th><th scope="col">Difference</th></tr></thead>
+                            <tbody>${fieldRows}${rows}</tbody>
+                        </table>
+                    </div>
+                    ${done ? '<p class="small text-muted mb-0">Some results from this report are already imported, so the reading can no longer be switched.</p>'
+                        : `<button type="button" class="btn btn-outline-primary btn-sm switch-reading">
+                            <i class="mdi mdi-swap-horizontal mr-1" aria-hidden="true"></i>Use the ${READER[other] === 'AI' ? 'AI\'s' : 'built-in reader\'s'} results instead</button>
+                           <small class="form-text text-muted">Switching reloads the results below; changes you've made to them are discarded.</small>`}
+                </div>
+            </details>`;
+    }
+
     function renderCard(key, p) {
         const rows = p.tests || [];
         const readable = rows.filter(r => r.readable && !r.already_imported);
@@ -251,6 +319,7 @@
         const physician = p.matched_provider ? '' : (p.physician ? `<small class="form-text text-muted">Report lists <strong>${esc(p.physician)}</strong> · <a href="#" data-new-provider="${key}" data-report-name="1">Add as new provider</a></small>` : '');
         const dateMissing = !p.date_collected;
         const showPdf = window.matchMedia('(min-width: 1200px)').matches;
+        const changes = new Map(((p.comparison || {}).rows || []).filter(r => r.active_index !== null).map(r => [r.active_index, r.change]));
 
         return `
         <section class="card review-card mb-4" id="card-${key}" data-key="${key}" aria-labelledby="card-${key}-title">
@@ -271,6 +340,7 @@
                 <p class="review-counts mb-3">
                     ${plural(readable.length, 'result')} to import${out.length ? ` · <strong>${out.length} out of range</strong>` : ''}${unreadable.length ? ` · ${unreadable.length} couldn't be read` : ''}${done.length ? ` · ${done.length} already imported` : ''}
                 </p>
+                ${p.comparison ? renderComparison(key, p, !!(state.cards.get(key) || {}).showCompare) : ''}
                 <div class="row">
                     <div class="review-main ${showPdf ? 'col-xl-7' : 'col-12'}">
                         <div class="form-row">
@@ -307,7 +377,7 @@
                                     </th>
                                     <th scope="col">Test</th><th scope="col">Result</th><th scope="col">Unit</th><th scope="col">Range</th><th scope="col">Status</th>
                                 </tr></thead>
-                                <tbody>${ordered.map(r => renderRow(key, r)).join('')}</tbody>
+                                <tbody>${ordered.map(r => renderRow(key, r, changes.get(r.index))).join('')}</tbody>
                             </table>
                         </div>` : '<p class="text-muted">No results were found in this report.</p>'}
                     </div>
@@ -381,12 +451,32 @@
             const response = await fetch(`/api/pdf/rescan-ai/${encodeURIComponent(card.preview.import_id)}`, { method: 'POST' });
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'AI re-scan failed.');
-            addCard(data, card.key);
-            message(`AI found ${plural(data.total_tests_found, 'result')} in ${esc(data.filename)}. Check them against the PDF before importing.`, 'info', false);
+            addCard(data, card.key, true);
+            const c = data.comparison;
+            message(`AI found ${plural(data.total_tests_found, 'result')} in ${esc(data.filename)}${c ? ` (the built-in reader found ${c.standard_count})` : ''}. `
+                + `<a href="#compare-${card.key}">See what changed</a> and check the values against the PDF before importing.`, 'info', false);
         } catch (error) {
             button.disabled = false;
             button.innerHTML = '<i class="mdi mdi-robot-outline mr-1" aria-hidden="true"></i>Re-scan with AI';
             message(`AI re-scan of ${esc(card.preview.filename)} failed: ${esc(error.message)}`);
+        }
+    }
+
+    async function switchReading(section) {
+        const card = state.cards.get(parseInt(section.dataset.key, 10));
+        const button = section.querySelector('.switch-reading');
+        button.disabled = true;
+        try {
+            const response = await fetch(`/api/pdf/${encodeURIComponent(card.preview.import_id)}/switch-reading`, { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Switching failed.');
+            addCard(data, card.key, true);
+            message(`Now using the ${data.parser === 'ai' ? 'AI\'s' : 'built-in reader\'s'} results for ${esc(data.filename)}.`, 'info', false);
+            const summary = document.querySelector(`#compare-${card.key} summary`);
+            if (summary) summary.focus();
+        } catch (error) {
+            button.disabled = false;
+            message(`Couldn't switch readings for ${esc(card.preview.filename)}: ${esc(error.message)}`);
         }
     }
 
@@ -603,6 +693,7 @@
             if (!section) return;
             if (e.target.closest('.toggle-pdf')) togglePdf(section);
             if (e.target.closest('.rescan-ai')) rescan(section);
+            if (e.target.closest('.switch-reading')) switchReading(section);
             if (e.target.closest('.remove-card')) {
                 state.cards.delete(parseInt(section.dataset.key, 10));
                 section.remove();
@@ -619,7 +710,8 @@
             const link = e.target.closest('a[href^="#"]');
             if (!link) return;
             e.preventDefault();
-            const target = document.querySelector(link.getAttribute('href'));
+            let target = document.querySelector(link.getAttribute('href'));
+            if (target && target.tagName === 'DETAILS') { target.open = true; target = target.querySelector('summary'); }
             if (target) { target.scrollIntoView({ block: 'center' }); target.focus(); }
         });
         $id('importButton').addEventListener('click', importSelected);
