@@ -124,10 +124,11 @@ class PDFParser:
             re.compile(r'(\w+\s+\d{1,2},?\s+\d{4})'),
             re.compile(r'(\d{1,2}-\w{3}-\d{4})'),
         ]
+        # Names stay on one line ([ \t], not \s), so the following text isn't swallowed into the name
         self.physician_patterns = [
-            re.compile(r'(?:physician|doctor|dr\.?|md)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*)', re.IGNORECASE),
-            re.compile(r'([A-Z][a-z]+\s+[A-Z][a-z]+),?\s*(?:MD|M\.D\.)', re.IGNORECASE),
-            re.compile(r'Dr\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]*)*)', re.IGNORECASE),
+            re.compile(r'(?:(?:physician|doctor|provider)[ \t]*:|\bdr\.?)[ \t]*([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]*)*)', re.IGNORECASE),
+            re.compile(r'([A-Z][a-z]+[ \t]+[A-Z][a-z]+),?[ \t]*(?:MD|M\.D\.)', re.IGNORECASE),
+            re.compile(r'Dr\.?[ \t]+([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]*)*)', re.IGNORECASE),
         ]
 
     async def parse_pdf_content(self, content: bytes) -> Dict[str, Any]:
@@ -575,6 +576,27 @@ class PDFParser:
         if 'reference' in column_map and column_map['reference'] < len(row):
             reference_range = row[column_map['reference']]
 
+        # A row in a recognised table that has a unit or reference range is a test even when
+        # its name or result is blank. Keep it as an incomplete row so the review screen can
+        # show it for the user to fill in, instead of dropping it or misreading another column
+        # as the name. Panel headings have neither, so they still fall through.
+        has_detail = bool((unit or '').strip() or (reference_range or '').strip())
+        if 'test' in column_map and 'result' in column_map and has_detail and bool(test_name) != bool((result or '').strip()):
+            if test_name and self._is_instructional_text(test_name):
+                return None
+            return {
+                'name': test_name or '',
+                'result': (result or '').strip(),
+                'result_text': None,
+                'unit': (unit or '').strip(),
+                'reference_range': self.parse_reference_range(reference_range or ''),
+                'flag': None,
+                'is_numeric': False,
+                'is_qualitative': False,
+                'numeric_value': None,
+                'incomplete': True,
+            }
+
         # If no explicit column mapping worked, try fallback
         if not test_name or not result:
             return self.process_row_heuristic(row)
@@ -874,14 +896,16 @@ class PDFParser:
 
         # Look for "Physician Name" section and extract the name from the line below
         for pattern in self.physician_patterns:
-            match = pattern.search(text, re.IGNORECASE)
+            # (flags are compiled into the patterns; passing re.IGNORECASE here would be a start position)
+            match = pattern.search(text)
             if match:
-                physician = match.group(1).strip()                # Clean up common suffixes and prefixes
-                physician = re.sub(r'\s+NPI.*$', '', physician, re.IGNORECASE)
-                physician = re.sub(r'\s+MD.*$', '', physician, re.IGNORECASE)
-                physician = re.sub(r'\s+DO.*$', '', physician, re.IGNORECASE)
-                physician = re.sub(r'\s+Dr\.?\s*', '', physician, re.IGNORECASE)
-                physician = re.sub(r'^Dr\.?\s+', '', physician, re.IGNORECASE)
+                physician = match.group(1).strip()
+                # Clean up common suffixes and prefixes
+                physician = re.sub(r'\s+NPI.*$', '', physician, flags=re.IGNORECASE)
+                physician = re.sub(r'\s+MD\b.*$', '', physician, flags=re.IGNORECASE)
+                physician = re.sub(r'\s+DO\b.*$', '', physician, flags=re.IGNORECASE)
+                physician = re.sub(r'\s+Dr\.?\s*', '', physician, flags=re.IGNORECASE)
+                physician = re.sub(r'^Dr\.?\s+', '', physician, flags=re.IGNORECASE)
 
                 # Skip if it looks like a title, header text, or empty
                 skip_values = ['physician', 'provider', 'doctor', 'npi #', 'physician id', 'npi # physician id']

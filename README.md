@@ -14,8 +14,11 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Automatic parsing**: Extracts test results from LabCorp, Quest and similar reports, including each result's reference range, the lab's flag (H/L), comments and fasting status
 - **Collection date detection**: Uses the date next to "Collected", "Collection Date" or "Date Drawn", never the date of birth
 - **Provider matching**: The ordering provider on the report is selected automatically when it matches a saved provider, or offered as a one-click new provider
-- **Bulk upload and selective import**: Upload several PDFs at once and choose which tests to keep
-- **Duplicate detection**: Files that were already imported are flagged
+- **Review next to the PDF**: Each report's results are shown beside the PDF, with High/Low status, so you can check them before anything is saved
+- **Correct before importing**: Edit any test name, result, unit or range, choose which saved test a row belongs to, or untick rows you don't want
+- **Nothing silently wrong**: A missing collection date must be entered before import; results in a different unit than the saved test (e.g. mmol/L vs mg/dL) are flagged and kept as a separate test by default; rows that couldn't be read are listed for you to fill in
+- **Several reports at once**: Each file uploads and is read separately with its own progress, and a summary afterwards lists what was saved and what's out of range
+- **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 
 ### 📊 **Dashboard and Charts**
@@ -107,8 +110,8 @@ Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/RE
 
 ### First Steps
 1. **Enter your name**: On first launch a welcome screen asks who the results are for (you can skip it and rename the patient later)
-2. **Import a PDF**: Go to *PDF Import*, upload a lab report and check the extracted results
-3. **Import the tests you want**: Pick the provider (often selected for you) and confirm
+2. **Import a PDF**: Go to *PDF Import* and upload a lab report
+3. **Review and import**: Check the results against the PDF, fix anything that's off, confirm the collection date and provider (often filled in for you), and import
 4. **Explore**: Open the dashboard, a test's page or *Charts* to see trends
 5. **Record vitals**: Use *Record vitals* on the dashboard
 
@@ -205,7 +208,10 @@ POST /api/results/             # Add a result
 POST /api/pdf/upload           # Upload one PDF (add ?ai=true to use AI parsing)
 POST /api/pdf/bulk-upload      # Upload several PDFs
 POST /api/pdf/rescan-ai/{id}   # Re-parse a pending import with AI
-POST /api/pdf/confirm          # Import the selected tests
+GET  /api/pdf/review/{id}      # Review data for an earlier upload (rows, matches, issues)
+GET  /api/pdf/{id}/file        # The uploaded PDF
+POST /api/pdf/confirm          # Import selected rows (with optional edits and test choices)
+POST /api/pdf/batch-confirm    # Import several reports at once
 GET  /api/pdf/history          # Import history
 GET  /api/labs/                # Lab test definitions
 GET  /api/vitals/              # Vitals (filter with patient_id, vital_type)
@@ -224,7 +230,10 @@ GET  /api/update-check         # Whether a newer image has been published
 - Check the logs: `docker logs mylabvault | grep -i pdf`
 
 **The wrong collection date was detected**
-- Change it with *Override date* on the import screen before importing.
+- Change the *Collection date* field on the review screen before importing. If no date was found, the field is highlighted and import waits until you enter one.
+
+**A result was saved under the wrong test**
+- On the review screen, each row has a *Save as* choice: pick the right saved test, or *New test*. Results in a different unit than the saved test default to a new test.
 
 **The app doesn't show a change you just deployed**
 - Compare the version in the footer with the latest build. Pull the image again and recreate the container (see [Updating](#-updating)).

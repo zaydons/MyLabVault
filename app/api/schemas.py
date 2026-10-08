@@ -177,15 +177,31 @@ class PDFImportPreview(BaseModel):
     import_id: Optional[str] = None
     duplicate_warning: Optional[Dict[str, Any]] = None
     parser: Optional[str] = None  # "standard" or "ai"
+    # Every parsed row in report order (readable or not), with its match, status and issues
+    tests: List[Dict[str, Any]] = []
+    pdf_url: Optional[str] = None
+    import_status: Optional[str] = None
+    fasting: Optional[bool] = None
+
+
+class PDFTestEdit(BaseModel):
+    """Corrections made to one parsed row on the review screen (unset fields keep the parsed value)."""
+    name: Optional[str] = Field(None, max_length=255)
+    result: Optional[str] = Field(None, max_length=255)
+    unit: Optional[str] = Field(None, max_length=50)
+    reference_range: Optional[str] = Field(None, max_length=100)
+    lab_id: Optional[int] = None  # Save under this existing lab test
+    new_lab: bool = False  # Save as a new lab test even if a saved one matches
 
 
 class PDFImportConfirm(BaseModel):
-    """PDF import confirmation schema."""
+    """PDF import confirmation schema. selected_tests are positions in the parsed report."""
     import_id: str
     selected_tests: List[int]
     provider_id: Optional[int] = None
     patient_id: int = 1
     manual_date: Optional[str] = None
+    edits: Dict[str, PDFTestEdit] = {}  # keyed by the row's position, as a string
 
 
 class PaginatedLabResults(BaseModel):
