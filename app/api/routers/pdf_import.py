@@ -19,7 +19,7 @@ from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
-from ..services.import_review import apply_edit, compare_parses, find_lab, normalize_unit, review_rows, row_date, row_status
+from ..services.import_review import apply_edit, compare_parses, find_lab, find_lab_in_unit, normalize_unit, review_rows, row_date, row_status
 import logging
 
 logger = logging.getLogger(__name__)
@@ -722,6 +722,10 @@ async def confirm_pdf_import(
             else:
                 key = ((test.get('name') or '').strip().lower(), normalize_unit(test.get('unit')))
                 lab = created.get(key) or (None if (edit and edit.new_lab) else find_lab(test.get('name'), db))
+                # "New test" never makes a second copy of a test already saved in this unit. The
+                # review may not have known it: another report in the same batch, or a page
+                # opened before an earlier import created it.
+                lab = lab or find_lab_in_unit(test.get('name'), test.get('unit'), db)
                 if lab is None:
                     lab = created[key] = _create_lab(test, db)
 

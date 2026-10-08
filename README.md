@@ -19,6 +19,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Review next to the PDF**: Each report's results are shown beside the PDF, with High/Low status, so you can check them before anything is saved
 - **Correct before importing**: Edit any test name, result, unit or range, choose which saved test a row belongs to, or untick rows you don't want
 - **Nothing silently wrong**: A missing collection date must be entered before import; results in a different unit than the saved test (e.g. mmol/L vs mg/dL) are flagged and kept as a separate test by default; rows that couldn't be read are listed for you to fill in
+- **No copies of existing tests**: A result is never saved as a new copy of a test that already exists in that unit, including when several reports are imported together
 - **Several reports at once**: Each file uploads and is read separately with its own progress, and a summary afterwards lists what was saved and what's out of range
 - **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history. A re-uploaded report with nothing saved from it yet is read again, so improvements to the reader apply (an earlier AI reading is kept to compare with)
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
@@ -39,7 +40,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Multiple patients**: Keep results for family members separately and switch between them from the top bar
 - **Reference ranges**: Ranges can be low–high, greater than or less than, and each result can carry the range printed on its own report
 - **Search**: Press `/` anywhere to search for a test or page
-- **Merge duplicates**: *Settings → Merge duplicates* finds lab tests, panels, units and providers saved more than once (such as *Albumin* and *Albumin (g/dL)*, *mg/dl* and *mg/dL*, or a provider with and without a middle initial). With AI enabled, *Ask AI to review* also catches differently worded names. You tick each group to merge, choose which item to keep and its name, and confirm; tests in units that can't be compared are never merged
+- **Merge duplicates**: *Settings → Merge duplicates* finds lab tests, panels, units and providers saved more than once (such as *Albumin* and *Albumin (g/dL)*, *mg/dl* and *mg/dL*, or a provider with and without a middle initial). With AI enabled, *Ask AI to review* also catches differently worded names. You tick each group to merge (or *Tick all*), choose which item to keep and its name, and confirm; tests in units that can't be compared are never merged
 - **Backup and restore**: Export and import all data, including uploaded PDFs, from Settings
 
 ### 🎨 **Interface**
