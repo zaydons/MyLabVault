@@ -5,6 +5,7 @@
 (function () {
     const KIND_TITLE = { labs: 'Lab tests', panels: 'Panels', units: 'Units', providers: 'Providers' };
     const COUNT_WORD = { labs: 'result', panels: 'test', units: 'test', providers: 'result' };
+    const KIND_NOUN = { labs: 'tests', panels: 'panels', units: 'units', providers: 'providers' };
     const SOURCE = { rule: 'Found by name', ai: 'Suggested by AI', both: 'Found by name and AI' };
     const state = { groups: [] };
     const $id = id => document.getElementById(id);
@@ -32,7 +33,9 @@
                 <legend class="sr-only">${esc(group.items.map(it => it.name).join(', '))}</legend>
                 <div class="custom-control custom-checkbox mb-2">
                     <input type="checkbox" class="custom-control-input dup-check" id="${id}-check">
-                    <label class="custom-control-label font-weight-bold" for="${id}-check">Merge ${esc(group.items.map(it => it.name).join(' and '))}</label>
+                    <label class="custom-control-label font-weight-bold" for="${id}-check">${group.items.length === 2
+                        ? `Merge ${esc(group.items[0].name)} and ${esc(group.items[1].name)}`
+                        : `Merge ${group.items.length} ${KIND_NOUN[group.kind]} into one: ${esc(group.name)}`}</label>
                 </div>
                 <p class="small mb-2"><span class="badge badge-status-info mr-1">${SOURCE[group.source] || ''}</span>${esc(group.reason)}${group.ai_reason ? ` · AI: ${esc(group.ai_reason)}` : ''}</p>
                 <div class="form-group mb-2" role="radiogroup" aria-labelledby="${id}-keep-label">

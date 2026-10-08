@@ -59,8 +59,12 @@ def _words_key(name: str) -> str:
 def _lab_base(name: str, unit: str) -> str:
     """Lab name without a suffix the importer adds to keep tests apart: " (g/dL)" or " (2)"."""
     base = (name or "").strip()
-    match = re.fullmatch(r"(.*?)\s*\(([^()]*)\)", base)
-    if match and (match.group(2).strip().isdigit() or normalize_unit(match.group(2)) == normalize_unit(unit)):
+    # Repeated imports can stack suffixes: "BUN/Creatinine Ratio (2) (2)"
+    while True:
+        match = re.fullmatch(r"(.*?)\s*\(([^()]*)\)", base)
+        if not (match and match.group(1) and (match.group(2).strip().isdigit()
+                                              or normalize_unit(match.group(2)) == normalize_unit(unit))):
+            break
         base = match.group(1)
     return _words_key(base)
 
@@ -190,16 +194,39 @@ async def ai_suggestions(inv: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str,
 
 
 def combine(rule_groups: List[Dict[str, Any]], ai_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Rule and AI suggestions together; a group both found is listed once."""
-    groups = {g["key"]: g for g in rule_groups}
-    for g in ai_groups:
-        if g["key"] in groups:
-            groups[g["key"]]["source"] = "both"
-            groups[g["key"]]["ai_reason"] = g["reason"]
-        else:
-            groups[g["key"]] = g
+    """Rule and AI suggestions together. Groups that share an item become one group, so each
+    item is offered once (the rules may find 6 copies of a test and the AI 7)."""
+    combined: List[Dict[str, Any]] = []
+    for g in rule_groups + ai_groups:
+        overlapping = [c for c in combined if c["kind"] == g["kind"]
+                       and {i["id"] for i in c["items"]} & {i["id"] for i in g["items"]}]
+        if not overlapping:
+            combined.append(dict(g))
+            continue
+        union = [i for c in overlapping + [g] for i in c["items"]]
+        if g["kind"] == "labs" and not all(units_match(x["unit"], y["unit"]) for x in union for y in union):
+            continue  # joining would mix units that can't be compared; keep what's already listed
+        target = overlapping[0]
+        for other in overlapping[1:] + [g]:
+            if other is not g:
+                combined.remove(other)
+            target = _join(target, other)
+        combined[combined.index(overlapping[0])] = target
     order = {kind: i for i, kind in enumerate(KINDS)}
-    return sorted(groups.values(), key=lambda g: (order[g["kind"]], g["name"].lower()))
+    return sorted(combined, key=lambda g: (order[g["kind"]], g["name"].lower()))
+
+
+def _join(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    """One suggestion covering the items of two overlapping ones."""
+    items = {i["id"]: i for i in a["items"] + b["items"]}
+    sources = {a["source"], b["source"]}
+    source = "both" if "both" in sources or sources == {"rule", "ai"} else a["source"]
+    rule, ai = (a, b) if a["source"] != "ai" else (b, a)
+    joined = _group(a["kind"], list(items.values()), rule["reason"] if rule["source"] != "ai" else a["reason"],
+                    source, keep_id=a["keep_id"], name=a["name"])
+    if source == "both":
+        joined["ai_reason"] = ai.get("ai_reason") or ai["reason"]
+    return joined
 
 
 # ---------- merging ----------
