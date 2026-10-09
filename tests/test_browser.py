@@ -310,3 +310,45 @@ def test_enter_results_by_hand(page):
     assert not page.query_selector(".manual-card")
     names = sorted(lab["name"] for lab in api(page, "GET", "/api/labs/?limit=100"))
     assert names == ["Glucose", "Glucose (mmol/L)", "HIV Screen"]
+
+
+def test_medications(page):
+    ready(page)
+    page.goto(page.base + "/medications", wait_until="networkidle")
+    page.click("#addMedication")
+    page.wait_for_selector("#medModal.show")
+    page.fill("#medName", "Testosterone cypionate")
+    page.fill("#medDose", "100 mg")
+    page.fill("#medFrequency", "weekly")
+    page.fill("#medRoute", "injection")
+    page.fill("#medStart", "2026-01-05")
+    page.select_option("#medProvider", "1")
+    page.click("#medForm button[type=submit]")
+    page.wait_for_selector("#medModal", state="hidden")
+    page.wait_for_selector(".med-item")
+
+    page.click("[aria-label='Change dose of Testosterone cypionate']")
+    page.wait_for_selector("#doseModal.show")
+    page.fill("#doseNew", "140 mg")
+    page.fill("#doseDate", "2026-06-03")
+    page.click("#doseForm button[type=submit]")
+    page.wait_for_selector("#doseModal", state="hidden")
+    page.wait_for_function("() => /140 mg/.test(document.getElementById('currentList').textContent)")
+    item = page.text_content("#currentList")
+    assert "was 100 mg" in item and "prescribed by Dr A" in item and "Dose history (2 doses)" in item
+
+    page.click("#addMedication")
+    page.wait_for_selector("#medModal.show")
+    page.fill("#medName", "Vitamin D3")
+    page.check("#kindSupplement", force=True)
+    page.fill("#medStart", "2025-01-10")
+    page.fill("#medEnd", "2025-12-31")
+    page.click("#medForm button[type=submit]")
+    page.wait_for_selector("#pastCard:not([hidden])")
+    assert "Supplement" in page.text_content("#pastList") and "Stopped" in page.text_content("#pastList")
+    page.click(".dose-history summary")
+    axe_clean(page, ".content")
+
+    page.goto(page.base + "/dashboard", wait_until="networkidle")
+    card = page.text_content(".current-medications")
+    assert "Testosterone cypionate" in card and "140 mg" in card and "Vitamin D3" not in card

@@ -147,6 +147,33 @@
       </div>
     </div>
 
+    <!-- Current medications -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <i class="mdi mdi-pill mr-2" aria-hidden="true"></i>
+          Current medications
+        </h2>
+        <div class="card-tools">
+          <a href="/medications" class="btn btn-outline-primary btn-sm">{{ 'Manage' if dashboard_data.current_medications else 'Add medications' }}</a>
+        </div>
+      </div>
+      <div class="card-body">
+        {% if dashboard_data.current_medications %}
+        <ul class="list-unstyled mb-0 current-medications">
+          {% for m in dashboard_data.current_medications %}
+          <li class="mb-1">
+            <strong>{{ m.name }}</strong>{% if m.kind == 'supplement' %} <span class="badge badge-status-info">Supplement</span>{% endif %}
+            <span class="summary-detail">{{ [m.dose, m.frequency, m.route] | select | join(' · ') }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0">No current medications or supplements recorded.</p>
+        {% endif %}
+      </div>
+    </div>
+
     <!-- Latest result per test -->
     <div class="card">
       <div class="card-header">

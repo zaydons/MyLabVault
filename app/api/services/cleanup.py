@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..models import ImportTemplate, Lab, LabResult, Panel, PDFImportLog, Provider, Unit
+from ..models import ImportTemplate, Lab, LabResult, Medication, Panel, PDFImportLog, Provider, Unit
 from . import ai_parser
 from .import_review import normalize_unit, units_match
 
@@ -277,6 +277,7 @@ def merge(kind: str, keep_id: int, merge_ids: List[int], name: Optional[str], db
         for other in others:
             moved += db.query(LabResult).filter(LabResult.provider_id == other.id).update({LabResult.provider_id: keep.id})
             db.query(PDFImportLog).filter(PDFImportLog.provider_id == other.id).update({PDFImportLog.provider_id: keep.id})
+            db.query(Medication).filter(Medication.provider_id == other.id).update({Medication.provider_id: keep.id})
             db.query(ImportTemplate).filter(ImportTemplate.default_provider_id == other.id).update(
                 {ImportTemplate.default_provider_id: keep.id})
 

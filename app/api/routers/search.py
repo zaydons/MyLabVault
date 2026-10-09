@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import Lab as LabModel, LabResult as LabResultModel
+from ..models import Lab as LabModel, LabResult as LabResultModel, Medication as MedicationModel
 from .pages import get_selected_patient_id
 
 router = APIRouter()
@@ -17,7 +17,8 @@ PAGES = [
     ("All Results", "/results", "results all lab results history"),
     ("Charts", "/charts", "charts trends graphs"),
     ("Vitals", "/vitals", "vitals weight blood pressure heart rate"),
-    ("PDF Import", "/import", "import pdf upload report"),
+    ("Medications", "/medications", "medications medicines drugs prescriptions supplements vitamins"),
+    ("Import", "/import", "import pdf upload report enter results by hand"),
     ("Lab Tests", "/labs", "lab tests manage"),
     ("Panels", "/panels", "panels"),
     ("Units", "/units", "units"),
@@ -58,6 +59,20 @@ def search(request: Request, q: str = Query("", max_length=100), db: Session = D
         ])),
         "url": f"/lab/{lab.id}",
     } for lab in labs[:8]]
+
+    # This patient's medications and supplements, newest dose of each name
+    meds = db.query(MedicationModel).filter(MedicationModel.patient_id == patient_id)
+    for word in words:
+        meds = meds.filter(func.lower(MedicationModel.name).contains(word, autoescape=True))
+    latest_dose = {}
+    for med in meds.order_by(MedicationModel.start_date.desc()).all():
+        latest_dose.setdefault(med.name.lower(), med)
+    items += [{
+        "type": "medication",
+        "label": med.name,
+        "detail": " · ".join(filter(None, [med.kind.capitalize(), med.dose, "current" if med.is_current() else "stopped"])),
+        "url": "/medications",
+    } for med in list(latest_dose.values())[:4]]
 
     items += [
         {"type": "page", "label": name, "detail": "Page", "url": url}

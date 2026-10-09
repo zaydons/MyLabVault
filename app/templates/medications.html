@@ -1,0 +1,446 @@
+{% extends "layout.html" %}
+{% from 'components/notification_modal.html' import notification_modal, confirmation_modal %}
+
+{% block title %}Medications - MyLabVault{% endblock %}
+
+{% block content %}
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="d-flex flex-wrap align-items-center">
+      <div class="mr-auto mb-2">
+        <h1 class="m-0"><i class="mdi mdi-pill mr-2" aria-hidden="true"></i>Medications</h1>
+        <p class="text-muted mb-0">Medications and supplements for the selected patient, with each dose change</p>
+      </div>
+      <button class="btn btn-primary mb-2" type="button" id="addMedication">
+        <i class="mdi mdi-plus mr-1" aria-hidden="true"></i>Add medication
+      </button>
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title" id="currentTitle">Current</h2></div>
+      <div class="card-body" id="currentList" aria-labelledby="currentTitle"><p class="text-muted mb-0">Loading…</p></div>
+    </div>
+    <div class="card" id="pastCard" hidden>
+      <div class="card-header"><h2 class="card-title" id="pastTitle">Past</h2></div>
+      <div class="card-body" id="pastList" aria-labelledby="pastTitle"></div>
+    </div>
+  </div>
+</section>
+
+<datalist id="medNameList"></datalist>
+<datalist id="frequencyList"></datalist>
+<datalist id="routeList"></datalist>
+
+<!-- Add or edit one dose period -->
+<div class="modal fade" id="medModal" tabindex="-1" role="dialog" aria-labelledby="medModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <form class="modal-content" id="medForm" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="medModalTitle">Add medication</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="medError" role="alert"></div>
+        <input type="hidden" id="medId">
+        <div class="form-row">
+          <div class="form-group col-md-8">
+            <label for="medName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" class="form-control" id="medName" list="medNameList" maxlength="255" required autocomplete="off" placeholder="e.g. Atorvastatin">
+          </div>
+          <div class="form-group col-md-4">
+            <span class="d-block mb-2 font-weight-bold" id="medKindLabel">Type</span>
+            <div role="radiogroup" aria-labelledby="medKindLabel">
+              <div class="custom-control custom-radio custom-control-inline">
+                <input type="radio" class="custom-control-input" id="kindMedication" name="medKind" value="medication" checked>
+                <label class="custom-control-label" for="kindMedication">Medication</label>
+              </div>
+              <div class="custom-control custom-radio custom-control-inline">
+                <input type="radio" class="custom-control-input" id="kindSupplement" name="medKind" value="supplement">
+                <label class="custom-control-label" for="kindSupplement">Supplement</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label for="medDose">Dose</label>
+            <input type="text" class="form-control" id="medDose" maxlength="100" placeholder="e.g. 20 mg">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="medFrequency">How often</label>
+            <input type="text" class="form-control" id="medFrequency" list="frequencyList" maxlength="100" autocomplete="off" placeholder="e.g. once daily">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="medRoute">How it's taken</label>
+            <input type="text" class="form-control" id="medRoute" list="routeList" maxlength="50" autocomplete="off" placeholder="e.g. by mouth">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label for="medStart">Started <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="date" class="form-control" id="medStart" required>
+          </div>
+          <div class="form-group col-md-6">
+            <label for="medEnd">Stopped</label>
+            <input type="date" class="form-control" id="medEnd" aria-describedby="medEndHelp">
+            <small class="form-text text-muted" id="medEndHelp">Leave empty while it's still being taken.</small>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label for="medReason">Reason</label>
+            <input type="text" class="form-control" id="medReason" maxlength="255" placeholder="e.g. high cholesterol">
+          </div>
+          <div class="form-group col-md-6">
+            <label for="medProvider">Prescriber</label>
+            <select class="custom-select" id="medProvider"></select>
+          </div>
+        </div>
+        <div class="form-group mb-0">
+          <label for="medNotes">Notes</label>
+          <textarea class="form-control" id="medNotes" rows="2" maxlength="2000" placeholder="Optional"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Change dose: ends the current period and starts a new one -->
+<div class="modal fade" id="doseModal" tabindex="-1" role="dialog" aria-labelledby="doseModalTitle" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form class="modal-content" id="doseForm" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="doseModalTitle">Change dose</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="doseError" role="alert"></div>
+        <input type="hidden" id="doseMedId">
+        <p id="doseCurrent" class="mb-3"></p>
+        <div class="form-row">
+          <div class="form-group col-sm-6">
+            <label for="doseNew">New dose</label>
+            <input type="text" class="form-control" id="doseNew" maxlength="100">
+          </div>
+          <div class="form-group col-sm-6">
+            <label for="doseFrequency">How often</label>
+            <input type="text" class="form-control" id="doseFrequency" list="frequencyList" maxlength="100" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="doseDate">New dose from <span class="text-danger" aria-hidden="true">*</span></label>
+          <input type="date" class="form-control" id="doseDate" required aria-describedby="doseDateHelp">
+          <small class="form-text text-muted" id="doseDateHelp">The current dose is recorded as ending the day before.</small>
+        </div>
+        <div class="form-group mb-0">
+          <label for="doseNotes">Notes</label>
+          <input type="text" class="form-control" id="doseNotes" maxlength="2000" placeholder="Optional, e.g. why it changed">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Change dose</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Stop -->
+<div class="modal fade" id="stopModal" tabindex="-1" role="dialog" aria-labelledby="stopModalTitle" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form class="modal-content" id="stopForm" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="stopModalTitle">Stop medication</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="stopError" role="alert"></div>
+        <input type="hidden" id="stopMedId">
+        <div class="form-group mb-0">
+          <label for="stopDate">Last day taken <span class="text-danger" aria-hidden="true">*</span></label>
+          <input type="date" class="form-control" id="stopDate" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Stop</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ notification_modal() }}
+{{ confirmation_modal() }}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Each record is one dose period; records with the same name (any case) are one medication's history
+let meds = [];
+let providers = [];
+let dateFormat = 'MM/DD/YYYY';
+
+const $id = id => document.getElementById(id);
+const esc = v => escapeHtml(v === null || v === undefined ? '' : String(v));
+const patientId = () => parseInt(getCookie('selectedPatientId') || '1', 10) || 1;
+const todayIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const showDate = iso => { try { return formatDateSync(`${iso}T12:00:00`, dateFormat); } catch (e) { return iso; } };
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const doseText = m => [m.dose, m.frequency, m.route].filter(Boolean).join(' · ');
+
+function duration(startIso, endIso) {
+    const a = new Date(`${startIso}T12:00:00`), b = new Date(`${(endIso || todayIso())}T12:00:00`);
+    let months = (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth() - (b.getDate() < a.getDate() ? 1 : 0);
+    if (months < 1) return plural(Math.max(1, Math.round((b - a) / 86400000) + 1), 'day');
+    const years = Math.floor(months / 12);
+    months %= 12;
+    return [years ? `${years} yr` : '', months ? `${months} mo` : ''].filter(Boolean).join(' ');
+}
+
+function groups() {
+    const byName = new Map();
+    meds.forEach(m => {
+        const key = m.name.trim().toLowerCase();
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push(m);
+    });
+    // Each group's periods newest first; groups by name
+    return [...byName.values()].map(periods => periods.sort((a, b) => b.start_date.localeCompare(a.start_date)))
+        .sort((a, b) => a[0].name.localeCompare(b[0].name));
+}
+
+function actions(m) {
+    const name = esc(m.name);
+    return `<div class="btn-group-wrap mt-2">
+        ${m.current ? `<button type="button" class="btn btn-outline-primary btn-sm mr-1 mb-1" data-action="dose" data-id="${m.id}" aria-label="Change dose of ${name}">Change dose</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm mr-1 mb-1" data-action="stop" data-id="${m.id}" aria-label="Stop ${name}">Stop</button>` : ''}
+        <button type="button" class="btn btn-outline-secondary btn-sm mr-1 mb-1" data-action="edit" data-id="${m.id}" aria-label="Edit ${name}${m.dose ? ` ${esc(m.dose)}` : ''}">Edit</button>
+        <button type="button" class="btn btn-outline-danger btn-sm mb-1" data-action="delete" data-id="${m.id}" aria-label="Delete ${name}${m.dose ? ` ${esc(m.dose)}` : ''}">Delete</button>
+    </div>`;
+}
+
+function renderGroup(periods, current) {
+    const latest = current ? periods.find(p => p.current) : periods[0];
+    const earlier = periods.filter(p => p !== latest);
+    // The dose just before this one, when it ran up to the day before this one started
+    const previous = earlier.find(p => p.end_date && new Date(`${p.end_date}T12:00:00`).getTime() + 86400000 === new Date(`${latest.start_date}T12:00:00`).getTime());
+    const when = current
+        ? `Since ${esc(showDate(latest.start_date))}${latest.end_date ? `, until ${esc(showDate(latest.end_date))}` : ''}`
+        : `${esc(showDate(periods[periods.length - 1].start_date))} – ${esc(showDate(latest.end_date))} (${duration(periods[periods.length - 1].start_date, latest.end_date)})`;
+    const extra = [
+        previous && previous.dose && previous.dose !== latest.dose ? `was ${esc(previous.dose)} from ${esc(showDate(previous.start_date))}` : '',
+        latest.provider_name ? `prescribed by ${esc(latest.provider_name)}` : '',
+        latest.reason ? `for ${esc(latest.reason)}` : '',
+    ].filter(Boolean).join(' · ');
+    const history = periods.length > 1 ? `
+        <details class="mt-2 dose-history">
+            <summary>Dose history (${plural(periods.length, 'dose')})</summary>
+            <table class="table table-sm mt-2 mb-0">
+                <caption class="sr-only">Doses of ${esc(latest.name)}, newest first</caption>
+                <thead><tr><th scope="col">Dose</th><th scope="col">From</th><th scope="col">To</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>${periods.map(p => `<tr>
+                    <td>${esc(doseText(p) || '—')}</td>
+                    <td>${esc(showDate(p.start_date))}</td>
+                    <td>${p.end_date ? esc(showDate(p.end_date)) : 'now'}</td>
+                    <td class="text-nowrap text-right">
+                        <button type="button" class="btn btn-link btn-sm p-0 mr-2" data-action="edit" data-id="${p.id}" aria-label="Edit ${esc(p.name)} ${esc(p.dose || '')} from ${esc(showDate(p.start_date))}">Edit</button>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-danger-strong" data-action="delete" data-id="${p.id}" aria-label="Delete ${esc(p.name)} ${esc(p.dose || '')} from ${esc(showDate(p.start_date))}">Delete</button>
+                    </td></tr>`).join('')}</tbody>
+            </table>
+        </details>` : '';
+    return `
+        <article class="med-item py-3" id="med-${latest.id}">
+            <h3 class="h6 mb-1">
+                <span class="med-name">${esc(latest.name)}</span>
+                ${latest.kind === 'supplement' ? '<span class="badge badge-status-info ml-1">Supplement</span>' : ''}
+                ${current ? '' : '<span class="badge badge-status-none ml-1">Stopped</span>'}
+            </h3>
+            ${doseText(latest) ? `<div class="med-dose">${esc(doseText(latest))}</div>` : ''}
+            <div class="text-muted small">${when}${extra ? ` · ${extra}` : ''}</div>
+            ${latest.notes ? `<div class="small mt-1"><i class="mdi mdi-note-text-outline" aria-hidden="true"></i> ${esc(latest.notes)}</div>` : ''}
+            ${actions(latest)}
+            ${history}
+        </article>`;
+}
+
+function render() {
+    const all = groups();
+    const current = all.filter(g => g.some(p => p.current));
+    const past = all.filter(g => !g.some(p => p.current));
+    $id('currentTitle').textContent = `Current (${current.length})`;
+    $id('currentList').innerHTML = current.length ? current.map(g => renderGroup(g, true)).join('')
+        : '<p class="text-muted mb-0">No current medications or supplements. Use <strong>Add medication</strong> to record one.</p>';
+    $id('pastCard').hidden = !past.length;
+    $id('pastTitle').textContent = `Past (${past.length})`;
+    $id('pastList').innerHTML = past.map(g => renderGroup(g, false)).join('');
+}
+
+async function load() {
+    const [list, options, providerList] = await Promise.all([
+        fetch(`/api/medications/?patient_id=${patientId()}`).then(r => r.json()),
+        fetch(`/api/medications/options?patient_id=${patientId()}`).then(r => r.json()),
+        fetch('/api/providers/?limit=1000').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+    meds = list;
+    providers = providerList.slice().sort((a, b) => a.name.localeCompare(b.name));
+    $id('medNameList').innerHTML = options.names.map(n => `<option value="${esc(n)}"></option>`).join('');
+    $id('frequencyList').innerHTML = options.frequencies.map(n => `<option value="${esc(n)}"></option>`).join('');
+    $id('routeList').innerHTML = options.routes.map(n => `<option value="${esc(n)}"></option>`).join('');
+    render();
+}
+
+function showError(box, text) { box.textContent = text; box.classList.remove('d-none'); box.focus && box.setAttribute('tabindex', '-1'); box.focus(); }
+function clearError(box) { box.textContent = ''; box.classList.add('d-none'); }
+
+async function send(url, method, body) {
+    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const detail = Array.isArray(data.detail) ? 'Check the dates and fields.' : data.detail;
+        throw new Error(detail || 'Saving failed.');
+    }
+    return data;
+}
+
+// ---------- add / edit ----------
+function openMedModal(med) {
+    clearError($id('medError'));
+    $id('medForm').reset();
+    $id('medModalTitle').textContent = med ? `Edit ${med.name}` : 'Add medication';
+    $id('medId').value = med ? med.id : '';
+    $id('medProvider').innerHTML = '<option value="">None</option>' + providers.map(p =>
+        `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    if (med) {
+        $id('medName').value = med.name;
+        $id(med.kind === 'supplement' ? 'kindSupplement' : 'kindMedication').checked = true;
+        $id('medDose').value = med.dose || '';
+        $id('medFrequency').value = med.frequency || '';
+        $id('medRoute').value = med.route || '';
+        $id('medStart').value = med.start_date;
+        $id('medEnd').value = med.end_date || '';
+        $id('medReason').value = med.reason || '';
+        $id('medProvider').value = med.provider_id || '';
+        $id('medNotes').value = med.notes || '';
+    } else {
+        $id('medStart').value = todayIso();
+    }
+    $('#medModal').modal('show');
+}
+
+async function saveMed(event) {
+    event.preventDefault();
+    const box = $id('medError');
+    const name = $id('medName').value.trim();
+    if (!name) return showError(box, 'Enter the name.');
+    if (!$id('medStart').value) return showError(box, 'Enter the date it was started.');
+    if ($id('medEnd').value && $id('medEnd').value < $id('medStart').value) return showError(box, 'The stop date is before the start date.');
+    const id = $id('medId').value;
+    const body = {
+        patient_id: patientId(), name, kind: document.querySelector('input[name="medKind"]:checked').value,
+        dose: $id('medDose').value, frequency: $id('medFrequency').value, route: $id('medRoute').value,
+        start_date: $id('medStart').value, end_date: $id('medEnd').value || null, reason: $id('medReason').value,
+        provider_id: parseInt($id('medProvider').value, 10) || null, notes: $id('medNotes').value,
+    };
+    try {
+        await send(id ? `/api/medications/${encodeURIComponent(id)}` : '/api/medications/', id ? 'PUT' : 'POST', body);
+        $('#medModal').modal('hide');
+        await load();
+    } catch (error) { showError(box, error.message); }
+}
+
+// ---------- change dose ----------
+function openDoseModal(med) {
+    clearError($id('doseError'));
+    $id('doseForm').reset();
+    $id('doseMedId').value = med.id;
+    $id('doseModalTitle').textContent = `Change dose of ${med.name}`;
+    $id('doseCurrent').textContent = `Now: ${doseText(med) || 'no dose recorded'}, since ${showDate(med.start_date)}.`;
+    $id('doseNew').value = '';
+    $id('doseFrequency').value = med.frequency || '';
+    $id('doseDate').value = todayIso();
+    $('#doseModal').modal('show');
+}
+
+async function saveDose(event) {
+    event.preventDefault();
+    const box = $id('doseError');
+    if (!$id('doseNew').value.trim() && !$id('doseFrequency').value.trim()) return showError(box, 'Enter the new dose.');
+    if (!$id('doseDate').value) return showError(box, 'Enter the date the new dose started.');
+    try {
+        await send(`/api/medications/${encodeURIComponent($id('doseMedId').value)}/change-dose`, 'POST', {
+            dose: $id('doseNew').value, frequency: $id('doseFrequency').value, change_date: $id('doseDate').value, notes: $id('doseNotes').value,
+        });
+        $('#doseModal').modal('hide');
+        await load();
+    } catch (error) { showError(box, error.message); }
+}
+
+// ---------- stop / delete ----------
+function openStopModal(med) {
+    clearError($id('stopError'));
+    $id('stopMedId').value = med.id;
+    $id('stopModalTitle').textContent = `Stop ${med.name}`;
+    $id('stopDate').value = todayIso();
+    $id('stopDate').min = med.start_date;
+    $('#stopModal').modal('show');
+}
+
+async function saveStop(event) {
+    event.preventDefault();
+    const box = $id('stopError');
+    if (!$id('stopDate').value) return showError(box, 'Enter the last day it was taken.');
+    try {
+        await send(`/api/medications/${encodeURIComponent($id('stopMedId').value)}/stop`, 'POST', { end_date: $id('stopDate').value });
+        $('#stopModal').modal('hide');
+        await load();
+    } catch (error) { showError(box, error.message); }
+}
+
+async function deleteMed(med) {
+    const ok = await showConfirmation(`Delete ${med.name}${med.dose ? ` ${med.dose}` : ''} from ${showDate(med.start_date)}? To keep it in the history, use Stop instead.`,
+        'Delete medication', 'Delete', 'Cancel');
+    if (!ok) return;
+    try {
+        await send(`/api/medications/${encodeURIComponent(med.id)}`, 'DELETE');
+        await load();
+    } catch (error) { showNotification(error.message, 'error', 'Delete failed'); }
+}
+
+$(document).ready(async function () {
+    try { dateFormat = await getUserDateFormat(); } catch (e) { /* default format */ }
+    $id('addMedication').addEventListener('click', () => openMedModal(null));
+    $id('medForm').addEventListener('submit', saveMed);
+    $id('doseForm').addEventListener('submit', saveDose);
+    $id('stopForm').addEventListener('submit', saveStop);
+    document.querySelector('.content').addEventListener('click', e => {
+        const button = e.target.closest('[data-action]');
+        if (!button) return;
+        const med = meds.find(m => String(m.id) === button.dataset.id);
+        if (!med) return;
+        ({ dose: openDoseModal, stop: openStopModal, edit: openMedModal, delete: deleteMed })[button.dataset.action](med);
+    });
+    await load();
+});
+</script>
+<style>
+.med-item + .med-item { border-top: 1px solid #dee2e6; }
+.dark-mode .med-item + .med-item { border-top-color: #6c757d; }
+.med-item:first-child { padding-top: 0 !important; }
+.med-dose { font-size: 1rem; }
+.dose-history summary { cursor: pointer; }
+.dose-history summary:focus { outline: 3px solid #0b6bcb; outline-offset: 2px; }
+.text-danger-strong { color: #a71d2a; }
+.dark-mode .text-danger-strong { color: #ff9aa4; }
+</style>
+{% endblock %}

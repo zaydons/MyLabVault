@@ -2,7 +2,7 @@
 
 **Your personal health data, organized and accessible.**
 
-MyLabVault is a self-hosted app for tracking your lab results and vitals over time. Upload PDF lab reports, review what was extracted, and follow your trends on a dashboard and charts. Everything is stored on your own server.
+MyLabVault is a self-hosted app for tracking your lab results, vitals and medications over time. Upload PDF lab reports, review what was extracted, and follow your trends on a dashboard and charts. Everything is stored on your own server.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
@@ -27,7 +27,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
 ### 📊 **Dashboard and Charts**
-- **Dashboard**: Your latest draw, how many tests are out of range right now, a *Needs attention* list, your latest vitals, and the latest value of every test with the change since the previous result
+- **Dashboard**: Your latest draw, how many tests are out of range right now, a *Needs attention* list, your latest vitals, your current medications, and the latest value of every test with the change since the previous result
 - **Trend charts**: Straight lines on a real time axis, the reference range shaded behind each point, and out-of-range results marked with a triangle and an H/L label
 - **Charts page**: Opens on your most recent panel. The panel and test boxes are search dropdowns: type part of a name ("chol" finds Cholesterol, Total and HDL Cholesterol) and pick with the mouse or the arrow keys and Enter. Link straight to a chart with `/charts?lab=<id>` or `/charts?panel=<id>`
 - **Plain-language descriptions**: Each test's page explains what it measures (built in for about 70 common tests, or write your own)
@@ -38,10 +38,16 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **More measurements**: Height, temperature, oxygen saturation, respiratory rate and blood glucose
 - **Your units**: Choose lb or kg, feet and inches or cm, °F or °C and mg/dL or mmol/L (or *US units* / *Metric units* in one click) in *Settings → General*. Every reading, chart, change and typical range is shown in those units and new readings default to them; readings keep the unit they were entered in, so switching never alters your data
 
+### 💊 **Medications**
+- **Medications and supplements**: Record what each patient takes: name, dose, how often, how it's taken, start date, and optionally the stop date, reason, prescriber and notes. Supplements (vitamin D, biotin, ...) are tracked too and labelled as such
+- **Dose changes**: *Change dose* ends the current dose the day before and starts the new one, so each medication keeps its full dose history (e.g. 100 mg from Jan 5, then 140 mg from Jun 3)
+- **Current and past**: The Medications page lists what's taken now (with the previous dose) and what was stopped (with how long it was taken); the dashboard shows the current ones
+- Charts with dose-change markers, a timeline and importing medications from health summaries are planned ([#71](https://github.com/zaydons/MyLabVault/issues/71), [#72](https://github.com/zaydons/MyLabVault/issues/72), [#73](https://github.com/zaydons/MyLabVault/issues/73))
+
 ### 🏥 **Health Data Management**
 - **Multiple patients**: Keep results for family members separately and switch between them from the top bar
 - **Reference ranges**: Ranges can be low–high, greater than or less than, and each result can carry the range printed on its own report
-- **Search**: Press `/` anywhere to search for a test or page
+- **Search**: Press `/` anywhere to search for a test, medication or page
 - **Merge duplicates**: *Settings → Clean up* finds lab tests, panels, units and providers saved more than once (such as *Albumin* and *Albumin (g/dL)*, *mg/dl* and *mg/dL*, or a provider with and without a middle initial). With AI enabled, *Ask AI to review* also catches differently worded names. You tick each group to merge (or *Tick all*), choose which item to keep and its name, and confirm; tests in units that can't be compared are never merged
 - **Backup and restore**: Download all data, including uploaded PDFs, and restore it from *Settings → Backup & restore*
 
@@ -123,7 +129,7 @@ Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/RE
 2. **Import a PDF**: Go to *Import* and upload a lab report (or use *Enter by hand* for results without a PDF)
 3. **Review and import**: Check the results against the PDF, fix anything that's off, confirm the collection date and provider (often filled in for you), and import
 4. **Explore**: Open the dashboard, a test's page or *Charts* to see trends
-5. **Record vitals**: Use *Record vitals* on the dashboard
+5. **Record vitals and medications**: Use *Record vitals* on the dashboard, and the *Medications* page for medications and supplements
 
 ## 🔄 Updating
 
@@ -154,7 +160,7 @@ MyLabVault/
 │   │   ├── schemas.py            # Request/response schemas
 │   │   ├── build_info.py         # Build version and update check
 │   │   ├── logging_setup.py      # Log format, request IDs, audit lines
-│   │   ├── routers/              # API and page routes (results, labs, vitals, pdf_import, search, setup, ...)
+│   │   ├── routers/              # API and page routes (results, labs, vitals, medications, pdf_import, search, setup, ...)
 │   │   └── services/
 │   │       ├── pdf_parser.py     # Built-in PDF parser
 │   │       ├── summary_parser.py # Results tables with several collection dates (health summaries)
@@ -182,6 +188,7 @@ MyLabVault/
 - **Labs**: Test definitions with unit, reference range and optional description
 - **LabResults**: Values with date, provider, the report's own range, flag, comment and fasting status
 - **Vitals**: Weight, blood pressure and other measurements
+- **Medications**: Medications and supplements per patient, one row per dose period
 - **PDFImportLog**: Import history and parsed data
 - **UserSettings**: Preferences such as dark mode and first-run setup
 
@@ -266,6 +273,9 @@ GET  /api/pdf/history          # Import history
 GET  /api/labs/                # Lab test definitions
 GET  /api/vitals/              # Vitals (filter with patient_id, vital_type)
 GET  /api/vitals/types         # Vital types, their units and the preferred unit for each
+GET  /api/medications/         # Medications (filter with patient_id, status=current|past)
+POST /api/medications/{id}/change-dose  # End the current dose and start a new one
+POST /api/medications/{id}/stop         # Record the stop date
 GET  /api/search/?q=           # Quick search for tests and pages
 GET  /api/cleanup/suggestions  # Likely duplicate tests, panels, units and providers
 POST /api/cleanup/suggestions/ai  # The same, plus an AI review of the names
