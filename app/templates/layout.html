@@ -261,6 +261,12 @@
         .btn-outline-secondary:hover, .btn-outline-secondary:not(:disabled):active, .btn-outline-secondary.active { color: #fff; background-color: #495057; border-color: #495057; }
         .dark-mode .btn-outline-secondary { color: #dee2e6; border-color: #adb5bd; }
         .dark-mode .btn-outline-secondary:hover, .dark-mode .btn-outline-secondary:not(:disabled):active, .dark-mode .btn-outline-secondary.active { color: #212529; background-color: #dee2e6; border-color: #dee2e6; }
+        .btn-outline-danger { color: #a71d2a; border-color: #a71d2a; }
+        .btn-outline-danger:hover, .btn-outline-danger:not(:disabled):active { color: #fff; background-color: #a71d2a; border-color: #a71d2a; }
+        .dark-mode .btn-outline-danger { color: #ff9aa4; border-color: #ff9aa4; }
+        .dark-mode .btn-outline-danger:hover, .dark-mode .btn-outline-danger:not(:disabled):active { color: #212529; background-color: #ff9aa4; border-color: #ff9aa4; }
+        .btn-link:not(.nav-link) { color: #0056b3; }
+        .dark-mode .btn-link:not(.nav-link) { color: #8ec5ff; }
         .navbar-light .navbar-nav .nav-link { color: #495057; }
         .navbar-light .navbar-nav .nav-link:hover { color: #212529; }
         .sidebar-dark-primary .nav-sidebar > .nav-item > .nav-link.active,
@@ -456,6 +462,12 @@
             <a href="/vitals" class="nav-link {{ 'active' if request.url.path == '/vitals' }}">
               <i class="nav-icon mdi mdi-heart-pulse" aria-hidden="true"></i>
               <p>Vitals</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="/medications" class="nav-link {{ 'active' if request.url.path == '/medications' }}">
+              <i class="nav-icon mdi mdi-pill" aria-hidden="true"></i>
+              <p>Medications</p>
             </a>
           </li>
           {% set manage_data_paths = ['/labs', '/panels', '/units', '/providers', '/import', '/patients'] %}

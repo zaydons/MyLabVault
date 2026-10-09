@@ -17,6 +17,7 @@ from ..models import (
     UserSettings as UserSettingsModel,
     PDFImportLog as PDFImportLogModel,
     Vital as VitalModel,
+    Medication as MedicationModel,
 )
 from sqlalchemy import func
 
@@ -175,8 +176,15 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
         })
     latest_vitals.sort(key=lambda v: list(VITAL_TYPES).index(v["type"]))
 
+    # Medications and supplements being taken now, for the dashboard's medications card
+    current_medications = [
+        m for m in db.query(MedicationModel).filter(MedicationModel.patient_id == patient_id)
+        .order_by(MedicationModel.name).all() if m.is_current()
+    ]
+
     dashboard_data = {
         "latest_vitals": latest_vitals,
+        "current_medications": current_medications,
         "total_results": len(results),
         "tests_tracked": len(latest),
         "last_draw": last_draw,
@@ -432,6 +440,11 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 def vitals_page(request: Request, db: Session = Depends(get_db)):
     """Vitals (weight, blood pressure, ...) page."""
     return _render_simple_page("vitals.html", request, db)
+
+@router.get("/medications")
+def medications_page(request: Request, db: Session = Depends(get_db)):
+    """Medications and supplements page."""
+    return _render_simple_page("medications.html", request, db)
 
 @router.get("/patients")
 def patients_page(request: Request, db: Session = Depends(get_db)):

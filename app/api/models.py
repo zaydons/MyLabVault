@@ -54,6 +54,7 @@ class Patient(Base):
 
     results = relationship("LabResult", back_populates="patient")
     vitals = relationship("Vital", back_populates="patient")
+    medications = relationship("Medication", back_populates="patient")
 
     def get_age(self) -> Optional[int]:
         """Calculate patient age with proper leap year handling."""
@@ -424,6 +425,59 @@ class Vital(Base):
             "unit": self.unit,
             "measured_at": self.measured_at.isoformat() if self.measured_at else None,
             "notes": self.notes,
+        }
+
+
+MEDICATION_KINDS = ("medication", "supplement")
+
+
+class Medication(Base):
+    """A medication or supplement a patient takes at one dose for a period.
+
+    A dose change ends one period and starts the next, so each row is one dose; the rows with the
+    same name make up that medication's history. end_date is empty while it's still being taken.
+    """
+    __tablename__ = "medications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False, index=True)
+    kind = Column(String(20), nullable=False, default="medication")
+    dose = Column(String(100), nullable=True)        # as written, e.g. "100 mg" or "2 tablets"
+    frequency = Column(String(100), nullable=True)   # e.g. "once daily", "weekly", "as needed"
+    route = Column(String(50), nullable=True)        # e.g. "by mouth", "injection"
+    start_date = Column(Date, nullable=False, index=True)
+    end_date = Column(Date, nullable=True)
+    reason = Column(String(255), nullable=True)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)  # prescriber
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    patient = relationship("Patient", back_populates="medications")
+    provider = relationship("Provider")
+
+    def is_current(self, today=None) -> bool:
+        """Still being taken: no stop date, or one that hasn't passed yet."""
+        today = today or datetime.now().date()
+        return self.end_date is None or self.end_date >= today
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "name": self.name,
+            "kind": self.kind,
+            "dose": self.dose,
+            "frequency": self.frequency,
+            "route": self.route,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "reason": self.reason,
+            "provider_id": self.provider_id,
+            "provider_name": self.provider.name if self.provider else None,
+            "notes": self.notes,
+            "current": self.is_current(),
         }
 
 

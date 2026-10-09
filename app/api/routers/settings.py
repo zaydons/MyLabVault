@@ -3,7 +3,7 @@
 import json
 import shutil
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Union
@@ -11,6 +11,7 @@ from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
@@ -19,7 +20,7 @@ from ..logging_setup import audit
 from .vitals import check_unit_preferences
 from .setup import reset_setup_state
 from ..models import (
-    LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel,
+    LabResult as LabResultModel, Lab as LabModel, Vital as VitalModel, Medication as MedicationModel, MEDICATION_KINDS,
     Patient as PatientModel, Provider as ProviderModel,
     Panel as PanelModel, PDFImportLog, Unit as UnitModel,
     UserSettings as UserSettingsModel
@@ -43,6 +44,7 @@ class ExportPreviewResponse(BaseModel):
     patients_count: int
     lab_results_count: int
     vitals_count: int = 0
+    medications_count: int = 0
     labs_count: int
     providers_count: int
     panels_count: int
@@ -58,6 +60,7 @@ class ImportPreviewResponse(BaseModel):
     patients_count: int
     lab_results_count: int
     vitals_count: int = 0
+    medications_count: int = 0
     labs_count: int
     providers_count: int
     panels_count: int
@@ -168,9 +171,11 @@ def reset_data(db: Session = Depends(get_db)):
         # Delete all data in correct dependency order to avoid foreign key constraint errors
         # 1. First delete LabResults and Vitals (depend on Lab, Patient, Provider)
         deleted = {"results": db.query(LabResultModel).count(), "vitals": db.query(VitalModel).count(),
+                   "medications": db.query(MedicationModel).count(),
                    "tests": db.query(LabModel).count(), "imports": db.query(PDFImportLog).count()}
         db.query(LabResultModel).delete()
         db.query(VitalModel).delete()
+        db.query(MedicationModel).delete()
         db.commit()  # Commit this deletion first
 
         # 2. Then delete Labs (depends on Panel, Unit)  
@@ -235,6 +240,7 @@ def get_data_counts(db: Session = Depends(get_db)):
     try:
         lab_results_count = db.query(LabResultModel).count()
         vitals_count = db.query(VitalModel).count()
+        medications_count = db.query(MedicationModel).count()
         labs_count = db.query(LabModel).count()
         panels_count = db.query(PanelModel).count()
         patients_count = db.query(PatientModel).count()
@@ -249,7 +255,7 @@ def get_data_counts(db: Session = Depends(get_db)):
             pdf_files_count = len(list(pdf_dir.glob("*.pdf")))
 
         total_items = (
-            lab_results_count + vitals_count + labs_count + panels_count + patients_count + providers_count + units_count + pdf_imports_count + pdf_files_count
+            lab_results_count + vitals_count + medications_count + labs_count + panels_count + patients_count + providers_count + units_count + pdf_imports_count + pdf_files_count
         )
 
         return {
@@ -257,6 +263,7 @@ def get_data_counts(db: Session = Depends(get_db)):
             "data": {
                 "lab_results": lab_results_count,
                 "vitals": vitals_count,
+                "medications": medications_count,
                 "labs": labs_count,
                 "panels": panels_count,
                 "providers": providers_count,
@@ -304,6 +311,7 @@ def get_export_preview(
         # Get counts
         lab_results_count = lab_results_query.count()
         vitals_count = _vitals_query(config, patient_ids, db).count()
+        medications_count = _medications_query(config, patient_ids, db).count()
         
         # Get related data counts
         patients_count = len(patient_ids) if patient_ids and 'all' not in config.patients else db.query(PatientModel).count()
@@ -330,6 +338,7 @@ def get_export_preview(
             patients_count=patients_count,
             lab_results_count=lab_results_count,
             vitals_count=vitals_count,
+            medications_count=medications_count,
             labs_count=labs_count,
             providers_count=providers_count,
             panels_count=panels_count,
@@ -355,6 +364,7 @@ def export_data(
         # Generate export data
         export_data = _generate_export_data(config, db)
         audit("data.exported", results=len(export_data.get('lab_results', [])), vitals=len(export_data.get('vitals', [])),
+              medications=len(export_data.get('medications', [])),
               patients=len(export_data.get('patients', [])), include_pdfs=config.include_pdfs)
         
         # Create filename
@@ -459,6 +469,7 @@ def preview_import_file(
         patients_count = len(export_data.get('patients', []))
         lab_results_count = len(export_data.get('lab_results', []))
         vitals_count = len(export_data.get('vitals', []))
+        medications_count = len(export_data.get('medications', []))
         labs_count = len(export_data.get('labs', []))
         providers_count = len(export_data.get('providers', []))
         panels_count = len(export_data.get('panels', []))
@@ -481,6 +492,7 @@ def preview_import_file(
             patients_count=patients_count,
             lab_results_count=lab_results_count,
             vitals_count=vitals_count,
+            medications_count=medications_count,
             labs_count=labs_count,
             providers_count=providers_count,
             panels_count=panels_count,
@@ -609,6 +621,7 @@ def _generate_export_data(config: ExportConfiguration, db: Session) -> dict:
     # Get data
     lab_results = lab_results_query.all()
     vitals = _vitals_query(config, patient_ids, db).all()
+    medications = _medications_query(config, patient_ids, db).all()
     
     # Get related data
     if patient_ids and 'all' not in config.patients:
@@ -641,7 +654,8 @@ def _generate_export_data(config: ExportConfiguration, db: Session) -> dict:
         "units": [_unit_to_dict(u) for u in units],
         "labs": [_lab_to_dict(l) for l in labs],
         "lab_results": [_lab_result_to_dict(lr) for lr in lab_results],
-        "vitals": [_vital_to_dict(v) for v in vitals]
+        "vitals": [_vital_to_dict(v) for v in vitals],
+        "medications": [m.to_dict() for m in medications]
     }
     
     return export_data
@@ -740,6 +754,19 @@ def _vitals_query(config: ExportConfiguration, patient_ids: List[int], db: Sessi
         if config.date_range.end:
             query = query.filter(VitalModel.measured_at <= config.date_range.end)
     return query.order_by(VitalModel.measured_at)
+
+
+def _medications_query(config: ExportConfiguration, patient_ids: List[int], db: Session):
+    """Medications for the exported patients that were being taken at some point in the date range."""
+    query = db.query(MedicationModel)
+    if patient_ids and 'all' not in config.patients:
+        query = query.filter(MedicationModel.patient_id.in_(patient_ids))
+    if config.date_range:
+        if config.date_range.start:
+            query = query.filter(or_(MedicationModel.end_date.is_(None), MedicationModel.end_date >= config.date_range.start))
+        if config.date_range.end:
+            query = query.filter(MedicationModel.start_date <= config.date_range.end)
+    return query.order_by(MedicationModel.start_date)
 
 
 def _vital_to_dict(vital: VitalModel) -> dict:
@@ -849,6 +876,7 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
             # Delete all lab results and vitals first (foreign key constraints)
             db.query(LabResultModel).delete()
             db.query(VitalModel).delete()
+            db.query(MedicationModel).delete()
             db.query(LabModel).delete()
             db.query(PanelModel).delete()
             db.query(UnitModel).delete()
@@ -996,6 +1024,26 @@ def _perform_data_import(export_data: dict, pdf_files: dict, merge_data: bool, s
                 unit=vital_data.get('unit'),
                 measured_at=datetime.fromisoformat(vital_data['measured_at']),
                 notes=vital_data.get('notes')
+            ))
+            imported_records += 1
+
+        # Import medications (absent from exports made before medications existed)
+        for med in export_data.get('medications', []):
+            if med.get('patient_id') not in patient_id_map or not med.get('name') or not med.get('start_date'):
+                warnings.append("Skipped medication due to missing patient mapping, name or start date")
+                continue
+            db.add(MedicationModel(
+                patient_id=patient_id_map[med['patient_id']],
+                name=med['name'],
+                kind=med.get('kind') if med.get('kind') in MEDICATION_KINDS else 'medication',
+                dose=med.get('dose'),
+                frequency=med.get('frequency'),
+                route=med.get('route'),
+                start_date=date.fromisoformat(med['start_date'][:10]),
+                end_date=date.fromisoformat(med['end_date'][:10]) if med.get('end_date') else None,
+                reason=med.get('reason'),
+                provider_id=provider_id_map.get(med.get('provider_id')),
+                notes=med.get('notes')
             ))
             imported_records += 1
         
