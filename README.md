@@ -47,7 +47,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 ### 🎨 **Interface**
 - **Settings in one place**: *General* (theme, date format), *Backup & restore*, *Clean up*, *About* (version, update status, what's stored) and a separate *Danger zone*; link straight to one with `/settings#backup` and the like
 - **Responsive**: Works on phones as well as desktops; results tables keep the value, status and date visible on small screens
-- **Accessible**: Meets WCAG AA text contrast in light and dark mode, works with the keyboard and screen readers, and respects the reduced-motion setting
+- **Accessible**: Meets WCAG AA text contrast in light and dark mode (chart axes included), works with the keyboard and screen readers, and respects the reduced-motion setting
 - **Dark and light mode**, remembered between visits
 - **Version and updates**: The footer shows the running version and an *Update available* badge when a newer image has been published
 

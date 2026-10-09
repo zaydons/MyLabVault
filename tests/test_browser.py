@@ -164,3 +164,47 @@ def test_vital_units(page):
     assert "70 kg" in cards and "+2 kg since previous" in cards
     assert "entered as 150 lb" in page.text_content("#historyBody")
     axe_clean(page, ".content")
+
+
+# Contrast of a Chart.js chart's axis text against the nearest opaque background behind its canvas.
+# Canvas text is invisible to axe, so the chart's own options are checked instead.
+CHART_CONTRAST = """canvas => {
+    const chart = Chart.getChart(canvas);
+    const rgb = color => {
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1);
+        return Array.from(ctx.getImageData(0, 0, 1, 1).data);
+    };
+    let el = canvas, bg;
+    while (el && (bg = getComputedStyle(el).backgroundColor).match(/rgba\\(.*, 0\\)|transparent/)) el = el.parentElement;
+    const lum = ([r, g, b]) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+    const back = rgb(bg), s = chart.options.scales;
+    return {
+        x: ratio(rgb(s.x.ticks.color), back), y: ratio(rgb(s.y.ticks.color), back),
+        grid: rgb(s.y.grid.color)[3] / 255, dark: document.body.classList.contains('dark-mode'),
+    };
+}"""
+
+
+def test_chart_text_contrast(page):
+    ready(page)
+    panel = api(page, "POST", "/api/panels/", {"name": "Metabolic"})["data"]
+    lab = api(page, "POST", "/api/labs/", {"name": "Glucose", "panel_id": panel["id"], "ref_low": 70, "ref_high": 99})["data"]
+    for value, when in ((88, "2025-01-10T08:00:00"), (104, "2025-06-10T08:00:00"), (92, "2026-01-10T08:00:00")):
+        api(page, "POST", "/api/results/", {"lab_id": lab["id"], "patient_id": 1, "provider_id": 1, "result": value, "date_collected": when})
+    api(page, "PUT", "/api/settings/user", {"dark_mode": True})
+    page.goto(page.base + "/charts", wait_until="networkidle")
+    page.select_option("#panelSelect", str(panel["id"]))
+    page.wait_for_function("() => Chart.getChart(document.querySelector('#panelChartsContent canvas'))")
+    canvas = page.locator("#panelChartsContent canvas")
+
+    # Dark on load, then light and dark again without a reload: drawn charts follow the theme
+    for dark in (True, False, True):
+        page.evaluate("d => document.body.classList.toggle('dark-mode', d)", dark)
+        page.wait_for_timeout(400)  # let the card's colour transition finish
+        result = canvas.evaluate(CHART_CONTRAST)
+        assert result["dark"] is dark
+        assert result["x"] >= 4.5 and result["y"] >= 4.5, result
+        assert 0.05 <= result["grid"] <= 0.3, result  # grid lines visible but subtle

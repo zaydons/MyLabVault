@@ -6,6 +6,7 @@
  * - Out-of-range points use a shape and an H/L label as well as color.
  * - The reference range is drawn per point (each result's own range, else the test's).
  * - The canvas gets a text summary for screen readers.
+ * - Colors follow the theme, and drawn charts are recolored when body.dark-mode changes.
  *
  * LabChart.create(canvas, {
  *     name, unit,
@@ -24,8 +25,44 @@
 
     function colors() {
         return isDark()
-            ? { line: '#8ec5ff', out: '#ff8a95', range: '#7fd18f', band: 'rgba(127, 209, 143, 0.12)', text: '#dee2e6', grid: 'rgba(255, 255, 255, 0.12)' }
+            ? { line: '#8ec5ff', out: '#ff8a95', range: '#7fd18f', band: 'rgba(127, 209, 143, 0.12)', text: '#dee2e6', grid: 'rgba(255, 255, 255, 0.18)' }
             : { line: '#0062cc', out: '#c82333', range: '#1e7e34', band: 'rgba(30, 126, 52, 0.08)', text: '#495057', grid: 'rgba(0, 0, 0, 0.08)' };
+    }
+
+    // Sets every theme-dependent color; works on a chart config before creation and on a live chart
+    function applyColors(chart, points) {
+        const c = colors();
+        const isOut = p => OUT.includes(p.status);
+        chart.data.datasets.forEach((ds, i) => {
+            if (i === 0) {
+                ds.borderColor = ds.backgroundColor = c.line;
+                ds.pointBackgroundColor = ds.pointBorderColor = points.map(p => isOut(p) ? c.out : c.line);
+            } else {
+                ds.borderColor = c.range;
+                if (ds.fill) ds.backgroundColor = c.band;
+            }
+        });
+        const { plugins, scales } = chart.options;
+        plugins.title.color = c.text;
+        scales.y.title.color = c.text;
+        ['x', 'y'].forEach(axis => {
+            scales[axis].ticks.color = c.text;
+            scales[axis].grid.color = c.grid;
+        });
+    }
+
+    // Recolor charts already on the page when dark mode is switched without a reload
+    function watchTheme() {
+        let dark = isDark();
+        new MutationObserver(() => {
+            if (isDark() === dark) return;
+            dark = isDark();
+            Object.values(Chart.instances || {}).forEach(chart => {
+                if (!chart.$labPoints) return;
+                applyColors(chart, chart.$labPoints);
+                chart.update('none');
+            });
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }
 
     // Draws "H" / "L" / "!" next to out-of-range points so status isn't conveyed by color alone
@@ -64,8 +101,6 @@
     function create(canvas, data, options) {
         if (!canvas || !window.Chart) return null;
         const opts = Object.assign({ compact: false, title: true }, options || {});
-        const c = colors();
-
         const points = (data.points || [])
             .map(p => ({ ...p, x: parseDate(p.date), y: toNum(p.value), low: toNum(p.low), high: toNum(p.high) }))
             .filter(p => p.y !== null && !isNaN(p.x))
@@ -85,28 +120,24 @@
         const datasets = [{
             label: data.name + (data.unit ? ` (${data.unit})` : ''),
             data: points.map(p => ({ x: p.x, y: p.y })),
-            borderColor: c.line,
-            backgroundColor: c.line,
             borderWidth: 2,
             tension: 0,
             fill: false,
             pointStyle: points.map(pointStyle),
             rotation: points.map(p => p.status === 'low' ? 180 : 0),
-            pointBackgroundColor: points.map(p => OUT.includes(p.status) ? c.out : c.line),
-            pointBorderColor: points.map(p => OUT.includes(p.status) ? c.out : c.line),
             pointRadius: points.map(p => OUT.includes(p.status) ? radius + 2 : radius),
             pointHoverRadius: radius + 3,
         }];
 
         const rangeLine = (label, values) => ({
-            label, data: values, borderColor: c.range, borderWidth: opts.compact ? 1 : 1.5,
+            label, data: values, borderWidth: opts.compact ? 1 : 1.5,
             borderDash: [5, 4], stepped: 'middle', spanGaps: true, fill: false, pointRadius: 0, pointHoverRadius: 0,
         });
         if (hasHigh) datasets.push(rangeLine('Upper reference', highs));
         if (hasLow) {
             const lower = rangeLine('Lower reference', lows);
             // Shade the normal range between the two lines when both are known
-            if (hasHigh) { lower.fill = '-1'; lower.backgroundColor = c.band; }
+            if (hasHigh) lower.fill = '-1';
             datasets.push(lower);
         }
 
@@ -114,7 +145,7 @@
         const pad = span ? span * 0.04 : 15 * 86400000;
         const font = size => ({ family: 'IBM Plex Sans', size });
 
-        const chart = new Chart(canvas.getContext('2d'), {
+        const config = {
             type: 'line',
             data: { datasets },
             plugins: [flagLabels],
@@ -125,7 +156,7 @@
                 layout: { padding: { top: 14, bottom: 4 } },
                 interaction: { mode: 'nearest', intersect: false },
                 plugins: {
-                    title: { display: opts.title && !opts.compact, text: `${data.name} over time`, color: c.text, font: { ...font(15), weight: '600' } },
+                    title: { display: opts.title && !opts.compact, text: `${data.name} over time`, font: { ...font(15), weight: '600' } },
                     legend: { display: false },
                     tooltip: {
                         filter: item => item.datasetIndex === 0,
@@ -151,21 +182,26 @@
                         type: 'linear',
                         min: points[0].x - pad,
                         max: points[points.length - 1].x + pad,
-                        grid: { display: !opts.compact, color: c.grid },
-                        ticks: { color: c.text, font: font(opts.compact ? 10 : 12), maxTicksLimit: opts.compact ? 4 : 7, maxRotation: 0, callback: v => shortDate(v) },
+                        grid: { display: !opts.compact },
+                        ticks: { font: font(opts.compact ? 10 : 12), maxTicksLimit: opts.compact ? 4 : 7, maxRotation: 0, callback: v => shortDate(v) },
                     },
                     y: {
                         grace: '8%',
-                        grid: { color: c.grid },
-                        title: { display: !opts.compact && !!data.unit, text: data.unit || '', color: c.text, font: font(12) },
-                        ticks: { color: c.text, font: font(opts.compact ? 10 : 12), maxTicksLimit: opts.compact ? 4 : 8 },
+                        grid: {},
+                        title: { display: !opts.compact && !!data.unit, text: data.unit || '', font: font(12) },
+                        ticks: { font: font(opts.compact ? 10 : 12), maxTicksLimit: opts.compact ? 4 : 8 },
                     }
                 }
             }
-        });
+        };
+        applyColors(config, points);
+        const chart = new Chart(canvas.getContext('2d'), config);
         chart.$labPoints = points;
         return chart;
     }
+
+    if (document.body) watchTheme();
+    else document.addEventListener('DOMContentLoaded', watchTheme);
 
     window.LabChart = { create, summarize };
 })();
