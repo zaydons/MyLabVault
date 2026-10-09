@@ -35,10 +35,11 @@
             <div class="row align-items-center">
               <div class="col-md-4">
                 <label for="panelSelect" class="form-label">Select Lab Panel:</label>
-                <select id="panelSelect" class="form-control" data-default="{{ default_panel_id or '' }}">
+                <select id="panelSelect" class="form-control" data-default="{{ default_panel_id or '' }}"
+                        data-search-select data-search-placeholder="Search panels…" data-search-empty="No panels match">
                   <option value="">Choose a panel...</option>
                   {% for panel in panels %}
-                  <option value="{{ panel.id }}">{{ panel.name }} ({{ panel.lab_count }} labs)</option>
+                  <option value="{{ panel.id }}" data-detail="{{ panel.lab_count }} {{ 'test' if panel.lab_count == 1 else 'tests' }}">{{ panel.name }}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -46,7 +47,7 @@
                 <div class="text-muted">
                   <small>
                     <i class="mdi mdi-information mr-1"></i>
-                    Charts load as soon as you pick a panel
+                    Type to search, or pick from the list; charts load as soon as you choose a panel
                   </small>
                 </div>
               </div>
@@ -93,12 +94,13 @@
             <div class="row align-items-center">
               <div class="col-md-4">
                 <label for="labSelect" class="form-label">Select Individual Lab:</label>
-                <select id="labSelect" class="form-control">
+                <select id="labSelect" class="form-control"
+                        data-search-select data-search-placeholder="Search tests…" data-search-empty="No tests match">
                   <option value="">Choose a lab test...</option>
                   {% for panel in grouped_labs %}
                   <optgroup label="{{ panel.name }}">
                     {% for lab in panel.labs %}
-                    <option value="{{ lab.id }}">{{ lab.name }} ({{ lab.result_count }} results)</option>
+                    <option value="{{ lab.id }}" data-detail="{{ lab.result_count }} {{ 'result' if lab.result_count == 1 else 'results' }}">{{ lab.name }}</option>
                     {% endfor %}
                   </optgroup>
                   {% endfor %}
@@ -108,7 +110,7 @@
                 <div class="text-muted">
                   <small>
                     <i class="mdi mdi-information mr-1"></i>
-                    Pick a test to see its detailed trend
+                    Type part of a test's name to find it and see its detailed trend
                   </small>
                 </div>
               </div>
@@ -200,21 +202,23 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="/static/js/search-select.js"></script>
 <script>
 function chartNumber(value) {
     return (value === null || value === undefined || isNaN(parseFloat(value))) ? null : parseFloat(value);
 }
 
 $(document).ready(function() {
+    $('select[data-search-select]').each((_, select) => SearchSelect.enhance(select));
     // Charts load as soon as a panel or test is picked
     $('#panelSelect').on('change', function() {
         if (!this.value) return;
-        loadPanelCharts(this.value, $('#panelSelect option:selected').text().split(' (')[0]);
+        loadPanelCharts(this.value, $('#panelSelect option:selected').text());
         rememberSelection('panel', this.value);
     });
     $('#labSelect').on('change', function() {
         if (!this.value) return;
-        loadIndividualChart(this.value, $('#labSelect option:selected').text().split(' (')[0]);
+        loadIndividualChart(this.value, $('#labSelect option:selected').text());
         rememberSelection('lab', this.value);
     });
 
