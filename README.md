@@ -23,6 +23,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 - **Several reports at once**: Each file uploads and is read separately with its own progress, and a summary afterwards lists what was saved and what's out of range
 - **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history. A re-uploaded report with nothing saved from it yet is read again, so improvements to the reader apply (an earlier AI reading is kept to compare with)
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
+- **Enter results by hand**: *Import → Enter by hand* uses the same review table for results from a visit without a PDF. Type each test (saved test names are suggested) or paste lines such as `Glucose  105  mg/dL  70-99` copied from a patient portal or spreadsheet. Rows are matched to your saved tests as you type, with the same unit warnings, "already saved" check, live High/Low status and summary as a report, so they never create copies of existing tests. Each card is one visit (one date and one provider), and you choose the panel for any new tests. Entries appear in the import history as *Entered by hand*
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
 ### 📊 **Dashboard and Charts**
@@ -119,7 +120,7 @@ Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/RE
 
 ### First Steps
 1. **Enter your name**: On first launch a welcome screen asks who the results are for (you can skip it and rename the patient later)
-2. **Import a PDF**: Go to *PDF Import* and upload a lab report
+2. **Import a PDF**: Go to *Import* and upload a lab report (or use *Enter by hand* for results without a PDF)
 3. **Review and import**: Check the results against the PDF, fix anything that's off, confirm the collection date and provider (often filled in for you), and import
 4. **Explore**: Open the dashboard, a test's page or *Charts* to see trends
 5. **Record vitals**: Use *Record vitals* on the dashboard
@@ -157,7 +158,7 @@ MyLabVault/
 │   │   └── services/
 │   │       ├── pdf_parser.py     # Built-in PDF parser
 │   │       ├── summary_parser.py # Results tables with several collection dates (health summaries)
-│   │       ├── import_review.py  # Review rows, test matching, reader comparison
+│   │       ├── import_review.py  # Review rows, test matching, reader comparison, pasted rows
 │   │       ├── cleanup.py        # Duplicate suggestions and merging
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
@@ -258,7 +259,9 @@ POST /api/pdf/{id}/switch-reading  # Switch a pending import between the built-i
 GET  /api/pdf/review/{id}      # Review data for an earlier upload (rows, matches, issues)
 GET  /api/pdf/{id}/file        # The uploaded PDF
 POST /api/pdf/confirm          # Import selected rows (with optional edits and test choices)
-POST /api/pdf/batch-confirm    # Import several reports at once
+POST /api/pdf/batch-confirm    # Import several reports (and results entered by hand) at once
+POST /api/pdf/manual/review    # Check rows typed by hand against saved tests (nothing is saved)
+POST /api/pdf/manual/paste     # Rows from pasted text, one result per line, checked the same way
 GET  /api/pdf/history          # Import history
 GET  /api/labs/                # Lab test definitions
 GET  /api/vitals/              # Vitals (filter with patient_id, vital_type)

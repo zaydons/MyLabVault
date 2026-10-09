@@ -1,13 +1,17 @@
 /**
- * PDF import: upload reports one at a time, review what was read next to the PDF, correct it,
- * and import. Used by templates/pdf-import.html.
+ * Import: upload reports one at a time, review what was read next to the PDF, correct it,
+ * and import; or enter results by hand on the same review table. Used by templates/pdf-import.html.
  *
  * Each report gets a review card. Rows are identified by their position in the parsed report
  * (`index`), which is what the server expects in selected_tests and edits.
+ *
+ * A card of results entered by hand (preview.manual) is one visit: one date and one provider. Its
+ * rows live in the page until they're imported; the server checks each row as it's typed (matching
+ * saved tests, units, results already saved) and saves them through the same batch import.
  */
 (function () {
     const OUT = ['high', 'low', 'abnormal'];
-    const state = { cards: new Map(), labs: [], labsById: new Map(), providers: [], aiEnabled: false, nextKey: 1 };
+    const state = { cards: new Map(), labs: [], labsById: new Map(), providers: [], panels: [], aiEnabled: false, nextKey: 1 };
 
     // ---------- helpers ----------
     const $id = id => document.getElementById(id);
@@ -74,11 +78,17 @@
 
     // ---------- reference data ----------
     async function loadReferenceData() {
-        const [labs, providers, ai] = await Promise.all([
+        const [labs, providers, ai, panels] = await Promise.all([
             fetch('/api/labs/?limit=1000').then(r => r.ok ? r.json() : []).catch(() => []),
             fetch('/api/providers/?limit=1000').then(r => r.ok ? r.json() : []).catch(() => []),
             fetch('/api/pdf/ai-status').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+            fetch('/api/panels/?limit=1000').then(r => r.ok ? r.json() : []).catch(() => []),
         ]);
+        state.panels = panels.map(p => p.name).sort((a, b) => a.localeCompare(b));
+        // Saved test names, suggested while typing a test name by hand
+        const list = $id('labNameList');
+        if (list) list.innerHTML = [...new Set(labs.map(l => l.name))].sort((a, b) => a.localeCompare(b))
+            .map(name => `<option value="${esc(name)}"></option>`).join('');
         state.labs = labs.slice().sort((a, b) => (a.panel_name || '').localeCompare(b.panel_name || '') || a.name.localeCompare(b.name));
         state.labsById = new Map(state.labs.map(l => [l.id, l]));
         state.providers = providers.slice().sort((a, b) => a.name.localeCompare(b.name));
@@ -210,16 +220,23 @@
             `<option value="${p.id}"${String(selected) === String(p.id) ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
     }
 
-    function renderRow(key, row, change) {
+    function issueText(row) {
+        if (!row.issues.length) return '';
+        return `<i class="mdi mdi-alert-outline" aria-hidden="true"></i> ${row.issues.map(esc).join(' ')}${row.unit_mismatch ? ' It will be saved as a new test unless you pick the existing one.' : ''}`;
+    }
+
+    function renderRow(key, row, change, manual) {
         const id = `r-${key}-${row.index}`;
         const marker = change === 'different' ? 'Read differently by the other reader'
             : change === 'only_ai' ? 'Only the AI found this' : change === 'only_standard' ? 'Only the built-in reader found this' : '';
         const done = row.already_imported;
         const choice = row.unit_mismatch || !row.matched_lab_id ? 'new' : row.matched_lab_id;
-        const checked = row.readable && !done && !row.already_saved;
-        const issues = row.issues.length ? `<div class="row-issue small mt-1" id="${id}-issues"><i class="mdi mdi-alert-outline" aria-hidden="true"></i> ${row.issues.map(esc).join(' ')}${row.unit_mismatch ? ' It will be saved as a new test unless you pick the existing one.' : ''}</div>` : '';
+        const checked = manual ? !row.already_saved : row.readable && !done && !row.already_saved;
+        // Rows typed by hand keep an (empty) issues line, filled in as the server checks the row
+        const issues = row.issues.length || manual ? `<div class="row-issue small mt-1" id="${id}-issues" ${row.issues.length ? '' : 'hidden'}>${issueText(row)}</div>` : '';
+        const label = row.name || `row ${row.index + 1}`;
         return `
-            <tr data-index="${row.index}" ${row.date_collected ? `data-date="${esc(row.date_collected)}"` : ''} class="${done ? 'row-done' : ''}${row.readable ? '' : ' row-unreadable'}">
+            <tr data-index="${row.index}" ${row.date_collected ? `data-date="${esc(row.date_collected)}"` : ''} class="${done ? 'row-done' : ''}${row.readable || manual ? '' : ' row-unreadable'}">
                 <td class="text-center">
                     <div class="custom-control custom-checkbox">
                         <input type="checkbox" class="custom-control-input row-check" id="${id}-check" ${checked ? 'checked' : ''} ${done ? 'disabled' : ''}
@@ -229,7 +246,8 @@
                 </td>
                 <td data-label="Test">
                     <input type="text" class="form-control form-control-sm row-name" id="${id}-name" value="${esc(row.name)}" maxlength="255"
-                           aria-label="Test name" ${done ? 'disabled' : ''} ${row.issues.length ? `aria-describedby="${id}-issues"` : ''}>
+                           aria-label="Test name" ${done ? 'disabled' : ''} ${row.issues.length || manual ? `aria-describedby="${id}-issues"` : ''}
+                           ${manual ? 'list="labNameList" autocomplete="off" placeholder="e.g. Glucose"' : ''}>
                     <label class="sr-only" for="${id}-lab">Save as</label>
                     <select class="custom-select custom-select-sm mt-1 row-lab" id="${id}-lab" ${done ? 'disabled' : ''}>${labOptions(choice, row)}</select>
                     ${marker ? `<span class="badge badge-status-info mt-1"><i class="mdi mdi-compare-horizontal" aria-hidden="true"></i> ${marker}</span>` : ''}
@@ -238,13 +256,15 @@
                 </td>
                 <td data-label="Result">
                     <input type="text" class="form-control form-control-sm row-result" id="${id}-result" value="${esc(row.result)}" maxlength="255"
-                           aria-label="Result" inputmode="decimal" ${done ? 'disabled' : ''}>
+                           aria-label="Result" ${done ? 'disabled' : ''} ${manual ? 'placeholder="e.g. 98 or Negative"' : ''}>
                     ${row.flag ? `<span class="badge badge-status-abnormal mt-1" title="Flag printed by the lab">Lab flag: ${esc(row.flag)}</span>` : ''}
                     ${row.lab_comment ? `<div class="small text-muted mt-1"><i class="mdi mdi-comment-text-outline" aria-hidden="true"></i> ${esc(row.lab_comment)}</div>` : ''}
                 </td>
-                <td data-label="Unit"><input type="text" class="form-control form-control-sm row-unit" id="${id}-unit" value="${esc(row.unit)}" maxlength="50" aria-label="Unit" ${done ? 'disabled' : ''}></td>
+                <td data-label="Unit"><input type="text" class="form-control form-control-sm row-unit" id="${id}-unit" value="${esc(row.unit)}" maxlength="50" aria-label="Unit" ${done ? 'disabled' : ''} ${manual ? 'placeholder="e.g. mg/dL"' : ''}></td>
                 <td data-label="Range"><input type="text" class="form-control form-control-sm row-range" id="${id}-range" value="${esc(row.reference_range.text || '')}" maxlength="100" aria-label="Reference range" placeholder="e.g. 70-99" ${done ? 'disabled' : ''}></td>
-                <td data-label="Status" class="row-status" aria-live="polite">${statusBadge(row.status)}</td>
+                <td data-label="Status" class="text-nowrap"><span class="row-status" aria-live="polite">${statusBadge(row.status)}</span>${manual ? `
+                    <button type="button" class="btn btn-link btn-sm text-reset p-0 ml-2 remove-row" aria-label="Remove ${esc(label)}" title="Remove row">
+                        <i class="mdi mdi-close" aria-hidden="true"></i></button>` : ''}</td>
             </tr>`;
     }
 
@@ -337,6 +357,7 @@
     }
 
     function renderCard(key, p) {
+        if (p.manual) return renderManualCard(key, p);
         const rows = p.tests || [];
         const readable = rows.filter(r => r.readable && !r.already_imported);
         const unreadable = rows.filter(r => !r.readable && !r.already_imported);
@@ -428,6 +449,232 @@
         </section>`;
     }
 
+    // ---------- results entered by hand ----------
+    const blankRow = index => ({
+        index, name: '', result: '', unit: '', reference_range: { text: '' }, issues: [], readable: false,
+        matched_lab_id: null, matched_lab_name: null, matched_lab_unit: null, unit_mismatch: false,
+        status: 'unknown', already_imported: false, already_saved: false, date_collected: null,
+    });
+    const isBlank = tr => !['.row-name', '.row-result', '.row-unit', '.row-range'].some(sel => tr.querySelector(sel).value.trim());
+
+    function panelOptions(selected) {
+        const names = state.panels.includes('Imported Tests') ? state.panels : ['Imported Tests', ...state.panels];
+        return names.map(name => `<option value="${esc(name)}"${name === selected ? ' selected' : ''}>${esc(name)}</option>`).join('');
+    }
+
+    function renderManualCard(key, p) {
+        const visits = [...state.cards.values()].filter(c => c.preview.manual).length;
+        return `
+        <section class="card review-card manual-card mb-4" id="card-${key}" data-key="${key}" aria-labelledby="card-${key}-title">
+            <div class="card-header d-flex flex-wrap align-items-center">
+                <h3 class="card-title h6 mb-0 mr-auto" id="card-${key}-title">
+                    <i class="mdi mdi-pencil-outline mr-1" aria-hidden="true"></i>${esc(p.filename)}${visits > 1 ? ` (visit ${visits})` : ''}
+                </h3>
+                <div class="card-tools d-flex flex-wrap">
+                    <button type="button" class="btn btn-outline-secondary btn-sm mb-1 remove-card" aria-label="Remove these results entered by hand">
+                        <i class="mdi mdi-close" aria-hidden="true"></i> Remove</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="review-counts mb-3"></p>
+                <div class="form-row">
+                    <div class="form-group col-sm-6 col-lg-4">
+                        <label for="date-${key}">Collection date <span class="text-danger" aria-hidden="true">*</span></label>
+                        <input type="date" class="form-control" id="date-${key}" value="${esc(p.date_collected || '')}" max="${today()}" required>
+                    </div>
+                    <div class="form-group col-sm-6 col-lg-4">
+                        <label for="provider-${key}">Provider <span class="text-danger" aria-hidden="true">*</span></label>
+                        <div class="input-group">
+                            <select class="custom-select" id="provider-${key}" required>${providerOptions('')}</select>
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-outline-secondary" data-new-provider="${key}" aria-label="Add a new provider"><i class="mdi mdi-plus" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group col-sm-6 col-lg-4">
+                        <label for="panel-${key}">Panel for new tests</label>
+                        <select class="custom-select" id="panel-${key}" aria-describedby="panel-${key}-help">${panelOptions(p.panel_name || 'Imported Tests')}</select>
+                        <small class="form-text text-muted" id="panel-${key}-help">Used only for results saved as a new test.</small>
+                    </div>
+                </div>
+                <div class="table-responsive-md">
+                    <table class="table table-sm review-table mb-2">
+                        <caption class="sr-only">Results entered by hand. Each row is checked against your saved tests as you type.</caption>
+                        <thead><tr>
+                            <th scope="col" class="text-center" style="width: 2.5rem;">
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input check-all" id="check-all-${key}" aria-label="Select all rows">
+                                    <label class="custom-control-label" for="check-all-${key}"></label>
+                                </div>
+                            </th>
+                            <th scope="col">Test</th><th scope="col">Result</th><th scope="col">Unit</th><th scope="col">Range</th><th scope="col">Status</th>
+                        </tr></thead>
+                        <tbody>${p.tests.map(r => renderRow(key, r, null, true)).join('')}</tbody>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap">
+                    <button type="button" class="btn btn-outline-primary btn-sm mr-2 mb-2 add-row"><i class="mdi mdi-plus mr-1" aria-hidden="true"></i>Add row</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mb-2 paste-toggle" aria-expanded="false" aria-controls="paste-${key}">
+                        <i class="mdi mdi-content-paste mr-1" aria-hidden="true"></i>Paste rows…</button>
+                </div>
+                <div class="paste-box mt-2" id="paste-${key}" hidden>
+                    <label for="paste-text-${key}">Paste results, one per line</label>
+                    <textarea class="form-control paste-text" id="paste-text-${key}" rows="6" maxlength="50000" aria-describedby="paste-help-${key}"
+                              placeholder="Glucose  105  mg/dL  70-99&#10;Hemoglobin A1c  5.4  %  4.8-5.6&#10;HIV Screen  Negative"></textarea>
+                    <small class="form-text text-muted" id="paste-help-${key}">Each line is a test name, result, unit and range. Columns copied from a patient portal or spreadsheet work too. You can check and change the rows before importing.</small>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-primary btn-sm paste-add">Add rows</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm ml-1 paste-cancel">Cancel</button>
+                    </div>
+                </div>
+                <div class="sr-only manual-status" role="status"></div>
+            </div>
+        </section>`;
+    }
+
+    function addManualCard() {
+        const key = state.nextKey++;
+        $id('importSummary').hidden = true;
+        addCard({ manual: true, filename: 'Entered by hand', date_collected: today(), tests: [blankRow(0)] }, key);
+        state.cards.get(key).nextIndex = 1;
+        updateManualCounts($id(`card-${key}`));
+        $id(`r-${key}-0-name`).focus();
+        return key;
+    }
+
+    function updateManualCounts(section) {
+        const rows = Array.from(section.querySelectorAll('tbody tr')).filter(tr => !isBlank(tr));
+        const statuses = rows.map(tr => tr.querySelector('.row-status').textContent.trim().toLowerCase());
+        const out = statuses.filter(t => /high|low|abnormal/.test(t)).length;
+        const saved = rows.filter(tr => tr.dataset.saved === '1').length;
+        section.querySelector('.review-counts').innerHTML = rows.length
+            ? `${plural(rows.length, 'result')} entered${out ? ` · <strong>${out} out of range</strong>` : ''}${saved ? ` · ${saved} already saved` : ''}`
+            : 'Type each result from the visit, or paste them. Each row is matched to your saved tests as you type.';
+    }
+
+    function appendRows(card, rows) {
+        const section = $id(`card-${card.key}`);
+        const tbody = section.querySelector('tbody');
+        // A single empty row is replaced by the rows added
+        const only = tbody.querySelectorAll('tr');
+        if (only.length === 1 && isBlank(only[0])) removeRow(only[0], true);
+        const added = rows.map(r => {
+            const row = { ...blankRow(0), ...r, index: card.nextIndex++ };
+            card.preview.tests.push(row);
+            tbody.insertAdjacentHTML('beforeend', renderRow(card.key, row, null, true));
+            const tr = tbody.lastElementChild;
+            if (row.already_saved) tr.dataset.saved = '1';
+            return tr;
+        });
+        updateManualCounts(section);
+        updateCounts();
+        return added;
+    }
+
+    function removeRow(tr, quiet) {
+        const card = cardOf(tr);
+        const section = tr.closest('.review-card');
+        const index = parseInt(tr.dataset.index, 10);
+        card.preview.tests = card.preview.tests.filter(r => r.index !== index);
+        const next = tr.nextElementSibling || tr.previousElementSibling;
+        tr.remove();
+        if (quiet) return;
+        if (!section.querySelector('tbody tr')) appendRows(card, [{}]);
+        updateManualCounts(section);
+        updateCounts();
+        const focus = next && next.isConnected ? next : section.querySelector('tbody tr');
+        if (focus) focus.querySelector('.row-name').focus();
+    }
+
+    // The server matches typed rows to saved tests (same rules as an upload); the page asks again
+    // shortly after typing stops, for just the rows that changed
+    function queueCheck(tr) {
+        const card = cardOf(tr);
+        card.dirty = card.dirty || new Set();
+        card.dirty.add(tr);
+        clearTimeout(card.checkTimer);
+        card.checkTimer = setTimeout(() => checkRows(card), 400);
+    }
+
+    async function checkRows(card) {
+        const section = $id(`card-${card.key}`);
+        const trs = [...(card.dirty || [])].filter(tr => tr.isConnected && !isBlank(tr));
+        card.dirty = new Set();
+        if (!section || !trs.length) return;
+        const values = trs.map(tr => ({
+            name: tr.querySelector('.row-name').value.trim(), result: tr.querySelector('.row-result').value.trim(),
+            unit: tr.querySelector('.row-unit').value.trim(), reference_range: tr.querySelector('.row-range').value.trim(),
+        }));
+        let data;
+        try {
+            const response = await fetch('/api/pdf/manual/review', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tests: values, date_collected: $id(`date-${card.key}`).value || null }),
+            });
+            if (!response.ok) return;
+            data = await response.json();
+        } catch (e) { return; }
+        data.tests.forEach((checked, i) => applyCheck(card, trs[i], values[i], checked));
+        updateManualCounts(section);
+        updateCounts();
+    }
+
+    function applyCheck(card, tr, typed, checked) {
+        // Ignore an answer for values that have changed since (a newer check is on its way)
+        if (!tr.isConnected || tr.querySelector('.row-name').value.trim() !== typed.name
+            || tr.querySelector('.row-unit').value.trim() !== typed.unit) return;
+        const index = parseInt(tr.dataset.index, 10);
+        const row = { ...checked, index };
+        card.preview.tests = card.preview.tests.map(r => r.index === index ? row : r);
+        const select = tr.querySelector('.row-lab');
+        if (!tr.dataset.labTouched) select.innerHTML = labOptions(row.unit_mismatch || !row.matched_lab_id ? 'new' : row.matched_lab_id, row);
+        const issues = tr.querySelector('.row-issue');
+        issues.innerHTML = issueText(row);
+        issues.hidden = !row.issues.length;
+        tr.dataset.saved = row.already_saved ? '1' : '';
+        // An exact copy of a saved result is left out unless it's ticked again
+        if (!tr.dataset.checkTouched) tr.querySelector('.row-check').checked = !row.already_saved;
+        updateRowStatus(tr);
+    }
+
+    async function pasteRows(section) {
+        const card = cardOf(section);
+        const text = section.querySelector('.paste-text');
+        const button = section.querySelector('.paste-add');
+        if (!text.value.trim()) { text.focus(); return; }
+        button.disabled = true;
+        try {
+            const response = await fetch('/api/pdf/manual/paste', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text.value, date_collected: $id(`date-${card.key}`).value || null }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The pasted text couldn\'t be read.');
+            if (!data.tests.length) {
+                section.querySelector('.manual-status').textContent = 'No results were found in the pasted text.';
+                message('No results were found in the pasted text. Put one result per line: test name, result, unit and range.', 'warning');
+                return;
+            }
+            const added = appendRows(card, data.tests);
+            text.value = '';
+            togglePaste(section, false);
+            section.querySelector('.manual-status').textContent = `${plural(added.length, 'row')} added. Check them before importing.`;
+            added[0].querySelector('.row-name').focus();
+        } catch (error) {
+            message(esc(error.message));
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    function togglePaste(section, show) {
+        const box = section.querySelector('.paste-box');
+        const toggle = section.querySelector('.paste-toggle');
+        box.hidden = show === undefined ? !box.hidden : !show;
+        toggle.setAttribute('aria-expanded', String(!box.hidden));
+        if (!box.hidden) box.querySelector('textarea').focus();
+    }
+
     function cardOf(el) {
         const section = el.closest('.review-card');
         return section ? state.cards.get(parseInt(section.dataset.key, 10)) : null;
@@ -435,7 +682,7 @@
 
     function updateRowStatus(tr) {
         const card = cardOf(tr);
-        const row = card.preview.tests.find(r => r.index === parseInt(tr.dataset.index, 10));
+        const row = card.preview.tests.find(r => r.index === parseInt(tr.dataset.index, 10)) || {};
         const lab = tr.querySelector('.row-lab').value;
         const status = computeStatus(tr.querySelector('.row-result').value, tr.querySelector('.row-range').value,
             lab === 'new' ? null : parseInt(lab, 10), row.flag);
@@ -532,6 +779,11 @@
         for (const card of state.cards.values()) {
             const section = $id(`card-${card.key}`);
             const p = card.preview;
+            if (p.manual) {
+                const confirmation = collectManual(card, section, errors);
+                if (confirmation) confirmations.push(confirmation);
+                continue;
+            }
             const selected = Array.from(section.querySelectorAll('tbody tr')).filter(tr => tr.querySelector('.row-check:checked:not(:disabled)'));
             if (!selected.length) continue;
 
@@ -587,13 +839,47 @@
         return { errors, confirmations };
     }
 
+    // Rows entered by hand are sent as typed (empty rows are skipped); the server saves them as an import
+    function collectManual(card, section, errors) {
+        const selected = Array.from(section.querySelectorAll('tbody tr'))
+            .filter(tr => tr.querySelector('.row-check:checked') && !isBlank(tr));
+        if (!selected.length) return null;
+        const where = esc(section.querySelector('.card-title').textContent.trim());
+        const dateEl = $id(`date-${card.key}`);
+        if (!dateEl.value) markInvalid(dateEl, `${where}: enter the collection date`, errors);
+        else if (dateEl.value > today()) markInvalid(dateEl, `${where}: the collection date is in the future`, errors);
+        const providerEl = $id(`provider-${card.key}`);
+        if (!providerEl.value) markInvalid(providerEl, `${where}: choose the provider`, errors);
+        const tests = [], edits = {};
+        selected.forEach((tr, i) => {
+            const name = tr.querySelector('.row-name');
+            const result = tr.querySelector('.row-result');
+            const label = esc(name.value.trim() || `row ${i + 1}`);
+            if (!name.value.trim()) markInvalid(name, `${where}, ${label}: enter the test name`, errors);
+            if (!result.value.trim()) markInvalid(result, `${where}, ${label}: enter the result`, errors);
+            tests.push({ name: name.value.trim(), result: result.value.trim(), unit: tr.querySelector('.row-unit').value.trim(),
+                         reference_range: tr.querySelector('.row-range').value.trim() });
+            const lab = tr.querySelector('.row-lab').value;
+            edits[String(i)] = lab === 'new' ? { new_lab: true } : { lab_id: parseInt(lab, 10) };
+        });
+        return {
+            key: card.key,
+            manual: { tests, panel_name: $id(`panel-${card.key}`).value },
+            selected_tests: tests.map((t, i) => i),
+            provider_id: parseInt(providerEl.value, 10) || null,
+            patient_id: parseInt(getCookie('selectedPatientId') || '1', 10) || 1,
+            manual_date: dateEl.value || null,
+            edits,
+        };
+    }
+
     async function importSelected() {
         const { errors, confirmations } = collect();
         if (errors.length) {
             message(`<strong>Fix ${plural(errors.length, 'thing')} before importing:</strong><ul class="mb-0 mt-1">${errors.join('')}</ul>`);
             return;
         }
-        if (!confirmations.length) return message('Tick at least one result to import.');
+        if (!confirmations.length) return message('Enter or tick at least one result to import.');
 
         const button = $id('importButton');
         button.disabled = true;
@@ -618,7 +904,8 @@
         // Imported files leave the review; failed ones stay so they can be fixed
         result.files.forEach(f => {
             for (const card of state.cards.values()) {
-                if (String(card.preview.import_id) === String(f.import_id)) { $id(`card-${card.key}`).remove(); state.cards.delete(card.key); }
+                const same = card.preview.manual ? f.key === card.key : String(card.preview.import_id) === String(f.import_id);
+                if (same) { $id(`card-${card.key}`).remove(); state.cards.delete(card.key); }
             }
         });
         if (result.failed_files.length) {
@@ -693,6 +980,7 @@
     }
 
     function reset() {
+        state.cards.forEach(card => clearTimeout(card.checkTimer));
         state.cards.clear();
         $id('reviewFiles').innerHTML = '';
         $id('uploadList').innerHTML = '';
@@ -719,7 +1007,11 @@
             if (t.classList.contains('check-all')) {
                 t.closest('.review-card').querySelectorAll('.row-check:not(:disabled)').forEach(b => { b.checked = t.checked; });
             }
-            if (t.classList.contains('row-lab')) updateRowStatus(t.closest('tr'));
+            if (t.classList.contains('row-lab')) { t.closest('tr').dataset.labTouched = '1'; updateRowStatus(t.closest('tr')); }
+            if (t.classList.contains('row-check')) t.closest('tr').dataset.checkTouched = '1';
+            // A new date can make a result "already saved" (or not); check the visit's rows again
+            const manualCard = t.closest('.manual-card');
+            if (manualCard && t.id === `date-${manualCard.dataset.key}`) manualCard.querySelectorAll('tbody tr').forEach(queueCheck);
             if (t.matches('input[type="date"], select[id^="provider-"]') && t.value) {
                 t.classList.remove('is-invalid'); t.removeAttribute('aria-invalid');
             }
@@ -728,6 +1020,11 @@
         files.addEventListener('input', e => {
             const tr = e.target.closest('tr[data-index]');
             if (tr && e.target.matches('.row-result, .row-range')) updateRowStatus(tr);
+            if (tr && e.target.closest('.manual-card')) {
+                if (e.target.matches('.row-name, .row-unit, .row-result')) queueCheck(tr);
+                updateManualCounts(e.target.closest('.manual-card'));
+                updateCounts();
+            }
             if (e.target.classList.contains('is-invalid') && e.target.value.trim()) {
                 e.target.classList.remove('is-invalid'); e.target.removeAttribute('aria-invalid');
             }
@@ -746,10 +1043,21 @@
             if (e.target.closest('.rescan-ai')) rescan(section);
             if (e.target.closest('.switch-reading')) switchReading(section);
             if (e.target.closest('.remove-card')) {
+                const card = state.cards.get(parseInt(section.dataset.key, 10));
+                if (card) clearTimeout(card.checkTimer);
                 state.cards.delete(parseInt(section.dataset.key, 10));
                 section.remove();
                 updateCounts();
             }
+            const removeBtn = e.target.closest('.remove-row');
+            if (removeBtn) removeRow(removeBtn.closest('tr'));
+            if (e.target.closest('.add-row')) {
+                const [tr] = appendRows(cardOf(section), [{}]);
+                tr.querySelector('.row-name').focus();
+            }
+            if (e.target.closest('.paste-toggle')) togglePaste(section);
+            if (e.target.closest('.paste-cancel')) { togglePaste(section, false); section.querySelector('.paste-toggle').focus(); }
+            if (e.target.closest('.paste-add')) pasteRows(section);
             const add = e.target.closest('[data-new-provider]');
             if (add) { e.preventDefault(); openNewProvider(parseInt(add.dataset.newProvider, 10), add.dataset.reportName === '1'); }
         });
@@ -767,12 +1075,50 @@
         });
         $id('importButton').addEventListener('click', importSelected);
         $id('cancelReview').addEventListener('click', reset);
-        $id('importMore').addEventListener('click', () => { $id('importSummary').hidden = true; reset(); $id('fileInput').click(); });
+        $id('importMore').addEventListener('click', () => {
+            $id('importSummary').hidden = true; reset();
+            if (activeTab() === 'manual') addManualCard(); else $id('fileInput').click();
+        });
+        setUpTabs();
         $id('newProviderForm').addEventListener('submit', createProvider);
 
         // /import?review=<id> reopens an earlier upload (linked from history)
         const reviewId = new URLSearchParams(window.location.search).get('review');
         if (reviewId) openReview(reviewId);
+        // /import?manual=1 (and the old /bulk-import address) opens the Enter by hand tab
+        if (new URLSearchParams(window.location.search).get('manual')) selectTab('manual');
+    }
+
+    // ---------- Upload PDFs / Enter by hand tabs ----------
+    const TABS = ['upload', 'manual'];
+    const activeTab = () => TABS.find(t => $id(`tab-${t}`).getAttribute('aria-selected') === 'true');
+
+    function selectTab(name, focus) {
+        TABS.forEach(t => {
+            const tab = $id(`tab-${t}`);
+            tab.setAttribute('aria-selected', String(t === name));
+            tab.tabIndex = t === name ? 0 : -1;
+            tab.classList.toggle('active', t === name);
+            $id(`panel-${t}`).hidden = t !== name;
+        });
+        if (focus) $id(`tab-${name}`).focus();
+        // The first visit to Enter by hand starts a card to type into
+        if (name === 'manual' && ![...state.cards.values()].some(c => c.preview.manual)) addManualCard();
+    }
+
+    function setUpTabs() {
+        TABS.forEach((t, i) => {
+            const tab = $id(`tab-${t}`);
+            tab.addEventListener('click', () => selectTab(t));
+            tab.addEventListener('keydown', e => {
+                const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+                if (step) { e.preventDefault(); selectTab(TABS[(i + step + TABS.length) % TABS.length], true); }
+            });
+        });
+        $id('addManualCard').addEventListener('click', () => {
+            const key = addManualCard();
+            $id(`card-${key}`).scrollIntoView({ block: 'start' });
+        });
     }
 
     window.PdfReview = { init, openReview };

@@ -185,8 +185,11 @@ def _already_saved(lab: Lab, day: Optional[str], value: Optional[float], text: s
 
 
 def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optional[set] = None,
-                report_date: Optional[str] = None) -> List[Dict[str, Any]]:
-    """One row per parsed test (in parsed order, `index` is its position) with match, status and issues."""
+                report_date: Optional[str] = None, typed: bool = False) -> List[Dict[str, Any]]:
+    """One row per parsed test (in parsed order, `index` is its position) with match, status and issues.
+
+    typed: the rows were entered by hand, so empty fields aren't "unreadable" and messages say "you".
+    """
     imported = imported or set()
     report_day = (report_date or "")[:10] or None
     rows = []
@@ -205,12 +208,13 @@ def review_rows(parsed_tests: List[Dict[str, Any]], db: Session, imported: Optio
         unit_mismatch = lab is not None and not units_match(unit, lab_unit)
 
         issues = []
-        if not name:
+        if not name and not typed:
             issues.append("The test name couldn't be read.")
-        if result_display in (None, ""):
+        if result_display in (None, "") and not typed:
             issues.append("The result couldn't be read.")
         if unit_mismatch:
-            issues.append(f"The report uses {unit}, but {lab.name} is saved in {lab_unit}.")
+            source = "You entered" if typed else "The report uses"
+            issues.append(f"{source} {unit or 'no unit'}, but {lab.name} is saved in {lab_unit or 'no unit'}.")
         own_date = row_date(test)
         saved = index not in imported and readable and _already_saved(
             lab, own_date or report_day, value, str(result_display or "").strip(), db)
@@ -368,3 +372,85 @@ def compare_parses(active: Dict[str, Any], other: Dict[str, Any], db: Session) -
         "fields": fields,
         "rows": rows,
     }
+
+
+# ---------- results entered by hand ----------
+
+def manual_test(row: Dict[str, Any], panel_name: Optional[str] = None) -> Dict[str, Any]:
+    """A row typed on the manual entry card, in the same shape as a parsed report row."""
+    test = apply_edit({}, {"name": row.get("name") or "", "result": row.get("result") or "",
+                           "unit": row.get("unit") or "", "reference_range": row.get("reference_range") or ""})
+    if not test.get("result"):
+        test.update(result="", numeric_value=None, result_text=None, is_numeric=False, is_qualitative=False)
+    if panel_name:
+        test["panel_name"] = panel_name
+    return test
+
+
+_RESULT_TOKEN = re.compile(rf"[<>]?=?{_NUMBER}")
+_FLAGS = {"h", "l", "hi", "lo", "high", "low", "a", "abn", "abnormal", "hh", "ll", "*"}
+_QUALITATIVE = ["not detected", "non-reactive", "nonreactive", "non reactive", "negative", "positive",
+                "reactive", "detected", "normal", "abnormal", "none seen", "trace", "clear"]
+_RANGE_START = re.compile(rf"([<>]=?|≤|≥)?\s*{_NUMBER}")
+MAX_PASTED_ROWS = 200
+
+
+def _split_fields(line: str) -> List[str]:
+    """Columns copied from a spreadsheet or portal: tabs, or runs of two or more spaces."""
+    if "\t" in line:
+        return [f.strip() for f in line.split("\t") if f.strip()]
+    return [f.strip() for f in re.split(r"\s{2,}", line) if f.strip()]
+
+
+def _row_from_fields(fields: List[str]) -> Dict[str, str]:
+    name, result, rest = fields[0], fields[1], fields[2:]
+    if rest and rest[0].lower() in _FLAGS:
+        rest = rest[1:]  # a High/Low column; the status is worked out from the range instead
+    unit = range_text = ""
+    if rest and not _RANGE_START.match(rest[0]):
+        unit, rest = rest[0], rest[1:]
+    if rest:
+        range_text = rest[0]
+    return {"name": name, "result": result, "unit": unit, "reference_range": range_text}
+
+
+def _row_from_words(line: str) -> Dict[str, str]:
+    """A line separated by single spaces: the name runs up to the first number, e.g. "Vitamin B12 450 pg/mL 232-1245"."""
+    words = line.split()
+    for i, word in enumerate(words[1:], start=1):
+        if _RESULT_TOKEN.fullmatch(word):
+            rest = words[i + 1:]
+            if rest and rest[0].lower() in _FLAGS:
+                rest = rest[1:]
+            unit = ""
+            if rest and not _RANGE_START.match(rest[0]):
+                unit, rest = rest[0], rest[1:]
+            return {"name": " ".join(words[:i]), "result": word, "unit": unit, "reference_range": " ".join(rest)}
+    lowered = line.lower()
+    for word in _QUALITATIVE:
+        if lowered.endswith(" " + word):
+            return {"name": line[:-len(word)].strip(), "result": line[-len(word):], "unit": "", "reference_range": ""}
+    return {"name": line.strip(), "result": "", "unit": "", "reference_range": ""}
+
+
+def parse_pasted(text: str) -> List[Dict[str, str]]:
+    """Rows from pasted text, one result per line: name, result, unit and range, e.g.
+
+        Glucose  105  mg/dL  70-99        (columns separated by tabs or two or more spaces)
+        Hemoglobin A1c 5.4 % 4.8-5.6      (single spaces: the name runs up to the first number)
+        HIV Screen Negative               (results in words)
+
+    Blank lines and lines without letters (dividers, page numbers) are skipped.
+    """
+    rows = []
+    for raw in (text or "").splitlines():
+        line = re.sub(r"^\s*(?:[-•*·]|\d+[.)])\s+", "", raw).strip()  # list bullets and numbering
+        if not re.search(r"[A-Za-z]", line) or re.fullmatch(r"page\s+\d+(\s+of\s+\d+)?", line, re.I):
+            continue
+        fields = _split_fields(line)
+        row = _row_from_fields(fields) if len(fields) >= 2 else _row_from_words(line)
+        if row["name"]:
+            rows.append({k: v[:255] for k, v in row.items()})
+        if len(rows) >= MAX_PASTED_ROWS:
+            break
+    return rows
