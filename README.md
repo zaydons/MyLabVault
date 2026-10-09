@@ -137,7 +137,7 @@ Database changes are applied automatically on startup. For TrueNAS, see [Updatin
 ## 🏗️ Architecture
 
 ### Technology Stack
-- **Backend**: Python 3.13, FastAPI, SQLAlchemy
+- **Backend**: Python 3.14, FastAPI, SQLAlchemy
 - **Frontend**: Server-rendered Jinja2 templates with AdminLTE 3.2 (Bootstrap 4), DataTables, Chart.js and Material Design Icons, all served locally from `app/static/vendor`
 - **Database**: SQLite with Alembic migrations
 - **PDF processing**: pdfplumber and pypdf, plus optional Claude through Amazon Bedrock

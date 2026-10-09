@@ -1,4 +1,4 @@
-FROM python:3.13-alpine3.24
+FROM python:3.14-alpine3.24
 
 # Install minimal runtime dependencies
 RUN apk add --no-cache \
