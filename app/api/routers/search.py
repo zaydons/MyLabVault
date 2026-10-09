@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import Lab as LabModel, LabResult as LabResultModel, Medication as MedicationModel
+from ..models import Immunization as ImmunizationModel, Lab as LabModel, LabResult as LabResultModel, Medication as MedicationModel
 from .pages import get_selected_patient_id
 
 router = APIRouter()
@@ -18,6 +18,7 @@ PAGES = [
     ("Charts", "/charts", "charts trends graphs"),
     ("Vitals", "/vitals", "vitals weight blood pressure heart rate"),
     ("Medications", "/medications", "medications medicines drugs prescriptions supplements vitamins"),
+    ("Vaccines", "/vaccines", "vaccines vaccinations immunizations shots boosters"),
     ("Import", "/import", "import pdf upload report enter results by hand"),
     ("Lab Tests", "/labs", "lab tests manage"),
     ("Panels", "/panels", "panels"),
@@ -73,6 +74,20 @@ def search(request: Request, q: str = Query("", max_length=100), db: Session = D
         "detail": " · ".join(filter(None, [med.kind.capitalize(), med.dose, "current" if med.is_current() else "stopped"])),
         "url": "/medications",
     } for med in list(latest_dose.values())[:4]]
+
+    # This patient's vaccines, latest dose of each
+    shots = db.query(ImmunizationModel).filter(ImmunizationModel.patient_id == patient_id)
+    for word in words:
+        shots = shots.filter(func.lower(ImmunizationModel.vaccine).contains(word, autoescape=True))
+    latest_shot = {}
+    for shot in shots.order_by(ImmunizationModel.date_given.desc()).all():
+        latest_shot.setdefault(shot.vaccine.lower(), shot)
+    items += [{
+        "type": "vaccine",
+        "label": shot.vaccine,
+        "detail": f"Vaccine · last given {shot.date_given.isoformat()}",
+        "url": "/vaccines",
+    } for shot in list(latest_shot.values())[:4]]
 
     items += [
         {"type": "page", "label": name, "detail": "Page", "url": url}

@@ -18,6 +18,7 @@ from ..models import (
     PDFImportLog as PDFImportLogModel,
     Vital as VitalModel,
     Medication as MedicationModel,
+    Immunization as ImmunizationModel,
 )
 from sqlalchemy import func
 
@@ -182,8 +183,16 @@ def dashboard_page(request: Request, db: Session = Depends(get_db)):
         .order_by(MedicationModel.name).all() if m.is_current()
     ]
 
+    # Vaccines whose next dose is overdue or due soon (latest dose of each vaccine only)
+    latest_shots = {}
+    for shot in (db.query(ImmunizationModel).filter(ImmunizationModel.patient_id == patient_id)
+                 .order_by(ImmunizationModel.date_given.desc(), ImmunizationModel.id.desc()).all()):
+        latest_shots.setdefault(shot.vaccine.strip().lower(), shot)
+    vaccines_due = sorted((s for s in latest_shots.values() if s.due_status() in ("overdue", "due")), key=lambda s: s.next_due)
+
     dashboard_data = {
         "latest_vitals": latest_vitals,
+        "vaccines_due": vaccines_due,
         "current_medications": current_medications,
         "total_results": len(results),
         "tests_tracked": len(latest),
@@ -445,6 +454,11 @@ def vitals_page(request: Request, db: Session = Depends(get_db)):
 def medications_page(request: Request, db: Session = Depends(get_db)):
     """Medications and supplements page."""
     return _render_simple_page("medications.html", request, db)
+
+@router.get("/vaccines")
+def vaccines_page(request: Request, db: Session = Depends(get_db)):
+    """Vaccines (immunizations) page."""
+    return _render_simple_page("vaccines.html", request, db)
 
 @router.get("/patients")
 def patients_page(request: Request, db: Session = Depends(get_db)):

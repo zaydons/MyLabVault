@@ -352,3 +352,35 @@ def test_medications(page):
     page.goto(page.base + "/dashboard", wait_until="networkidle")
     card = page.text_content(".current-medications")
     assert "Testosterone cypionate" in card and "140 mg" in card and "Vitamin D3" not in card
+
+
+def test_vaccines(page):
+    ready(page)
+    page.goto(page.base + "/vaccines", wait_until="networkidle")
+    page.click("#addVaccine")
+    page.wait_for_selector("#vaccineModal.show")
+    page.fill("#vaccineName", "Shingles (zoster)")
+    page.fill("#vaccineDate", "2026-01-10")
+    page.fill("#vaccineDose", "1 of 2")
+    page.fill("#vaccineManufacturer", "Shingrix")
+    page.fill("#vaccineNextDue", "2026-03-10")  # passed: overdue
+    page.select_option("#vaccineProvider", "1")
+    page.click("#vaccineForm button[type=submit]")
+    page.wait_for_selector("#vaccineModal", state="hidden")
+    page.wait_for_selector(".vaccine-item")
+    assert "Overdue" in page.text_content("#dueList")
+
+    # Another dose prefills the vaccine, brand and the date it was due
+    page.click("[aria-label='Add another dose of Shingles (zoster)']")
+    page.wait_for_selector("#vaccineModal.show")
+    assert page.input_value("#vaccineName") == "Shingles (zoster)" and page.input_value("#vaccineManufacturer") == "Shingrix"
+    assert page.input_value("#vaccineDate") == "2026-03-10"
+    page.fill("#vaccineDose", "2 of 2")
+    page.click("#vaccineForm button[type=submit]")
+    page.wait_for_selector("#vaccineModal", state="hidden")
+    page.wait_for_function("() => /2 doses/.test(document.getElementById('recordList').textContent)")
+    assert page.is_hidden("#dueCard")  # the latest dose has no next dose due
+    axe_clean(page, ".content")
+
+    page.goto(page.base + "/dashboard", wait_until="networkidle")
+    assert "Vaccines due" not in page.text_content(".content")

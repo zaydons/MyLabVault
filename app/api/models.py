@@ -55,6 +55,7 @@ class Patient(Base):
     results = relationship("LabResult", back_populates="patient")
     vitals = relationship("Vital", back_populates="patient")
     medications = relationship("Medication", back_populates="patient")
+    immunizations = relationship("Immunization", back_populates="patient")
 
     def get_age(self) -> Optional[int]:
         """Calculate patient age with proper leap year handling."""
@@ -478,6 +479,58 @@ class Medication(Base):
             "provider_name": self.provider.name if self.provider else None,
             "notes": self.notes,
             "current": self.is_current(),
+        }
+
+
+class Immunization(Base):
+    """One dose of a vaccine given to a patient, with the date the next dose is due (if any)."""
+    __tablename__ = "immunizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    vaccine = Column(String(255), nullable=False, index=True)   # e.g. "COVID-19", "Influenza (flu)"
+    date_given = Column(Date, nullable=False, index=True)
+    dose = Column(String(50), nullable=True)            # e.g. "1 of 2", "booster"
+    manufacturer = Column(String(100), nullable=True)   # manufacturer or brand, e.g. "Pfizer", "Shingrix"
+    lot_number = Column(String(50), nullable=True)
+    site = Column(String(50), nullable=True)            # e.g. "left arm"
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)  # given by a saved provider
+    location = Column(String(255), nullable=True)       # or a clinic or pharmacy name
+    next_due = Column(Date, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    patient = relationship("Patient", back_populates="immunizations")
+    provider = relationship("Provider")
+
+    DUE_SOON_DAYS = 30
+
+    def due_status(self, today=None) -> Optional[str]:
+        """'overdue', 'due' (within DUE_SOON_DAYS) or 'scheduled' for the next dose; None when none is due."""
+        if self.next_due is None:
+            return None
+        today = today or datetime.now().date()
+        if self.next_due < today:
+            return "overdue"
+        return "due" if (self.next_due - today).days <= self.DUE_SOON_DAYS else "scheduled"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "vaccine": self.vaccine,
+            "date_given": self.date_given.isoformat() if self.date_given else None,
+            "dose": self.dose,
+            "manufacturer": self.manufacturer,
+            "lot_number": self.lot_number,
+            "site": self.site,
+            "provider_id": self.provider_id,
+            "provider_name": self.provider.name if self.provider else None,
+            "location": self.location,
+            "next_due": self.next_due.isoformat() if self.next_due else None,
+            "notes": self.notes,
+            "due_status": self.due_status(),
         }
 
 
