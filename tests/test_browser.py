@@ -164,3 +164,60 @@ def test_vital_units(page):
     assert "70 kg" in cards and "+2 kg since previous" in cards
     assert "entered as 150 lb" in page.text_content("#historyBody")
     axe_clean(page, ".content")
+
+
+def test_chart_search_dropdowns(page):
+    ready(page)
+    for name in ("Chemistry", "Lipid Panel"):
+        api(page, "POST", "/api/panels/", {"name": name})
+    for name in ("mg/dL", "mmol/L"):
+        api(page, "POST", "/api/units/", {"name": name})
+    labs = {}
+    for name, panel, unit in (("Glucose", 1, 1), ("Glucose (mmol/L)", 1, 2), ("Cholesterol, Total", 2, 1), ("HDL Cholesterol", 2, 1)):
+        lab = api(page, "POST", "/api/labs/", {"name": name, "panel_id": panel, "unit_id": unit})
+        labs[name] = lab["data"]["id"] if "data" in lab else lab["id"]
+        for day, value in (("2025-01-02", 5.1), ("2025-06-02", 5.4)):
+            api(page, "POST", "/api/results/", {"lab_id": labs[name], "patient_id": 1, "provider_id": 1, "result": value, "date_collected": day})
+
+    page.goto(page.base + "/charts", wait_until="networkidle")
+    assert page.is_hidden("#labSelect") and page.is_visible("#labSelect-search")
+    assert page.get_attribute("label[for='labSelect-search']", "for") == "labSelect-search"
+
+    # Every typed word must match, in any order, and the panel groups stay
+    page.fill("#labSelect-search", "chol")
+    options = lambda: page.eval_on_selector_all("#labSelect-list [role=option] .name", "els => els.map(e => e.textContent)")
+    assert options() == ["Cholesterol, Total", "HDL Cholesterol"]
+    assert page.eval_on_selector_all("#labSelect-list .search-select-group", "els => els.map(e => e.textContent)") == ["Lipid Panel"]
+    page.fill("#labSelect-search", "total chol")
+    assert options() == ["Cholesterol, Total"]
+    page.fill("#labSelect-search", "zzz")
+    assert page.text_content("#labSelect-list") == "No tests match"
+
+    # Keyboard: filter, move down, Enter picks; the chart and address bar follow, and brackets stay in the title
+    page.fill("#labSelect-search", "gluc")
+    assert page.get_attribute("#labSelect-search", "aria-expanded") == "true"
+    axe_clean(page, ".content")
+    page.keyboard.press("ArrowDown")
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => /Glucose \\(mmol\\/L\\)/.test(document.getElementById('individualChartTitle').textContent)")
+    assert page.input_value("#labSelect-search") == "Glucose (mmol/L)"
+    assert page.get_attribute("#labSelect-search", "aria-expanded") == "false"
+    assert f"lab={labs['Glucose (mmol/L)']}" in page.url
+
+    # Escape closes and puts back the current choice; the current choice is marked with a check icon, not only colour
+    page.click("#labSelect-search")
+    page.keyboard.type("hdl")
+    page.keyboard.press("Escape")
+    assert page.input_value("#labSelect-search") == "Glucose (mmol/L)"
+    page.fill("#labSelect-search", "")
+    assert page.eval_on_selector("#labSelect-list .current", "li => li.querySelector('.mdi-check') && li.textContent.includes('(current)')")
+
+    # A mouse pick on the panel list loads that panel's charts
+    page.fill("#panelSelect-search", "chem")
+    page.click("#panelSelect-list [role=option]")
+    page.wait_for_function("() => /Chemistry/.test(document.getElementById('panelChartsTitle').textContent)")
+    assert page.input_value("#panelSelect-search") == "Chemistry" and "panel=1" in page.url
+
+    # A link to a test opens it with its name in the box
+    page.goto(page.base + f"/charts?lab={labs['HDL Cholesterol']}", wait_until="networkidle")
+    assert page.input_value("#labSelect-search") == "HDL Cholesterol"
