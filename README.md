@@ -28,7 +28,7 @@ MyLabVault is a self-hosted app for tracking your lab results and vitals over ti
 ### 📊 **Dashboard and Charts**
 - **Dashboard**: Your latest draw, how many tests are out of range right now, a *Needs attention* list, your latest vitals, and the latest value of every test with the change since the previous result
 - **Trend charts**: Straight lines on a real time axis, the reference range shaded behind each point, and out-of-range results marked with a triangle and an H/L label
-- **Charts page**: Opens on your most recent panel; link straight to a chart with `/charts?lab=<id>` or `/charts?panel=<id>`
+- **Charts page**: Opens on your most recent panel. The panel and test boxes are search dropdowns: type part of a name ("chol" finds Cholesterol, Total and HDL Cholesterol) and pick with the mouse or the arrow keys and Enter. Link straight to a chart with `/charts?lab=<id>` or `/charts?panel=<id>`
 - **Plain-language descriptions**: Each test's page explains what it measures (built in for about 70 common tests, or write your own)
 
 ### ❤️ **Vitals**
@@ -163,7 +163,7 @@ MyLabVault/
 │   │       └── test_descriptions.py  # Plain-language test descriptions
 │   ├── templates/                # Jinja2 pages and components
 │   ├── static/
-│   │   ├── js/                   # Shared scripts (charts, modals)
+│   │   ├── js/                   # Shared scripts (charts, modals, search dropdowns)
 │   │   └── vendor/               # Bundled front-end libraries and fonts
 │   ├── alembic/                  # Database migrations
 │   └── data/                     # Database and uploaded PDFs (mounted volume)
