@@ -16,12 +16,13 @@ from werkzeug.utils import secure_filename
 from ..database import get_db
 from .. import paths
 from ..models import PDFImportLog, LabResult, Lab, Provider, Patient, Panel, Unit, ImportTemplate
-from ..schemas import APIResponse, PDFImportPreview, PDFImportConfirm
+from ..schemas import APIResponse, ManualPasteRequest, ManualReviewRequest, ManualRow, PDFImportPreview, PDFImportConfirm
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
 from ..logging_setup import audit
-from ..services.import_review import apply_edit, compare_parses, find_lab, find_lab_in_unit, normalize_unit, review_rows, row_date, row_status
+from ..services.import_review import (apply_edit, compare_parses, find_lab, find_lab_in_unit, manual_test, normalize_unit,
+                                      parse_pasted, review_rows, row_date, row_status)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,8 @@ def _imported_indices(import_log: PDFImportLog, db: Session) -> set:
 
 def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session) -> PDFImportPreview:
     """Match parsed tests and provider against the database and build the review data."""
-    rows = review_rows(parsed_data.get('tests', []), db, _imported_indices(import_log, db), parsed_data.get('date_collected'))
+    rows = review_rows(parsed_data.get('tests', []), db, _imported_indices(import_log, db), parsed_data.get('date_collected'),
+                       typed=parsed_data.get('parser') == 'manual')
     return PDFImportPreview(
         parser=parsed_data.get('parser', 'standard'),
         filename=filename,
@@ -101,7 +103,7 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
         matched_provider=_match_provider(parsed_data.get('physician'), db),
         physician=parsed_data.get('physician'),
         import_id=str(import_log.id),
-        pdf_url=f"/api/pdf/{import_log.id}/file",
+        pdf_url=f"/api/pdf/{import_log.id}/file" if import_log.file_path else None,
         import_status=import_log.status,
         fasting=parsed_data.get('fasting') if isinstance(parsed_data.get('fasting'), bool) else None,
         comparison=compare_parses(parsed_data, parsed_data['other_parse'], db) if parsed_data.get('other_parse') else None,
@@ -499,6 +501,44 @@ async def get_batch_status(batch_id: str, db: Session = Depends(get_db)):
         "imports": [import_log.to_dict() for import_log in imports]
     }
 
+MANUAL_FILENAME = "Entered by hand"
+
+
+def _create_manual_import(confirmation: dict, db: Session) -> PDFImportLog:
+    """An import record for rows typed on the manual entry card, so they're saved like a report's rows."""
+    manual = confirmation.get("manual") or {}
+    try:
+        rows = [ManualRow(**row) for row in (manual.get("tests") or [])][:200]
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"{MANUAL_FILENAME}: a row is too long or malformed")
+    panel = (manual.get("panel_name") or "").strip()[:255] or None
+    parsed = {"parser": "manual", "date_collected": confirmation.get("manual_date"),
+              "tests": [manual_test(row.model_dump(), panel) for row in rows]}
+    log = PDFImportLog(filename=MANUAL_FILENAME, file_path="", parsed_data=json.dumps(parsed),
+                       total_tests_found=len(rows), date_collected=confirmation.get("manual_date"), status="pending")
+    db.add(log)
+    db.commit()
+    return log
+
+
+@router.post("/manual/review")
+def review_manual_rows(body: ManualReviewRequest, db: Session = Depends(get_db)):
+    """Check rows typed on the manual entry card against saved tests, as an upload's rows are. Nothing is saved.
+
+    Example: POST /api/pdf/manual/review
+        {"date_collected": "2026-01-15", "tests": [{"name": "Glucose", "result": "105", "unit": "mg/dL", "reference_range": "70-99"}]}
+    """
+    tests = [manual_test(row.model_dump()) for row in body.tests]
+    return {"tests": review_rows(tests, db, report_date=body.date_collected, typed=True)}
+
+
+@router.post("/manual/paste")
+def paste_manual_rows(body: ManualPasteRequest, db: Session = Depends(get_db)):
+    """Rows from text pasted on the manual entry card (one result per line), checked like typed rows."""
+    tests = [manual_test(row) for row in parse_pasted(body.text)]
+    return {"tests": review_rows(tests, db, report_date=body.date_collected, typed=True)}
+
+
 @router.post("/batch-confirm")
 async def confirm_batch_import(
     request: Request,
@@ -530,11 +570,17 @@ async def confirm_batch_import(
 
     files, failed = [], []
     for confirmation in individual_confirmations:
-        import_log = db.query(PDFImportLog).filter_by(id=confirmation.get("import_id")).first()
-        filename = import_log.filename if import_log else "Unknown file"
+        manual_log = None
+        import_id = confirmation.get("import_id")
+        import_log = None if confirmation.get("manual") is not None else db.query(PDFImportLog).filter_by(id=import_id).first()
+        filename = MANUAL_FILENAME if confirmation.get("manual") is not None else (import_log.filename if import_log else "Unknown file")
         try:
+            # Results entered by hand arrive as rows; they become an import of their own, without a file
+            if confirmation.get("manual") is not None:
+                manual_log = _create_manual_import(confirmation, db)
+                import_id = manual_log.id
             merged = PDFImportConfirm(
-                import_id=str(confirmation.get("import_id")),
+                import_id=str(import_id),
                 selected_tests=confirmation.get("selected_tests", []),
                 provider_id=confirmation.get("provider_id") or global_settings.get("provider_id"),
                 patient_id=confirmation.get("patient_id") or global_settings.get("patient_id") or cookie_patient_id,
@@ -542,12 +588,15 @@ async def confirm_batch_import(
                 edits=confirmation.get("edits") or {},
             )
             result = await confirm_pdf_import(request, merged, db)
-            files.append(result.data)
-        except HTTPException as e:
-            failed.append({"import_id": confirmation.get("import_id"), "filename": filename, "error": e.detail})
-        except Exception:
-            logger.exception(f"Batch import failed for {filename}")
-            failed.append({"import_id": confirmation.get("import_id"), "filename": filename, "error": "Import failed."})
+            files.append({**result.data, "key": confirmation.get("key")})
+        except (HTTPException, Exception) as e:
+            if not isinstance(e, HTTPException):
+                logger.exception(f"Batch import failed for {filename}")
+            if manual_log:  # nothing was saved, so the rows stay on the page and leave no trace here
+                db.delete(manual_log)
+                db.commit()
+            failed.append({"import_id": None if manual_log else import_id, "key": confirmation.get("key"), "filename": filename,
+                           "error": e.detail if isinstance(e, HTTPException) else "Import failed."})
 
     total = sum(f["imported_count"] for f in files)
     return APIResponse(
@@ -691,6 +740,7 @@ async def confirm_pdf_import(
 
     parsed_data = json.loads(import_log.parsed_data)
     parsed_tests = parsed_data.get('tests', [])
+    manual = parsed_data.get('parser') == 'manual'
     report_date = None  # only needed when a selected row has no date of its own
     patient_id = confirmation.patient_id or 1
     already = _imported_indices(import_log, db)
@@ -750,7 +800,8 @@ async def confirm_pdf_import(
                 result=value,
                 result_text=text,
                 date_collected=collected,
-                notes=f"Imported from PDF: {import_log.filename} (test index: {index})",
+                notes=(f"Entered by hand (test index: {index})" if manual
+                       else f"Imported from PDF: {import_log.filename} (test index: {index})"),
                 pdf_import_id=str(import_log.id),
                 **_report_details(test, parsed_data)
             )
@@ -768,7 +819,7 @@ async def confirm_pdf_import(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Saving results from {import_log.filename} failed.") from e
-    audit("import.confirmed", import_id=import_log.id, saved=len(saved), new_tests=len(created),
+    audit("import.confirmed", import_id=import_log.id, source="manual" if manual else "pdf", saved=len(saved), new_tests=len(created),
           dates=len({r.date_collected.date() for r in saved}), provider_id=confirmation.provider_id,
           patient_id=patient_id)
 
@@ -786,7 +837,8 @@ async def confirm_pdf_import(
     dates = sorted({r.date_collected.date().isoformat() for r in saved})
     return APIResponse(
         success=True,
-        message=f"Imported {len(saved)} results from {import_log.filename}",
+        message=(f"Saved {len(saved)} results entered by hand" if manual
+                 else f"Imported {len(saved)} results from {import_log.filename}"),
         data={
             "import_id": import_log.id,
             "filename": import_log.filename,
@@ -1015,6 +1067,7 @@ async def get_import_history(db: Session = Depends(get_db)):
         item = import_log.to_dict()
         item.pop("parsed_data", None)  # large, and the page loads it per import when needed
         item["results_saved"] = saved.get(str(import_log.id), 0)
+        item["has_file"] = bool(import_log.file_path)  # results entered by hand have no PDF
         history.append(item)
     return history
 

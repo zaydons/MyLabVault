@@ -197,6 +197,26 @@ class PDFTestEdit(BaseModel):
     date_collected: Optional[str] = Field(None, max_length=10)  # YYYY-MM-DD, for reports with several dates
 
 
+class ManualRow(BaseModel):
+    """A result typed (or pasted) on the manual entry card, before it's matched to a saved test."""
+    name: str = Field("", max_length=255)
+    result: str = Field("", max_length=255)
+    unit: str = Field("", max_length=50)
+    reference_range: str = Field("", max_length=100)
+
+
+class ManualReviewRequest(BaseModel):
+    """Rows to check against saved tests; nothing is saved."""
+    tests: List[ManualRow] = Field(default_factory=list, max_length=200)
+    date_collected: Optional[str] = Field(None, max_length=10)
+
+
+class ManualPasteRequest(BaseModel):
+    """Text pasted on the manual entry card, one result per line."""
+    text: str = Field(..., max_length=50000)
+    date_collected: Optional[str] = Field(None, max_length=10)
+
+
 class PDFImportConfirm(BaseModel):
     """PDF import confirmation schema. selected_tests are positions in the parsed report."""
     import_id: str

@@ -439,9 +439,10 @@ def patients_page(request: Request, db: Session = Depends(get_db)):
     return _render_simple_page("patients.html", request, db)
 
 @router.get("/bulk-import")
-def bulk_import_page(request: Request, db: Session = Depends(get_db)):
-    """Bulk manual import page for entering multiple lab results."""
-    return _render_simple_page("bulk-import.html", request, db)
+def bulk_import_page():
+    """The old manual entry page: results are now entered by hand on the Import page."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/import?manual=1", status_code=301)
 
 @router.get("/result/{result_id}")
 def result_detail_page(request: Request, result_id: int, db: Session = Depends(get_db)):

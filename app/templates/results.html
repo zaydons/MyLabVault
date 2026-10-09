@@ -190,10 +190,10 @@
             <i class="mdi mdi-close mr-1"></i>
             Cancel
           </button>
-          <button type="button" class="btn btn-info mr-auto" onclick="openBulkImport()">
-            <i class="mdi mdi-table-plus mr-1"></i>
-            Bulk Manual Import
-          </button>
+          <a href="/import?manual=1" class="btn btn-outline-primary mr-auto">
+            <i class="mdi mdi-table-plus mr-1" aria-hidden="true"></i>
+            Enter several results
+          </a>
           <button type="submit" class="btn btn-success">
             <i class="mdi mdi-content-save mr-1"></i>
             Add Result
@@ -909,10 +909,7 @@ function addResult() {
     $('#addResultModal').modal('show');
 }
 
-function openBulkImport() {
-    $('#addResultModal').modal('hide');
-    window.location.href = '/bulk-import';
-}
+
 
 function editResult(id) {
     

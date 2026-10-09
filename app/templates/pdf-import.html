@@ -2,14 +2,14 @@
 {% from 'components/notification_modal.html' import notification_modal, confirmation_modal %}
 {% from 'components/details_modal.html' import pdf_modal %}
 
-{% block title %}PDF Import - MyLabVault{% endblock %}
+{% block title %}Import Results - MyLabVault{% endblock %}
 
 {% block content %}
 <div class="content-header">
   <div class="container-fluid">
     <h1 class="m-0">
       <i class="mdi mdi-file-upload mr-2" aria-hidden="true"></i>
-      PDF Lab Report Import
+      Import Lab Results
     </h1>
   </div>
 </div>
@@ -17,15 +17,19 @@
 <section class="content">
   <div class="container-fluid">
 
-    <!-- Upload -->
+    <!-- Add results: upload PDFs or enter them by hand -->
     <div class="card">
-      <div class="card-header">
-        <h2 class="card-title"><i class="mdi mdi-cloud-upload mr-2" aria-hidden="true"></i>Upload lab reports</h2>
-        <div class="card-tools">
-          <a href="#historySection" class="btn btn-outline-primary btn-sm">Import history</a>
+      <div class="card-header d-flex flex-wrap align-items-center">
+        <h2 class="sr-only">Add results</h2>
+        <div class="nav nav-tabs card-header-tabs mr-auto" role="tablist" aria-label="How to add results">
+          <button type="button" class="nav-link active" role="tab" id="tab-upload" aria-selected="true" aria-controls="panel-upload">
+            <i class="mdi mdi-cloud-upload mr-1" aria-hidden="true"></i>Upload PDFs</button>
+          <button type="button" class="nav-link" role="tab" id="tab-manual" aria-selected="false" aria-controls="panel-manual" tabindex="-1">
+            <i class="mdi mdi-pencil-outline mr-1" aria-hidden="true"></i>Enter by hand</button>
         </div>
+        <a href="#historySection" class="btn btn-outline-primary btn-sm my-1">Import history</a>
       </div>
-      <div class="card-body">
+      <div class="card-body" role="tabpanel" id="panel-upload" aria-labelledby="tab-upload">
         <div class="upload-zone text-center p-4" id="uploadZone">
           <i class="mdi mdi-cloud-upload text-primary" style="font-size: 3rem;" aria-hidden="true"></i>
           <p class="h5 mt-2">Drop PDF files here or choose files</p>
@@ -40,7 +44,13 @@
           <ul class="list-unstyled mb-0" id="uploadList" aria-live="polite"></ul>
         </div>
       </div>
+      <div class="card-body" role="tabpanel" id="panel-manual" aria-labelledby="tab-manual" hidden>
+        <p class="mb-2">Type results from a visit, or paste them from a patient portal. They're checked against your saved tests as you type, the same way a report's results are, so they go into the tests you already have.</p>
+        <p class="text-muted mb-3">Each card below is one visit: one collection date and one provider.</p>
+        <button type="button" class="btn btn-outline-primary" id="addManualCard"><i class="mdi mdi-plus mr-1" aria-hidden="true"></i>Add a visit</button>
+      </div>
     </div>
+    <datalist id="labNameList"></datalist>
 
     <div id="reviewMessages"></div>
 
@@ -54,21 +64,21 @@
         <ul class="list-group mb-3" id="summaryFiles"></ul>
         <a href="/dashboard" class="btn btn-primary">Go to dashboard</a>
         <a href="/results" class="btn btn-outline-primary ml-1">All results</a>
-        <button type="button" class="btn btn-outline-secondary ml-1" id="importMore">Import more reports</button>
+        <button type="button" class="btn btn-outline-secondary ml-1" id="importMore">Import more</button>
       </div>
     </div>
 
     <!-- Review -->
     <div id="reviewSection" hidden>
       <h2 class="h4 mb-1">Review and import</h2>
-      <p class="text-muted">Check each report against its PDF. You can correct any value, choose which saved test it belongs to, or untick rows you don't want.</p>
+      <p class="text-muted">Check each card before importing (reports against their PDF). You can correct any value, choose which saved test it belongs to, or untick rows you don't want.</p>
       <div id="reviewFiles"></div>
       <div class="review-actions">
         <button type="button" class="btn btn-primary" id="importButton" disabled>
           <i class="mdi mdi-check-all mr-1" aria-hidden="true"></i><span>Nothing selected</span>
         </button>
         <button type="button" class="btn btn-outline-secondary ml-2" id="cancelReview">Cancel</button>
-        <small class="text-muted ml-2 d-none d-md-inline">Reports you don't import stay in the history below.</small>
+        <small class="text-muted ml-2 d-none d-md-inline">Reports you don't import stay in the history below; rows typed by hand are kept only on this page.</small>
       </div>
     </div>
 
@@ -200,7 +210,9 @@ function initializeHistoryTable() {
                 if (canReview(row)) {
                     html += `<button type="button" class="btn btn-primary btn-sm mr-1" data-review-import="${id}">${row.status === 'completed' ? 'Import remaining' : 'Review'}</button>`;
                 }
-                html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportPdf(${id})" aria-label="View PDF ${name}" title="View PDF"><i class="mdi mdi-file-pdf-box" aria-hidden="true"></i></button>`;
+                if (row.has_file) {
+                    html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportPdf(${id})" aria-label="View PDF ${name}" title="View PDF"><i class="mdi mdi-file-pdf-box" aria-hidden="true"></i></button>`;
+                }
                 html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportDetails(${id})" aria-label="Details for ${name}" title="Details"><i class="mdi mdi-information-outline" aria-hidden="true"></i></button>`;
                 const locked = row.results_saved > 0;
                 html += `<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteImport(${id})" ${locked ? 'disabled' : ''}
@@ -253,7 +265,7 @@ async function viewImportDetails(importId) {
             <dl class="row mb-3">
                 <dt class="col-sm-4">Status</dt><dd class="col-sm-8">${STATUS_BADGES[data.import_status] || escapeHtml(data.import_status)}</dd>
                 <dt class="col-sm-4">Collected</dt><dd class="col-sm-8">${data.date_collected ? `<span class="format-date" data-iso-date="${escapeHtml(data.date_collected)}">${escapeHtml(data.date_collected)}</span>` : 'Not found on the report'}</dd>
-                <dt class="col-sm-4">Provider on report</dt><dd class="col-sm-8">${escapeHtml(data.physician || '—')}</dd>
+                ${data.parser === 'manual' ? '' : `<dt class="col-sm-4">Provider on report</dt><dd class="col-sm-8">${escapeHtml(data.physician || '—')}</dd>`}
                 <dt class="col-sm-4">Results saved</dt><dd class="col-sm-8">${imported} of ${rows.length}</dd>
             </dl>
             <div class="table-responsive"><table class="table table-sm mb-0">
@@ -339,6 +351,11 @@ $(document).ready(async function () {
 .compare-table tr.compare-same { color: #5a6268; }
 .dark-mode .compare-readings { border-color: #6c757d; }
 .dark-mode .compare-table tr.compare-same { color: #ced4da; }
+.card-header-tabs .nav-link { background: none; border-color: transparent; color: #0b5ed7; cursor: pointer; }
+.card-header-tabs .nav-link.active { color: #212529; background: #fff; border-color: #dee2e6 #dee2e6 #fff; font-weight: 600; }
+.dark-mode .card-header-tabs .nav-link { color: #8ec5ff; }
+.dark-mode .card-header-tabs .nav-link.active { color: #fff; background: #343a40; border-color: #6c757d #6c757d #343a40; }
+.manual-card .review-table td[data-label="Test"] { min-width: 15rem; }
 .review-actions { position: sticky; bottom: 0; z-index: 10; background: #f4f6f9; padding: .75rem 0; margin-bottom: 1rem; border-top: 1px solid #dee2e6; }
 .dark-mode .review-actions { background: #454d55; border-color: #6c757d; }
 

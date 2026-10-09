@@ -264,3 +264,49 @@ def test_chart_search_dropdowns(page):
     # A link to a test opens it with its name in the box
     page.goto(page.base + f"/charts?lab={labs['HDL Cholesterol']}", wait_until="networkidle")
     assert page.input_value("#labSelect-search") == "HDL Cholesterol"
+
+
+def test_enter_results_by_hand(page):
+    ready(page)
+    api(page, "POST", "/api/panels/", {"name": "Chemistry"})
+    api(page, "POST", "/api/units/", {"name": "mg/dL"})
+    api(page, "POST", "/api/labs/", {"name": "Glucose", "panel_id": 1, "unit_id": 1})
+    page.goto(page.base + "/results", wait_until="networkidle")
+    page.goto(page.base + "/bulk-import", wait_until="networkidle")
+    page.wait_for_selector(".manual-card")
+    assert page.get_attribute("#tab-manual", "aria-selected") == "true"
+    assert page.evaluate("document.activeElement.classList.contains('row-name')")  # ready to type
+
+    # Three results typed with the keyboard; each is checked against the saved tests
+    page.keyboard.type("Glucose")
+    for value in ("105", "mg/dL", "70-99"):
+        page.keyboard.press("Tab")
+        if value == "105":
+            page.keyboard.press("Tab")  # past "Save as"
+        page.keyboard.type(value)
+    page.click(".add-row")
+    page.keyboard.type("Glucose")
+    page.fill(".manual-card tbody tr:nth-child(2) .row-result", "5.9")
+    page.fill(".manual-card tbody tr:nth-child(2) .row-unit", "mmol/L")
+    page.click(".paste-toggle")
+    page.fill(".paste-text", "HIV Screen  Negative")
+    page.click(".paste-add")
+    page.wait_for_function("() => document.querySelectorAll('.manual-card tbody tr').length === 3")
+    page.wait_for_function("() => /mmol\\/L, but Glucose/.test(document.querySelector('.manual-card tbody tr:nth-child(2) .row-issue').textContent)")
+    choices = page.eval_on_selector_all(".manual-card .row-lab", "s => s.map(x => x.selectedOptions[0].text)")
+    assert choices == ["Glucose (mg/dL)", "New test", "New test"]
+    assert page.text_content(".manual-card tbody tr:first-child .row-status").strip() == "High"
+    axe_clean(page, ".content")
+
+    # A blank row is ignored; the provider is required, then everything saves together
+    page.click(".add-row")
+    page.click("#importButton")
+    assert "choose the provider" in page.text_content("#reviewMessages")
+    page.select_option("#provider-1", "1")
+    page.click("#importButton")
+    page.wait_for_selector("#importSummary:not([hidden])")
+    summary = page.text_content("#importSummary")
+    assert "Imported 3 results" in summary and "Entered by hand" in summary and "Glucose" in summary
+    assert not page.query_selector(".manual-card")
+    names = sorted(lab["name"] for lab in api(page, "GET", "/api/labs/?limit=100"))
+    assert names == ["Glucose", "Glucose (mmol/L)", "HIV Screen"]
