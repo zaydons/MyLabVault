@@ -470,6 +470,12 @@
               <p>Medications</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="/vaccines" class="nav-link {{ 'active' if request.url.path == '/vaccines' }}">
+              <i class="nav-icon mdi mdi-needle" aria-hidden="true"></i>
+              <p>Vaccines</p>
+            </a>
+          </li>
           {% set manage_data_paths = ['/labs', '/panels', '/units', '/providers', '/import', '/patients'] %}
           {% set is_manage_data_page = request.url.path in manage_data_paths or request.url.path.startswith('/lab/') %}
           <li class="nav-item {{ 'menu-open' if is_manage_data_page }}">

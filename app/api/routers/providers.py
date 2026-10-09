@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import Medication as MedicationModel, Provider as ProviderModel
+from ..models import Immunization as ImmunizationModel, Medication as MedicationModel, Provider as ProviderModel
 from ..schemas import ProviderCreate
 
 router = APIRouter()
@@ -100,6 +100,7 @@ def delete_provider(provider_id: int, db: Session = Depends(get_db)):
     provider_name = db_provider.name
     # Medications keep their history; they just no longer name this prescriber
     db.query(MedicationModel).filter(MedicationModel.provider_id == provider_id).update({MedicationModel.provider_id: None})
+    db.query(ImmunizationModel).filter(ImmunizationModel.provider_id == provider_id).update({ImmunizationModel.provider_id: None})
     db.delete(db_provider)
     db.commit()
     return {

@@ -288,7 +288,7 @@
             <div class="setting-row">
               <div class="setting-text">
                 <span class="setting-label">Reset all data</span>
-                <p>Permanently deletes every result, vital, medication, test, panel, unit, provider, patient, uploaded PDF and setting, then starts again with the welcome screen. <strong>This can't be undone.</strong> Download a backup first.</p>
+                <p>Permanently deletes every result, vital, medication, vaccine, test, panel, unit, provider, patient, uploaded PDF and setting, then starts again with the welcome screen. <strong>This can't be undone.</strong> Download a backup first.</p>
               </div>
               <div class="setting-control">
                 <button type="button" class="btn btn-outline-danger" id="resetDataBtn" onclick="showResetConfirmation()">
@@ -348,6 +348,7 @@
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="labResultsCount">0</span> Lab Results</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="vitalsCount">0</span> Vitals</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="medicationsCount">0</span> Medications</li>
+              <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="vaccinesCount">0</span> Vaccines</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="labsCount">0</span> Lab Tests</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="panelsCount">0</span> Panels</li>
               <li><i class="mdi mdi-close-circle text-danger mr-1"></i> <span id="unitsCount">0</span> Units</li>
@@ -673,6 +674,7 @@ function showResetConfirmation() {
             $('#labResultsCount').text(data.lab_results.toLocaleString());
             $('#vitalsCount').text((data.vitals || 0).toLocaleString());
             $('#medicationsCount').text((data.medications || 0).toLocaleString());
+            $('#vaccinesCount').text((data.immunizations || 0).toLocaleString());
             $('#labsCount').text(data.labs.toLocaleString());
             $('#panelsCount').text(data.panels.toLocaleString());
             $('#unitsCount').text(data.units.toLocaleString());
@@ -941,7 +943,7 @@ function generateExportPreview() {
 
 function displayExportPreview(preview) {
     const n = v => Number(v || 0).toLocaleString();
-    const parts = [`${n(preview.lab_results_count)} results`, `${n(preview.vitals_count)} vitals`, `${n(preview.medications_count)} medications`, `${n(preview.labs_count)} tests`,
+    const parts = [`${n(preview.lab_results_count)} results`, `${n(preview.vitals_count)} vitals`, `${n(preview.medications_count)} medications`, `${n(preview.immunizations_count)} vaccines`, `${n(preview.labs_count)} tests`,
                    `${n(preview.providers_count)} providers`, `${n(preview.patients_count)} patients`];
     if (preview.include_pdfs) parts.push(`${n(preview.pdf_files_count)} PDFs`);
     $('#exportPreview').html(`<strong>Will include:</strong> ${parts.join(', ')}. About ${escapeHtml(preview.estimated_size)}${preview.include_pdfs ? ' (ZIP)' : ' (JSON)'}.`);
@@ -1184,7 +1186,7 @@ function previewImportFile() {
 
 function displayImportPreview(preview) {
     const n = v => Number(v || 0).toLocaleString();
-    const parts = [`${n(preview.lab_results_count)} results`, `${n(preview.vitals_count)} vitals`, `${n(preview.medications_count)} medications`, `${n(preview.labs_count)} tests`,
+    const parts = [`${n(preview.lab_results_count)} results`, `${n(preview.vitals_count)} vitals`, `${n(preview.medications_count)} medications`, `${n(preview.immunizations_count)} vaccines`, `${n(preview.labs_count)} tests`,
                    `${n(preview.providers_count)} providers`, `${n(preview.patients_count)} patients`];
     if (preview.pdf_files_count > 0) parts.push(`${n(preview.pdf_files_count)} PDFs`);
     let html = `<strong>This backup has:</strong> ${parts.join(', ')} (${escapeHtml(preview.file_type)}, ${escapeHtml(preview.file_size)}).`;

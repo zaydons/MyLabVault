@@ -1,0 +1,306 @@
+{% extends "layout.html" %}
+{% from 'components/notification_modal.html' import notification_modal, confirmation_modal %}
+
+{% block title %}Vaccines - MyLabVault{% endblock %}
+
+{% block content %}
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="d-flex flex-wrap align-items-center">
+      <div class="mr-auto mb-2">
+        <h1 class="m-0"><i class="mdi mdi-needle mr-2" aria-hidden="true"></i>Vaccines</h1>
+        <p class="text-muted mb-0">Vaccines given to the selected patient, and when the next dose is due</p>
+      </div>
+      <button class="btn btn-primary mb-2" type="button" id="addVaccine">
+        <i class="mdi mdi-plus mr-1" aria-hidden="true"></i>Add vaccine
+      </button>
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="card" id="dueCard" hidden>
+      <div class="card-header"><h2 class="card-title" id="dueTitle">Next doses</h2></div>
+      <div class="card-body"><ul class="list-unstyled mb-0" id="dueList" aria-labelledby="dueTitle"></ul></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h2 class="card-title" id="recordTitle">Vaccine record</h2></div>
+      <div class="card-body" id="recordList" aria-labelledby="recordTitle"><p class="text-muted mb-0">Loading…</p></div>
+    </div>
+  </div>
+</section>
+
+<datalist id="vaccineList"></datalist>
+<datalist id="siteList"></datalist>
+<datalist id="doseList">
+  <option value="1 of 2"></option><option value="2 of 2"></option><option value="1 of 3"></option><option value="2 of 3"></option>
+  <option value="3 of 3"></option><option value="booster"></option><option value="annual"></option>
+</datalist>
+
+<div class="modal fade" id="vaccineModal" tabindex="-1" role="dialog" aria-labelledby="vaccineModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <form class="modal-content" id="vaccineForm" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="vaccineModalTitle">Add vaccine</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="vaccineError" role="alert" tabindex="-1"></div>
+        <input type="hidden" id="vaccineId">
+        <div class="form-row">
+          <div class="form-group col-md-8">
+            <label for="vaccineName">Vaccine <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" class="form-control" id="vaccineName" list="vaccineList" maxlength="255" required autocomplete="off" placeholder="e.g. Influenza (flu)">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="vaccineDate">Date given <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="date" class="form-control" id="vaccineDate" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label for="vaccineDose">Dose</label>
+            <input type="text" class="form-control" id="vaccineDose" list="doseList" maxlength="50" autocomplete="off" placeholder="e.g. 1 of 2, booster">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="vaccineManufacturer">Manufacturer or brand</label>
+            <input type="text" class="form-control" id="vaccineManufacturer" maxlength="100" placeholder="e.g. Pfizer, Shingrix">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="vaccineLot">Lot number</label>
+            <input type="text" class="form-control" id="vaccineLot" maxlength="50">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label for="vaccineSite">Where given</label>
+            <input type="text" class="form-control" id="vaccineSite" list="siteList" maxlength="50" autocomplete="off" placeholder="e.g. left arm">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="vaccineProvider">Given by</label>
+            <select class="custom-select" id="vaccineProvider"></select>
+          </div>
+          <div class="form-group col-md-4">
+            <label for="vaccineLocation">Clinic or pharmacy</label>
+            <input type="text" class="form-control" id="vaccineLocation" maxlength="255" placeholder="e.g. CVS Pharmacy">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label for="vaccineNextDue">Next dose due</label>
+            <input type="date" class="form-control" id="vaccineNextDue" aria-describedby="vaccineNextDueHelp">
+            <small class="form-text text-muted" id="vaccineNextDueHelp">For a second dose or a booster. Leave empty if none.</small>
+          </div>
+          <div class="form-group col-md-8 mb-0">
+            <label for="vaccineNotes">Notes</label>
+            <textarea class="form-control" id="vaccineNotes" rows="2" maxlength="2000" placeholder="Optional, e.g. reaction"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ notification_modal() }}
+{{ confirmation_modal() }}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let shots = [];
+let providers = [];
+let dateFormat = 'MM/DD/YYYY';
+
+const $id = id => document.getElementById(id);
+const esc = v => escapeHtml(v === null || v === undefined ? '' : String(v));
+const patientId = () => parseInt(getCookie('selectedPatientId') || '1', 10) || 1;
+const todayIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const showDate = iso => { try { return formatDateSync(`${iso}T12:00:00`, dateFormat); } catch (e) { return iso; } };
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// Text and an icon carry the status, never colour alone
+const DUE_BADGE = {
+    overdue: '<span class="badge badge-status-abnormal"><i class="mdi mdi-alert" aria-hidden="true"></i> Overdue</span>',
+    due: '<span class="badge badge-status-out"><i class="mdi mdi-calendar-clock" aria-hidden="true"></i> Due soon</span>',
+    scheduled: '<span class="badge badge-status-none"><i class="mdi mdi-calendar" aria-hidden="true"></i> Scheduled</span>',
+};
+
+function groups() {
+    const byName = new Map();
+    shots.forEach(s => {
+        const key = s.vaccine.trim().toLowerCase();
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push(s);
+    });
+    // Doses newest first; vaccines by most recent dose
+    return [...byName.values()].map(doses => doses.sort((a, b) => b.date_given.localeCompare(a.date_given)))
+        .sort((a, b) => b[0].date_given.localeCompare(a[0].date_given));
+}
+
+function givenBy(s) {
+    return [s.provider_name, s.location].filter(Boolean).join(', ');
+}
+
+function renderGroup(doses) {
+    const latest = doses[0];
+    const name = esc(latest.vaccine);
+    return `
+        <article class="vaccine-item py-3">
+            <div class="d-flex flex-wrap align-items-baseline">
+                <h3 class="h6 mb-1 mr-auto">${name} <span class="text-muted font-weight-normal small">· ${plural(doses.length, 'dose')}, last ${esc(showDate(latest.date_given))}</span></h3>
+                <button type="button" class="btn btn-outline-primary btn-sm mb-1" data-action="another" data-id="${latest.id}" aria-label="Add another dose of ${name}">
+                    <i class="mdi mdi-plus" aria-hidden="true"></i> Another dose</button>
+            </div>
+            <div class="table-responsive-md">
+                <table class="table table-sm mb-0 vaccine-table">
+                    <caption class="sr-only">Doses of ${name}, newest first</caption>
+                    <thead><tr><th scope="col">Given</th><th scope="col">Dose</th><th scope="col">Brand and lot</th><th scope="col">Where</th>
+                        <th scope="col">Given by</th><th scope="col">Next due</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>${doses.map(s => `<tr>
+                        <td data-label="Given">${esc(showDate(s.date_given))}</td>
+                        <td data-label="Dose">${esc(s.dose || '—')}</td>
+                        <td data-label="Brand and lot">${esc([s.manufacturer, s.lot_number ? `lot ${s.lot_number}` : ''].filter(Boolean).join(', ') || '—')}</td>
+                        <td data-label="Where">${esc(s.site || '—')}</td>
+                        <td data-label="Given by">${esc(givenBy(s) || '—')}</td>
+                        <td data-label="Next due">${s.next_due ? `${esc(showDate(s.next_due))} ${s === latest ? DUE_BADGE[s.due_status] || '' : ''}` : '—'}</td>
+                        <td class="text-nowrap text-right">
+                            <button type="button" class="btn btn-link btn-sm p-0 mr-2" data-action="edit" data-id="${s.id}" aria-label="Edit ${name} given ${esc(showDate(s.date_given))}">Edit</button>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-danger-strong" data-action="delete" data-id="${s.id}" aria-label="Delete ${name} given ${esc(showDate(s.date_given))}">Delete</button>
+                        </td></tr>${s.notes ? `<tr class="vaccine-notes"><td colspan="7" class="small pt-0 border-top-0"><i class="mdi mdi-note-text-outline" aria-hidden="true"></i> ${esc(s.notes)}</td></tr>` : ''}`).join('')}</tbody>
+                </table>
+            </div>
+        </article>`;
+}
+
+function render() {
+    const all = groups();
+    $id('recordTitle').textContent = `Vaccine record (${plural(all.length, 'vaccine')})`;
+    $id('recordList').innerHTML = all.length ? all.map(renderGroup).join('')
+        : '<p class="text-muted mb-0">No vaccines recorded. Use <strong>Add vaccine</strong> to record one.</p>';
+    // The next dose of each vaccine comes from its latest dose
+    const upcoming = all.map(d => d[0]).filter(s => s.next_due).sort((a, b) => a.next_due.localeCompare(b.next_due));
+    $id('dueCard').hidden = !upcoming.length;
+    $id('dueList').innerHTML = upcoming.map(s => `
+        <li class="mb-2">${DUE_BADGE[s.due_status] || ''} <strong>${esc(s.vaccine)}</strong>
+            <span class="text-muted">next dose ${esc(showDate(s.next_due))}${s.dose ? ` (last: ${esc(s.dose)})` : ''}</span></li>`).join('');
+}
+
+async function load() {
+    const [list, options, providerList] = await Promise.all([
+        fetch(`/api/vaccines/?patient_id=${patientId()}`).then(r => r.json()),
+        fetch(`/api/vaccines/options?patient_id=${patientId()}`).then(r => r.json()),
+        fetch('/api/providers/?limit=1000').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+    shots = list;
+    providers = providerList.slice().sort((a, b) => a.name.localeCompare(b.name));
+    $id('vaccineList').innerHTML = options.vaccines.map(n => `<option value="${esc(n)}"></option>`).join('');
+    $id('siteList').innerHTML = options.sites.map(n => `<option value="${esc(n)}"></option>`).join('');
+    render();
+}
+
+function showError(text) { const box = $id('vaccineError'); box.textContent = text; box.classList.remove('d-none'); box.focus(); }
+
+function openModal(shot, another) {
+    $id('vaccineError').classList.add('d-none');
+    $id('vaccineForm').reset();
+    $id('vaccineDate').max = todayIso();
+    $id('vaccineProvider').innerHTML = '<option value="">None</option>' + providers.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    const editing = shot && !another;
+    $id('vaccineModalTitle').textContent = editing ? `Edit ${shot.vaccine}` : another ? `Another dose of ${shot.vaccine}` : 'Add vaccine';
+    $id('vaccineId').value = editing ? shot.id : '';
+    if (editing) {
+        $id('vaccineName').value = shot.vaccine;
+        $id('vaccineDate').value = shot.date_given;
+        $id('vaccineDose').value = shot.dose || '';
+        $id('vaccineManufacturer').value = shot.manufacturer || '';
+        $id('vaccineLot').value = shot.lot_number || '';
+        $id('vaccineSite').value = shot.site || '';
+        $id('vaccineProvider').value = shot.provider_id || '';
+        $id('vaccineLocation').value = shot.location || '';
+        $id('vaccineNextDue').value = shot.next_due || '';
+        $id('vaccineNotes').value = shot.notes || '';
+    } else {
+        // Another dose: same vaccine and brand, given on the due date if that has passed, else today
+        $id('vaccineName').value = another ? shot.vaccine : '';
+        $id('vaccineManufacturer').value = another ? shot.manufacturer || '' : '';
+        $id('vaccineDate').value = another && shot.next_due && shot.next_due <= todayIso() ? shot.next_due : todayIso();
+    }
+    $('#vaccineModal').modal('show');
+}
+
+async function save(event) {
+    event.preventDefault();
+    const vaccine = $id('vaccineName').value.trim();
+    const given = $id('vaccineDate').value;
+    const nextDue = $id('vaccineNextDue').value;
+    if (!vaccine) return showError('Enter the vaccine.');
+    if (!given) return showError('Enter the date it was given.');
+    if (given > todayIso()) return showError('The date given is in the future. Record an upcoming dose as Next dose due on the last one.');
+    if (nextDue && nextDue <= given) return showError('The next dose has to be due after this one was given.');
+    const id = $id('vaccineId').value;
+    const body = {
+        patient_id: patientId(), vaccine, date_given: given, dose: $id('vaccineDose').value,
+        manufacturer: $id('vaccineManufacturer').value, lot_number: $id('vaccineLot').value, site: $id('vaccineSite').value,
+        provider_id: parseInt($id('vaccineProvider').value, 10) || null, location: $id('vaccineLocation').value,
+        next_due: nextDue || null, notes: $id('vaccineNotes').value,
+    };
+    try {
+        const response = await fetch(id ? `/api/vaccines/${encodeURIComponent(id)}` : '/api/vaccines/', {
+            method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(Array.isArray(data.detail) ? 'Check the dates and fields.' : data.detail || 'Saving failed.');
+        $('#vaccineModal').modal('hide');
+        await load();
+    } catch (error) { showError(error.message); }
+}
+
+async function remove(shot) {
+    const ok = await showConfirmation(`Delete ${shot.vaccine} given ${showDate(shot.date_given)}?`, 'Delete vaccine', 'Delete', 'Cancel');
+    if (!ok) return;
+    const response = await fetch(`/api/vaccines/${encodeURIComponent(shot.id)}`, { method: 'DELETE' });
+    if (!response.ok) return showNotification('The vaccine couldn\'t be deleted.', 'error', 'Delete failed');
+    await load();
+}
+
+$(document).ready(async function () {
+    try { dateFormat = await getUserDateFormat(); } catch (e) { /* default format */ }
+    $id('addVaccine').addEventListener('click', () => openModal(null));
+    $id('vaccineForm').addEventListener('submit', save);
+    document.querySelector('.content').addEventListener('click', e => {
+        const button = e.target.closest('[data-action]');
+        if (!button) return;
+        const shot = shots.find(s => String(s.id) === button.dataset.id);
+        if (!shot) return;
+        if (button.dataset.action === 'edit') openModal(shot);
+        if (button.dataset.action === 'another') openModal(shot, true);
+        if (button.dataset.action === 'delete') remove(shot);
+    });
+    await load();
+});
+</script>
+<style>
+.vaccine-item + .vaccine-item { border-top: 1px solid #dee2e6; }
+.dark-mode .vaccine-item + .vaccine-item { border-top-color: #6c757d; }
+.vaccine-item:first-child { padding-top: 0 !important; }
+.text-danger-strong { color: #a71d2a; }
+.dark-mode .text-danger-strong { color: #ff9aa4; }
+/* Phones: each dose becomes a stacked block with its field labels */
+@media (max-width: 767.98px) {
+    .vaccine-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .vaccine-table tr { display: block; border-bottom: 1px solid #dee2e6; padding: .5rem 0; }
+    .vaccine-table td { display: block; border: 0; padding: .15rem 0; }
+    .vaccine-table td[data-label]::before { content: attr(data-label) ": "; font-weight: 600; color: #5a6268; }
+    .dark-mode .vaccine-table td[data-label]::before { color: #c8cdd2; }
+    .vaccine-table td.text-right { text-align: left !important; }
+}
+</style>
+{% endblock %}

@@ -147,6 +147,36 @@
       </div>
     </div>
 
+    {% if dashboard_data.vaccines_due %}
+    <!-- Vaccines due (only shown when something is due soon or overdue) -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          <i class="mdi mdi-needle mr-2" aria-hidden="true"></i>
+          Vaccines due
+        </h2>
+        <div class="card-tools">
+          <a href="/vaccines" class="btn btn-outline-primary btn-sm">Vaccines</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <ul class="list-unstyled mb-0 vaccines-due">
+          {% for s in dashboard_data.vaccines_due %}
+          <li class="mb-1">
+            <strong>{{ s.vaccine }}</strong>
+            {% if s.due_status() == 'overdue' %}
+            <span class="badge badge-status-abnormal"><i class="mdi mdi-alert" aria-hidden="true"></i> Overdue</span>
+            {% else %}
+            <span class="badge badge-status-out"><i class="mdi mdi-calendar-clock" aria-hidden="true"></i> Due soon</span>
+            {% endif %}
+            <span class="summary-detail">next dose <span data-date="{{ s.next_due.isoformat() }}T12:00:00"><span class="format-date">{{ s.next_due.strftime('%m/%d/%Y') }}</span></span></span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Current medications -->
     <div class="card">
       <div class="card-header">
