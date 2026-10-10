@@ -1,5 +1,7 @@
 """Template-based page routes"""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session, joinedload
@@ -21,6 +23,7 @@ from ..models import (
     Immunization as ImmunizationModel,
 )
 from sqlalchemy import func
+from ..models import _num
 
 router = APIRouter()
 from pathlib import Path
@@ -90,7 +93,13 @@ def _render_simple_page(template_name: str, request: Request, db: Session):
         }
     )
 
+def long_date(value):
+    """A date written out, e.g. Oct 5, 2026 (reads the same whatever the date format setting)."""
+    return f"{value:%b} {value.day}, {value.year}" if value else ""
+
 # Add the filters to Jinja2
+templates.env.filters['long_date'] = long_date
+templates.env.filters['num'] = lambda value: _num(value) if value is not None else ''
 templates.env.globals['build_info'] = build_info.get_build_info()
 templates.env.filters['number_format'] = number_format
 templates.env.filters['get_result_status'] = get_result_status
@@ -252,6 +261,39 @@ def results_page(request: Request, db: Session = Depends(get_db)):
             "user_settings": user_settings.to_dict(),
             "pending_imports_count": get_pending_imports_count(db)
         }
+    )
+
+@router.get("/visits")
+def visits_page(request: Request, db: Session = Depends(get_db)):
+    """Each visit (the day results were collected), newest first."""
+    from ..services.visits import list_visits
+    return templates.TemplateResponse(
+        request,
+        "visits.html",
+        {
+            "request": request,
+            "visits": list_visits(db, get_selected_patient_id(request)),
+            "user_settings": UserSettingsModel.get_settings(db).to_dict(),
+            "pending_imports_count": get_pending_imports_count(db)
+        }
+    )
+
+@router.get("/visits/{day}")
+def visit_page(request: Request, day: date, db: Session = Depends(get_db)):
+    """One visit's results: value, where it sits on the reference range and the previous result."""
+    from ..services.visits import get_visit
+    visit = get_visit(db, get_selected_patient_id(request), day)
+    return templates.TemplateResponse(
+        request,
+        "visit.html",
+        {
+            "request": request,
+            "visit": visit,
+            "day": day,
+            "user_settings": UserSettingsModel.get_settings(db).to_dict(),
+            "pending_imports_count": get_pending_imports_count(db)
+        },
+        status_code=200 if visit else 404,
     )
 
 @router.get("/lab/{lab_id}")

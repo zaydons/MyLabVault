@@ -453,6 +453,12 @@
             </a>
           </li>
           <li class="nav-item">
+            <a href="/visits" class="nav-link {{ 'active' if request.url.path.startswith('/visits') }}">
+              <i class="nav-icon mdi mdi-calendar-text" aria-hidden="true"></i>
+              <p>Visits</p>
+            </a>
+          </li>
+          <li class="nav-item">
             <a href="/charts" class="nav-link {{ 'active' if request.url.path == '/charts' }}">
               <i class="nav-icon mdi mdi-chart-line" aria-hidden="true"></i>
               <p>Charts</p>

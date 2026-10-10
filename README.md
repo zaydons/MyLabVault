@@ -26,8 +26,9 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Enter results by hand**: *Import → Enter by hand* uses the same review table for results from a visit without a PDF. Type each test (saved test names are suggested) or paste lines such as `Glucose  105  mg/dL  70-99` copied from a patient portal or spreadsheet. Rows are matched to your saved tests as you type, with the same unit warnings, "already saved" check, live High/Low status and summary as a report, so they never create copies of existing tests. Each card is one visit (one date and one provider), and you choose the panel for any new tests. Entries appear in the import history as *Entered by hand*
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
-### 📊 **Dashboard and Charts**
+### 📊 **Dashboard, Visits and Charts**
 - **Dashboard**: Your latest draw, how many tests are out of range right now, a *Needs attention* list, your latest vitals, your current medications, vaccines due soon or overdue, and the latest value of every test with the change since the previous result
+- **Visits**: Every result from one draw on a single page (`/visits/<date>`, e.g. `/visits/2026-10-05`), grouped by panel. Each result shows its value, a status badge, a bar marking where it falls against the reference range, the range itself and the previous result with the change. Step to older and newer visits, show only out-of-range results, or print the page. The *Visits* page lists every draw with how many results were out of range; the dashboard's latest draw links to it
 - **Trend charts**: Straight lines on a real time axis, the reference range shaded behind each point, and out-of-range results marked with a triangle and an H/L label
 - **Charts page**: Opens on your most recent panel. The panel and test boxes are search dropdowns: type part of a name ("chol" finds Cholesterol, Total and HDL Cholesterol) and pick with the mouse or the arrow keys and Enter. Link straight to a chart with `/charts?lab=<id>` or `/charts?panel=<id>`
 - **Plain-language descriptions**: Each test's page explains what it measures (built in for about 70 common tests, or write your own)
@@ -133,7 +134,7 @@ Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/RE
 1. **Enter your name**: On first launch a welcome screen asks who the results are for (you can skip it and rename the patient later)
 2. **Import a PDF**: Go to *Import* and upload a lab report (or use *Enter by hand* for results without a PDF)
 3. **Review and import**: Check the results against the PDF, fix anything that's off, confirm the collection date and provider (often filled in for you), and import
-4. **Explore**: Open the dashboard, a test's page or *Charts* to see trends
+4. **Explore**: Open the dashboard, *Visits* for everything from one draw, a test's page or *Charts* to see trends
 5. **Record vitals and medications**: Use *Record vitals* on the dashboard, the *Medications* page for medications and supplements, and the *Vaccines* page for vaccines
 
 ## 🔄 Updating
@@ -171,6 +172,7 @@ MyLabVault/
 │   │       ├── summary_parser.py # Results tables with several collection dates (health summaries)
 │   │       ├── import_review.py  # Review rows, test matching, reader comparison, pasted rows
 │   │       ├── cleanup.py        # Duplicate suggestions and merging
+│   │       ├── visits.py         # Results grouped by draw date, range-bar positions
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
 │   ├── templates/                # Jinja2 pages and components

@@ -384,3 +384,34 @@ def test_vaccines(page):
 
     page.goto(page.base + "/dashboard", wait_until="networkidle")
     assert "Vaccines due" not in page.text_content(".content")
+
+
+def test_visit_page(page):
+    ready(page)
+    panel = api(page, "POST", "/api/panels/", {"name": "Lipid"})["data"]
+    labs = [api(page, "POST", "/api/labs/", {"name": name, "panel_id": panel["id"], "ref_low": low, "ref_high": high})["data"]
+            for name, low, high in (("Triglycerides", 0, 150), ("Cholesterol", 100, 199), ("Glucose", 70, 99))]
+    for lab, old, new in zip(labs, (204, 180, 90), (410, 150, 60)):
+        for value, when in ((old, "2025-10-13T08:00:00"), (new, "2026-10-05T08:00:00")):
+            api(page, "POST", "/api/results/", {"lab_id": lab["id"], "patient_id": 1, "provider_id": 1, "result": value, "date_collected": when})
+
+    page.goto(page.base + "/dashboard", wait_until="networkidle")
+    page.click("a[href='/visits/2026-10-05']")
+    page.wait_for_selector(".col-bar .range-bar")
+    assert page.locator(".col-bar .range-bar").count() == 3
+    marker = page.eval_on_selector("[aria-label^='410'] .range-marker", "m => parseFloat(m.style.left)")
+    normal = page.eval_on_selector("[aria-label^='410'] .range-normal", "n => parseFloat(n.style.left) + parseFloat(n.style.width)")
+    assert marker > normal  # high result sits right of the normal band
+
+    # Only out of range hides the normal rows, and is remembered
+    page.check("#onlyOut", force=True)
+    assert page.locator(".visit-table tbody tr:visible").count() == 2
+    page.reload(wait_until="networkidle")
+    assert page.is_checked("#onlyOut") and page.locator(".visit-table tbody tr:visible").count() == 2
+    page.uncheck("#onlyOut", force=True)
+    axe_clean(page, ".content-wrapper")
+
+    page.select_option("#visitPicker", "2025-10-13")
+    page.wait_for_url("**/visits/2025-10-13")
+    page.goto(page.base + "/visits", wait_until="networkidle")
+    axe_clean(page, ".content")

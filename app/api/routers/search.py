@@ -15,6 +15,7 @@ router = APIRouter()
 PAGES = [
     ("Dashboard", "/dashboard", "dashboard home overview"),
     ("All Results", "/results", "results all lab results history"),
+    ("Visits", "/visits", "visits draws appointments results by date blood work"),
     ("Charts", "/charts", "charts trends graphs"),
     ("Vitals", "/vitals", "vitals weight blood pressure heart rate"),
     ("Medications", "/medications", "medications medicines drugs prescriptions supplements vitamins"),
