@@ -1,0 +1,193 @@
+{% extends "layout.html" %}
+{% from "components/result_badges.html" import status_badge, detail_badges %}
+
+{% block title %}{{ 'Visit ' ~ (day|long_date) }} - MyLabVault{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Where a result falls: the normal range is the darker band, the marker is the result */
+  .range-bar { position: relative; height: 10px; min-width: 120px; border-radius: 5px; background: #dfe3e7; margin: 6px 0; }
+  .range-bar .range-normal { position: absolute; top: 0; bottom: 0; background: #8cc79f; }
+  .range-bar .range-marker { position: absolute; top: -5px; width: 6px; height: 20px; margin-left: -3px; border-radius: 3px;
+                             background: #1f2328; box-shadow: 0 0 0 2px #fff; }
+  .dark-mode .range-bar { background: #4b535b; }
+  .dark-mode .range-bar .range-normal { background: #3e8a59; }
+  .dark-mode .range-bar .range-marker { background: #f8f9fa; box-shadow: 0 0 0 2px #343a40; }
+  .visit-table td { vertical-align: middle; }
+  .visit-table .result-number { font-size: 1.05rem; font-weight: 600; white-space: nowrap; }
+  .visit-table .col-bar { width: 22%; }
+  .lab-comment { font-size: .85rem; white-space: pre-line; }
+  .visit-summary .badge { font-size: .85rem; }
+  body.only-out tr[data-in-range="1"], body.only-out .visit-panel[data-out="0"] { display: none; }
+  @media print {
+    .main-sidebar, .main-header, .main-footer, .no-print { display: none !important; }
+    .content-wrapper { margin-left: 0 !important; }
+    .visit-panel { break-inside: avoid; }
+    .range-bar, .range-bar * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+{% endblock %}
+
+{% macro change_text(row) -%}
+  {% set p = row.previous %}
+  {% if p %}
+    <span class="text-nowrap">{{ p.result|num if p.result is not none else (p.result_text or '—') }}</span>
+    <span class="text-muted small text-nowrap">on {{ p.date_collected.date()|long_date }}</span>
+    {% if row.change is not none %}
+      {% set amount = '%g'|format((row.change if row.change > 0 else -row.change)|round(2)) %}
+      <div class="small text-muted text-nowrap">
+        {% if row.change > 0 %}<i class="mdi mdi-arrow-up" aria-hidden="true"></i> up {{ amount }}
+        {% elif row.change < 0 %}<i class="mdi mdi-arrow-down" aria-hidden="true"></i> down {{ amount }}
+        {% else %}no change{% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <span class="text-muted">—</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro range_bar(row) -%}
+  {% set r = row.result %}
+  {% if row.scale %}
+  {% set s = row.scale %}
+  <div class="range-bar" role="img"
+       aria-label="{{ r.result|num }}{{ (" " ~ row.unit) if row.unit }}, {{ {'high': 'above', 'low': 'below', 'normal': 'within'}.get(row.status, 'compared with') }} the range {{ r.reference_range }}">
+    <div class="range-normal" style="left: {{ s.low }}%; width: {{ s.high - s.low }}%;"></div>
+    <div class="range-marker" style="left: {{ s.value }}%;"></div>
+  </div>
+  {% else %}
+  <span class="text-muted small">No range to compare</span>
+  {% endif %}
+{%- endmacro %}
+
+{% block content %}
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-calendar-text mr-2" aria-hidden="true"></i>
+          Visit: {{ day|long_date }}
+        </h1>
+      </div>
+    </div>
+    <div class="d-flex flex-wrap align-items-center no-print" style="gap: .5rem;">
+      <a href="/visits" class="btn btn-outline-secondary"><i class="mdi mdi-arrow-left mr-1" aria-hidden="true"></i> All visits</a>
+      {% if visit %}
+        {% if visit.previous_date %}
+          <a href="/visits/{{ visit.previous_date.isoformat() }}" class="btn btn-outline-secondary" id="olderVisit">
+            <i class="mdi mdi-chevron-left" aria-hidden="true"></i> Older: {{ visit.previous_date|long_date }}</a>
+        {% endif %}
+        {% if visit.next_date %}
+          <a href="/visits/{{ visit.next_date.isoformat() }}" class="btn btn-outline-secondary" id="newerVisit">
+            Newer: {{ visit.next_date|long_date }} <i class="mdi mdi-chevron-right" aria-hidden="true"></i></a>
+        {% endif %}
+        <label for="visitPicker" class="sr-only">Go to visit</label>
+        <select id="visitPicker" class="form-control w-auto">
+          {% for d in visit.all_dates %}
+            <option value="{{ d.isoformat() }}" {{ 'selected' if d == visit.date }}>{{ d|long_date }}</option>
+          {% endfor %}
+        </select>
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="mdi mdi-printer mr-1" aria-hidden="true"></i> Print</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    {% if not visit %}
+    <div class="alert alert-warning" role="alert">
+      No results were collected on {{ day|long_date }} for this patient.
+    </div>
+    {% else %}
+    <div class="card visit-summary">
+      <div class="card-body d-flex flex-wrap align-items-center" style="gap: .75rem;">
+        <strong>{{ visit.count }} result{{ 's' if visit.count != 1 }}</strong>
+        {% if visit.out_of_range %}
+          <span class="badge badge-status-out"><i class="mdi mdi-alert-circle-outline" aria-hidden="true"></i> {{ visit.out_of_range }} out of range</span>
+        {% endif %}
+        {% if visit.counts.high %}<span class="badge badge-status-out"><i class="mdi mdi-arrow-up-bold" aria-hidden="true"></i> {{ visit.counts.high }} high</span>{% endif %}
+        {% if visit.counts.low %}<span class="badge badge-status-out"><i class="mdi mdi-arrow-down-bold" aria-hidden="true"></i> {{ visit.counts.low }} low</span>{% endif %}
+        {% if visit.counts.abnormal %}<span class="badge badge-status-abnormal"><i class="mdi mdi-alert" aria-hidden="true"></i> {{ visit.counts.abnormal }} abnormal</span>{% endif %}
+        <span class="badge badge-status-normal">{{ visit.counts.normal }} normal</span>
+        {% if visit.counts.unknown %}<span class="badge badge-status-none">{{ visit.counts.unknown }} without a range</span>{% endif %}
+        {% if visit.fasting is true %}<span class="badge badge-status-info">Fasting</span>
+        {% elif visit.fasting is false %}<span class="badge badge-status-none">Not fasting</span>{% endif %}
+        {% if visit.providers %}<span class="text-muted">Ordered by {{ visit.providers|join(', ') }}</span>{% endif %}
+        <div class="custom-control custom-switch ml-md-auto no-print">
+          <input type="checkbox" class="custom-control-input" id="onlyOut">
+          <label class="custom-control-label" for="onlyOut">Only out of range</label>
+        </div>
+      </div>
+    </div>
+
+    {% for panel, rows in visit.panels %}
+    {% set out = rows|selectattr('status', 'in', ['high', 'low', 'abnormal'])|list|length %}
+    <div class="card visit-panel" data-out="{{ 1 if out else 0 }}">
+      <div class="card-header">
+        <h2 class="card-title">{{ panel }}</h2>
+        <div class="card-tools text-muted small pt-1">{{ rows|length }} test{{ 's' if rows|length != 1 }}{% if out %} &middot; {{ out }} out of range{% endif %}</div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table visit-table mb-0">
+            <thead>
+              <tr>
+                <th scope="col">Test</th>
+                <th scope="col">Result</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="col-bar d-none d-sm-table-cell">Where it falls</th>
+                <th scope="col" class="d-none d-md-table-cell">Range</th>
+                <th scope="col" class="d-none d-lg-table-cell">Previous</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              {% set r = row.result %}
+              <tr data-in-range="{{ 0 if row.status in ['high', 'low', 'abnormal'] else 1 }}">
+                <td>
+                  <a href="/result/{{ r.id }}" class="font-weight-bold">{{ r.lab.name if r.lab else 'Unknown test' }}</a>
+                  {% if r.lab %}<a href="/lab/{{ r.lab_id }}" class="small ml-1 no-print" aria-label="History of {{ r.lab.name }}" title="History"><i class="mdi mdi-chart-line" aria-hidden="true"></i></a>{% endif %}
+                  {% if r.lab_comment %}<div class="lab-comment text-muted">{{ r.lab_comment }}</div>{% endif %}
+                </td>
+                <td><span class="result-number">{% if r.result is not none %}{{ r.result|num }} <span class="small font-weight-normal">{{ row.unit }}</span>{% else %}{{ r.result_text or '—' }}{% endif %}</span>
+                  {% if row.scale %}<div class="d-sm-none" aria-hidden="true">{{ range_bar(row) }}</div>{% endif %}
+                  <div class="d-md-none small text-muted">{{ r.reference_range or '' }}</div></td>
+                <td class="text-nowrap">{{ status_badge(row.status) }} {{ detail_badges(r) }}</td>
+                <td class="col-bar d-none d-sm-table-cell">
+                  {{ range_bar(row) }}
+                </td>
+                <td class="d-none d-md-table-cell text-muted text-nowrap">{{ r.reference_range or '—' }}</td>
+                <td class="d-none d-lg-table-cell">{{ change_text(row) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const picker = document.getElementById('visitPicker');
+  if (picker) picker.addEventListener('change', () => { window.location.href = '/visits/' + picker.value; });
+  const only = document.getElementById('onlyOut');
+  if (!only) return;
+  let saved = false;
+  try { saved = localStorage.getItem('visitOnlyOut') === '1'; } catch (e) {}
+  only.checked = saved;
+  document.body.classList.toggle('only-out', saved);
+  only.addEventListener('change', () => {
+    document.body.classList.toggle('only-out', only.checked);
+    try { localStorage.setItem('visitOnlyOut', only.checked ? '1' : '0'); } catch (e) {}
+  });
+})();
+</script>
+{% endblock %}

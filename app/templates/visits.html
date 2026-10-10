@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+
+{% block title %}Visits - MyLabVault{% endblock %}
+
+{% block content %}
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="row mb-2">
+      <div class="col-sm-12">
+        <h1 class="m-0">
+          <i class="mdi mdi-calendar-text mr-2" aria-hidden="true"></i>
+          Visits
+        </h1>
+        <p class="text-muted mb-0">Each day results were collected. Open one to see everything from that draw.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="card">
+      <div class="card-body p-0">
+        {% if visits %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="visitsTable">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Results</th>
+                <th scope="col">Out of range</th>
+                <th scope="col" class="d-none d-md-table-cell">Panels</th>
+                <th scope="col" class="d-none d-lg-table-cell">Provider</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in visits %}
+              <tr>
+                <td><a href="/visits/{{ v.date.isoformat() }}" class="font-weight-bold text-nowrap">{{ v.date|long_date }}</a></td>
+                <td>{{ v.count }}</td>
+                <td>
+                  {% if v.out_of_range %}
+                    <span class="badge badge-status-out"><i class="mdi mdi-alert-circle-outline" aria-hidden="true"></i> {{ v.out_of_range }} out of range</span>
+                  {% else %}
+                    <span class="badge badge-status-normal">None</span>
+                  {% endif %}
+                </td>
+                <td class="d-none d-md-table-cell text-muted">{{ v.panels|join(', ') or '—' }}</td>
+                <td class="d-none d-lg-table-cell">{{ v.providers|join(', ') or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+          <i class="mdi mdi-flask-outline text-muted mb-3" style="font-size: 3rem;" aria-hidden="true"></i>
+          <h2 class="h5 text-muted">No results yet</h2>
+          <p class="text-muted">Import a PDF lab report or enter results by hand to get started.</p>
+          <a href="/import" class="btn btn-primary">Import a PDF</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

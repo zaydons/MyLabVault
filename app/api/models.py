@@ -9,6 +9,12 @@ from sqlalchemy.orm import relationship, Session
 
 Base = declarative_base()
 
+
+def _num(value) -> str:
+    """A number as written on a report: 150 rather than 150.0."""
+    value = float(value)
+    return str(int(value)) if value.is_integer() else str(value)
+
 class Panel(Base):
     """Lab test panel model."""
     __tablename__ = "panels"
@@ -346,25 +352,25 @@ class LabResult(Base):
             return self.ref_text
         if self.has_own_range:
             if self.ref_low is not None and self.ref_high is not None:
-                return f"{self.ref_low} - {self.ref_high}"
+                return f"{_num(self.ref_low)} - {_num(self.ref_high)}"
             if self.ref_low is not None:
-                return f"> {self.ref_low}"
-            return f"< {self.ref_high}"
+                return f"> {_num(self.ref_low)}"
+            return f"< {_num(self.ref_high)}"
         if not self.lab:
             return None
 
         # Handle different reference range types
         if self.lab.ref_type == "greater" and self.lab.ref_value is not None:
-            return f"> {self.lab.ref_value}"
+            return f"> {_num(self.lab.ref_value)}"
         elif self.lab.ref_type == "less" and self.lab.ref_value is not None:
-            return f"< {self.lab.ref_value}"
+            return f"< {_num(self.lab.ref_value)}"
         low, high = self.lab.ref_low, self.lab.ref_high
         if low is not None and high is not None:
-            return f"{low} - {high}"
+            return f"{_num(low)} - {_num(high)}"
         if low is not None:
-            return f"≥ {low}"
+            return f"≥ {_num(low)}"
         if high is not None:
-            return f"≤ {high}"
+            return f"≤ {_num(high)}"
         return None
 
     def get_reference_range(self) -> Optional[str]:

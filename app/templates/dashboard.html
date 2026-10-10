@@ -44,7 +44,7 @@
           <div class="card-body">
             <div class="summary-label">Latest draw</div>
             {% if last %}
-              <div class="summary-value" data-date="{{ last.date_collected.isoformat() }}"><span class="format-date">{{ last.date_collected.strftime('%m/%d/%Y') }}</span></div>
+              <div class="summary-value" data-date="{{ last.date_collected.isoformat() }}"><a href="/visits/{{ last.date_collected.date().isoformat() }}" class="format-date" title="See every result from this visit">{{ last.date_collected.strftime('%m/%d/%Y') }}</a></div>
               <div class="summary-detail">{{ dashboard_data.last_draw_count }} result{{ 's' if dashboard_data.last_draw_count != 1 }}{% if last.provider %} &middot; {{ last.provider.name }}{% endif %}</div>
             {% else %}
               <div class="summary-value">None yet</div>
