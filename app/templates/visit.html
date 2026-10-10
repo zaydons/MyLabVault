@@ -177,7 +177,9 @@
 <script>
 (function () {
   const picker = document.getElementById('visitPicker');
-  if (picker) picker.addEventListener('change', () => { window.location.href = '/visits/' + picker.value; });
+  // Addresses of the visits in the picker's order, so navigation never uses text read from the page
+  const visitUrls = {{ (visit.all_dates|map('string')|list if visit else [])|tojson }}.map(d => '/visits/' + d);
+  if (picker) picker.addEventListener('change', () => { window.location.href = visitUrls[picker.selectedIndex]; });
   const only = document.getElementById('onlyOut');
   if (!only) return;
   let saved = false;
