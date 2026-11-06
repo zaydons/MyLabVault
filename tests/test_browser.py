@@ -41,8 +41,9 @@ def server():
 def browser():
     with playwright_api.sync_playwright() as p:
         # The Claude Code cloud image ships Chromium here; elsewhere Playwright uses its own download
-        exe = "/opt/pw-browsers/chromium/chrome-linux/chrome"
-        b = p.chromium.launch(executable_path=exe) if os.path.exists(exe) and not os.getenv("CI") else p.chromium.launch()
+        exe = next((e for e in ("/opt/pw-browsers/chromium/chrome-linux/chrome", "/opt/pw-browsers/chromium")
+                    if os.path.isfile(e)), None)
+        b = p.chromium.launch(executable_path=exe) if exe and not os.getenv("CI") else p.chromium.launch()
         yield b
         b.close()
 
