@@ -13,7 +13,7 @@ alembic==1.16.4
 # PDF Processing
 pypdf==6.21.4
 pdfplumber==0.11.10
-reportlab==4.0.4
+reportlab==4.5.1
 
 # AI-assisted PDF parsing via Amazon Bedrock (optional; used only when AWS credentials are set)
 anthropic[bedrock]==1.11.0
