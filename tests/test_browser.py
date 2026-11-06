@@ -447,3 +447,43 @@ def test_visit_summary_vitals_and_medications(page, ai, tmp_path):
     names = {(m["name"], m["end_date"]) for m in api(page, "GET", "/api/medications/?patient_id=1")}
     assert ("Lisinopril", None) in names and ("Amlodipine", "2026-03-02") in names and not any(n == "Atorvastatin" for n, _ in names)
     assert len(api(page, "GET", "/api/vitals/?patient_id=1")) == 7
+
+
+def test_medication_delete_and_undo(page):
+    ready(page)
+    for body in ({"dose": "10 mg", "start_date": "2019-03-01", "end_date": "2020-06-30"},
+                 {"dose": "20 mg", "start_date": "2024-01-15", "reason": "Blood pressure", "notes": "Morning"}):
+        api(page, "POST", "/api/medications/", {"patient_id": 1, "name": "Lisinopril", "frequency": "once daily", **body})
+    api(page, "POST", "/api/medications/", {"patient_id": 1, "name": "Vitamin D", "kind": "supplement", "start_date": "2025-01-01"})
+    page.goto(page.base + "/medications", wait_until="networkidle")
+
+    # A medication with history deletes one dose, and says what stays
+    button = page.locator("#currentList .med-item", has_text="Lisinopril").locator("[data-action='delete']").first
+    assert button.text_content().strip() == "Delete this dose"
+    assert page.locator("#currentList .med-item", has_text="Vitamin D").locator("[data-action='delete']").text_content().strip() == "Delete"
+    button.click()
+    page.wait_for_selector("#confirmationModal.show")
+    text = page.text_content("#confirmationModalMessage")
+    assert "Only this dose is deleted" in text and "stay in its history" in text and "Stop instead" in text
+    page.click("#confirmationModalConfirmBtn")
+    page.wait_for_selector("#undoBar:not([hidden])")
+    assert "Deleted Lisinopril 20 mg" in page.text_content("#undoText")
+    assert page.evaluate("document.activeElement.id") == "undoDelete"
+    names = [(m["dose"], m["end_date"]) for m in api(page, "GET", "/api/medications/?patient_id=1") if m["name"] == "Lisinopril"]
+    assert names == [("10 mg", "2020-06-30")]  # the old dose is still there, now under Past
+    assert "Lisinopril" in page.text_content("#pastList")
+    axe_clean(page, ".content")
+
+    # Undo puts it back as it was
+    page.click("#undoDelete")
+    page.wait_for_function("() => document.getElementById('undoText').textContent.startsWith('Restored')")
+    assert page.is_hidden("#undoDelete")
+    back = [m for m in api(page, "GET", "/api/medications/?patient_id=1") if m["dose"] == "20 mg"]
+    assert len(back) == 1 and back[0]["start_date"] == "2024-01-15" and back[0]["end_date"] is None
+    assert back[0]["reason"] == "Blood pressure" and back[0]["notes"] == "Morning" and back[0]["frequency"] == "once daily"
+    assert "Lisinopril" in page.text_content("#currentList")
+
+    # The only record says so
+    page.locator("#currentList .med-item", has_text="Vitamin D").locator("[data-action='delete']").click()
+    page.wait_for_selector("#confirmationModal.show")
+    assert "only record of Vitamin D" in page.text_content("#confirmationModalMessage")

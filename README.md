@@ -43,6 +43,7 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 ### 💊 **Medications**
 - **Medications and supplements**: Record what each patient takes: name, dose, how often, how it's taken, start date, and optionally the stop date, reason, prescriber and notes. Supplements (vitamin D, biotin, ...) are tracked too and labelled as such
 - **Dose changes**: *Change dose* ends the current dose the day before and starts the new one, so each medication keeps its full dose history (e.g. 100 mg from Jan 5, then 140 mg from Jun 3)
+- **Delete with undo**: *Delete* removes one dose period (on a medication with history the button reads *Delete this dose*), and the confirmation says which doses stay in the history. After deleting, an *Undo* button puts the record back as it was. To keep a medication that ended in the history, use *Stop* rather than *Delete*
 - **Current and past**: The Medications page lists what's taken now (with the previous dose) and what was stopped (with how long it was taken); the dashboard shows the current ones
 - **From visit summaries**: Medications started, continued at a new dose or discontinued at a visit can be applied from the visit summary on the Import page (see *Visit summaries* above)
 - Charts with dose-change markers and a timeline are planned ([#71](https://github.com/zaydons/MyLabVault/issues/71), [#72](https://github.com/zaydons/MyLabVault/issues/72))
