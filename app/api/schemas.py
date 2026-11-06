@@ -220,6 +220,12 @@ class ManualPasteRequest(BaseModel):
     date_collected: Optional[str] = Field(None, max_length=10)
 
 
+class RecheckApply(BaseModel):
+    """Rows of an AI re-check to apply (their positions in the fresh reading)."""
+    indices: List[int] = Field(default_factory=list, max_length=500)
+    provider_id: Optional[int] = None  # for results being added; defaults to the import's provider
+
+
 class PDFImportConfirm(BaseModel):
     """PDF import confirmation schema. selected_tests are positions in the parsed report."""
     import_id: str

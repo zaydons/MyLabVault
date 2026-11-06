@@ -25,6 +25,7 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports and for visit summaries (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 - **Enter results by hand**: *Import → Enter by hand* uses the same review table for results from a visit without a PDF. Type each test (saved test names are suggested) or paste lines such as `Glucose  105  mg/dL  70-99` copied from a patient portal or spreadsheet. Rows are matched to your saved tests as you type, with the same unit warnings, "already saved" check, live High/Low status and summary as a report, so they never create copies of existing tests. Each card is one visit (one date and one provider), and you choose the panel for any new tests. Entries appear in the import history as *Entered by hand*
 - **Visit summaries (vitals and medications)**: With AI parsing on, upload the *Clinical Visit Summary* or *After Visit Summary* your doctor gives you after a visit (or a health summary). The AI reads its vital signs (blood pressure, temperature, pulse, respiratory rate, weight, height, oxygen saturation, blood glucose) and its medications along with any lab results. The review card lists the vitals to save on the visit date (ones already saved are left unticked) and compares each medication with the patient's list: a new one is added, a new dose becomes a dose change, a discontinued one is marked stopped, and anything already on the list as written needs no change. Nothing is saved until you import, and the summary afterwards lists each medication change. Saved vitals and medication changes are ordinary entries on the Vitals and Medications pages: deleting the import from the history removes its lab results but not those
+- **Re-check an import with AI**: For a report already imported, the robot button in the import history reads its PDF again with AI and compares that with what's saved from it: results that match, saved values the AI read differently (tick to correct them), and results on the report that aren't saved, whether never imported or deleted since (tick to add them back). Results saved but not found this time are listed and left alone. Nothing changes until you apply the ticked rows, and the original reading is kept
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
 ### 📊 **Dashboard, Visits and Charts**
@@ -177,6 +178,7 @@ MyLabVault/
 │   │       ├── cleanup.py        # Duplicate suggestions and merging
 │   │       ├── visits.py         # Results grouped by draw date, range-bar positions
 │   │       ├── visit_review.py   # Vitals and medication changes from visit summaries (review and saving)
+│   │       ├── recheck.py        # AI re-check of an imported report against its saved results
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
 │   ├── templates/                # Jinja2 pages and components
@@ -275,6 +277,8 @@ POST /api/pdf/upload           # Upload one PDF (add ?ai=true to use AI parsing)
 POST /api/pdf/bulk-upload      # Upload several PDFs
 POST /api/pdf/rescan-ai/{id}   # Re-parse a pending import with AI (keeps the built-in reading to compare)
 POST /api/pdf/{id}/switch-reading  # Switch a pending import between the built-in and AI readings
+POST /api/pdf/{id}/recheck     # Read an imported report again with AI and compare with what's saved (GET: the last re-check)
+POST /api/pdf/{id}/recheck/apply   # Correct saved results and add missing ones from the re-check ({"indices": [...]})
 GET  /api/pdf/review/{id}      # Review data for an earlier upload (rows, matches, issues)
 GET  /api/pdf/{id}/file        # The uploaded PDF
 POST /api/pdf/confirm          # Import selected rows (with optional edits and test choices)

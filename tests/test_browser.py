@@ -487,3 +487,28 @@ def test_medication_delete_and_undo(page):
     page.locator("#currentList .med-item", has_text="Vitamin D").locator("[data-action='delete']").click()
     page.wait_for_selector("#confirmationModal.show")
     assert "only record of Vitamin D" in page.text_content("#confirmationModalMessage")
+
+
+def test_recheck_imported_report(page, ai):
+    from test_recheck import AI_READING, REPORT
+    ready(page)
+    upload = page.request.post(page.base + "/api/pdf/upload", multipart={"file": {"name": "r.pdf", "mimeType": "application/pdf", "buffer": REPORT}})
+    iid = upload.json()["import_id"]
+    api(page, "POST", "/api/pdf/confirm", {"import_id": iid, "selected_tests": [0, 1], "provider_id": 1})  # Glucose left out
+    ai.reply = AI_READING
+    page.goto(page.base + "/import", wait_until="networkidle")
+    page.click("[aria-label='Re-check r.pdf with AI']")
+    page.wait_for_selector("#recheckTable")
+    assert "1 match · 1 different value · 2 not saved" in page.text_content("#recheckContent")
+    assert page.text_content("#recheckTable tbody tr:first-child").count("Different") == 1  # differences listed first
+    assert page.is_disabled("#recheckApply")
+    page.check("[aria-label='Correct Triglycerides from 210 to 201']", force=True)
+    page.check("[aria-label='Add Glucose 88']", force=True)
+    assert page.text_content("#recheckApply").strip() == "Apply 2 changes"
+    axe_clean(page, "#recheckModal .modal-content")
+    page.click("#recheckApply")
+    page.wait_for_selector("#recheckStatus .alert-success")
+    assert "Corrected 1 result and added 1 result" in page.text_content("#recheckStatus")
+    assert "3 matches · 0 different values · 1 not saved" in page.text_content("#recheckContent")
+    saved = {r["lab"]["name"]: r["result"] for r in api(page, "GET", "/api/results/")["results"]}
+    assert saved == {"Cholesterol, Total": 185, "Triglycerides": 201, "Glucose": 88}
