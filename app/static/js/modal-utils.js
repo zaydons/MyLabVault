@@ -3,6 +3,25 @@
  * Handles PDF viewing, downloads, and other modal operations
  */
 
+// Bootstrap ignores modal('hide') while a dialog is still opening, which leaves it open when a save
+// finishes before the opening animation does. Close it as soon as it has finished opening instead.
+(function () {
+    const modal = $.fn.modal;
+    if (!modal || modal.deferredHide) return;
+    $.fn.modal = function (action) {
+        if (action === 'hide') {
+            this.filter(function () {
+                const instance = $(this).data('bs.modal');
+                return instance && instance._isShown && instance._isTransitioning;
+            }).each(function () {
+                $(this).one('shown.bs.modal', () => $(this).modal('hide'));
+            });
+        }
+        return modal.apply(this, arguments);
+    };
+    Object.assign($.fn.modal, modal, { deferredHide: true });
+})();
+
 // Global variable to store current download URL
 let currentPDFDownloadUrl = '';
 
