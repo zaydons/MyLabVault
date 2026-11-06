@@ -523,3 +523,12 @@ def test_recheck_imported_report(page, ai):
     saved = {r["lab"]["name"]: r["result"] for r in api(page, "GET", "/api/results/")["results"]}
     assert saved == {"Cholesterol, Total": 185, "Triglycerides": 201, "Glucose": 88}
     page.wait_for_function("() => document.getElementById('historyTable').textContent.includes('AI re-check')")  # Last scanned
+
+
+def test_dialog_closes_when_asked_while_opening(page):
+    # A save can finish before a dialog's opening animation does; Bootstrap alone ignores that close
+    ready(page)
+    page.goto(page.base + "/vaccines", wait_until="networkidle")
+    page.evaluate("$('#vaccineModal').modal('show'); $('#vaccineModal').modal('hide')")
+    modal_closed(page, "#vaccineModal")
+    assert page.is_hidden("#vaccineModal")
