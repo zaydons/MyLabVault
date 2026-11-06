@@ -74,14 +74,22 @@ def ready(page):
     api(page, "POST", "/api/providers/", {"name": "Dr A"})
 
 
+def modal_closed(page, selector):
+    """Wait until a dialog has finished closing, backdrop included; Bootstrap ignores opening another before then."""
+    page.wait_for_selector(selector, state="hidden")
+    page.wait_for_function("() => !document.body.classList.contains('modal-open')")
+
+
 def axe_clean(page, selector):
     assert AXE.exists(), f"axe-core not found at {AXE}; run: npm install --prefix tests/.node axe-core@4.10.2"
     page.add_script_tag(path=str(AXE))
+    # Switch themes instantly, so the scan doesn't have to wait for colour transitions
+    page.add_style_tag(content="*, *::before, *::after { transition: none !important; animation: none !important; }")
     problems = {}
     for dark in (False, True):
         page.evaluate("d => document.body.classList.toggle('dark-mode', d)", dark)
         page.mouse.move(0, 0)
-        page.wait_for_timeout(400)  # let colour transitions finish
+        page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
         violations = page.evaluate(f"async () => (await axe.run(document.querySelector({selector!r}))).violations"
                                    ".map(v => v.id + ': ' + v.nodes.map(n => n.target.join(' ')).slice(0, 3).join(' | '))")
         if violations:
@@ -325,7 +333,7 @@ def test_medications(page):
     page.fill("#medStart", "2026-01-05")
     page.select_option("#medProvider", "1")
     page.click("#medForm button[type=submit]")
-    page.wait_for_selector("#medModal", state="hidden")
+    modal_closed(page, "#medModal")
     page.wait_for_selector(".med-item")
 
     page.click("[aria-label='Change dose of Testosterone cypionate']")
@@ -333,7 +341,7 @@ def test_medications(page):
     page.fill("#doseNew", "140 mg")
     page.fill("#doseDate", "2026-06-03")
     page.click("#doseForm button[type=submit]")
-    page.wait_for_selector("#doseModal", state="hidden")
+    modal_closed(page, "#doseModal")
     page.wait_for_function("() => /140 mg/.test(document.getElementById('currentList').textContent)")
     item = page.text_content("#currentList")
     assert "was 100 mg" in item and "prescribed by Dr A" in item and "Dose history (2 doses)" in item
@@ -367,7 +375,7 @@ def test_vaccines(page):
     page.fill("#vaccineNextDue", "2026-03-10")  # passed: overdue
     page.select_option("#vaccineProvider", "1")
     page.click("#vaccineForm button[type=submit]")
-    page.wait_for_selector("#vaccineModal", state="hidden")
+    modal_closed(page, "#vaccineModal")
     page.wait_for_selector(".vaccine-item")
     assert "Overdue" in page.text_content("#dueList")
 
@@ -378,7 +386,7 @@ def test_vaccines(page):
     assert page.input_value("#vaccineDate") == "2026-03-10"
     page.fill("#vaccineDose", "2 of 2")
     page.click("#vaccineForm button[type=submit]")
-    page.wait_for_selector("#vaccineModal", state="hidden")
+    modal_closed(page, "#vaccineModal")
     page.wait_for_function("() => /2 doses/.test(document.getElementById('recordList').textContent)")
     assert page.is_hidden("#dueCard")  # the latest dose has no next dose due
     axe_clean(page, ".content")
@@ -468,7 +476,9 @@ def test_medication_delete_and_undo(page):
     page.click("#confirmationModalConfirmBtn")
     page.wait_for_selector("#undoBar:not([hidden])")
     assert "Deleted Lisinopril 20 mg" in page.text_content("#undoText")
-    assert page.evaluate("document.activeElement.id") == "undoDelete"
+    # Focus moves to Undo once the confirmation has finished closing
+    modal_closed(page, "#confirmationModal")
+    page.wait_for_function("() => document.activeElement.id === 'undoDelete'", timeout=2000)
     names = [(m["dose"], m["end_date"]) for m in api(page, "GET", "/api/medications/?patient_id=1") if m["name"] == "Lisinopril"]
     assert names == [("10 mg", "2020-06-30")]  # the old dose is still there, now under Past
     assert "Lisinopril" in page.text_content("#pastList")

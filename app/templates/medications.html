@@ -441,7 +441,10 @@ async function deleteMed(med) {
         $id('undoDelete').hidden = false;
         $id('undoBar').hidden = false;
         await load();
-        $id('undoDelete').focus();
+        // The confirmation keeps focus until it has finished closing, so move focus after that
+        const focusUndo = () => $id('undoDelete').focus();
+        const confirmation = $('#confirmationModal');
+        if (confirmation.is(':visible')) confirmation.one('hidden.bs.modal', focusUndo); else focusUndo();
     } catch (error) { showNotification(error.message, 'error', 'Delete failed'); }
 }
 

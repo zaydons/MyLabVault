@@ -251,7 +251,7 @@ ERROR   app        Unhandled error in POST /api/pdf/upload (error ID 5c2e9f10) r
 - **Settings**: `MYLABVAULT_LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`; default `INFO`) and `MYLABVAULT_LOG_FORMAT=json` for one JSON object per line (for Loki, Graylog and similar).
 
 ### Tests
-API and browser tests live in `tests/` and run on every pull request; an image is only published when they pass.
+API and browser tests live in `tests/`. Pull requests run the fast tests, plus the browser and accessibility tests when they change pages, scripts, styles or routes; an image is only published when the fast tests pass on `main` (see `tests/README.md`).
 
 ```bash
 pip install -r app/requirements.txt -r requirements-dev.txt
