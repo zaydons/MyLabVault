@@ -108,6 +108,7 @@
               <th scope="col">Results saved</th>
               <th scope="col">Collected</th>
               <th scope="col">Uploaded</th>
+              <th scope="col">Last scanned</th>
               <th scope="col"><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -223,6 +224,13 @@ function initializeHistoryTable() {
             { data: 'created_at', responsivePriority: 6, render: (data, type) => {
                 if (type !== 'display') return data || '';
                 return data ? `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>` : '';
+            } },
+            { data: 'last_scanned', responsivePriority: 7, render: (data, type, row) => {
+                if (type !== 'display') return data || '';
+                if (!data) return '<span class="text-muted">—</span>';
+                const reader = { standard: 'Built-in reader', ai: 'AI', ai_recheck: 'AI re-check' }[row.last_reader] || '';
+                return `<span class="format-date" data-iso-date="${escapeHtml(data)}">${escapeHtml(new Date(data).toLocaleDateString())}</span>`
+                    + (reader ? `<div class="small text-muted">${reader}</div>` : '');
             } },
             { data: null, orderable: false, searchable: false, responsivePriority: 3, className: 'text-nowrap', render: (data, type, row) => {
                 const id = Number(row.id);

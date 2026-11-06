@@ -154,6 +154,30 @@ async def _parse_with_ai(content: bytes, db: Session, patient_id: int = 1) -> di
 
 
 async def _parse_content(content: bytes, db: Session, use_ai: bool = False, patient_id: int = 1) -> dict:
+    """Read a PDF (see _read_content) and note when, for the import history's "Last scanned"."""
+    parsed_data = await _read_content(content, db, use_ai, patient_id)
+    parsed_data['read_at'] = datetime.now().isoformat(timespec='seconds')
+    return parsed_data
+
+
+def _last_scanned(import_log: PDFImportLog) -> dict:
+    """When the PDF was last read and by which reader: an upload or re-scan, or an AI re-check."""
+    if not import_log.file_path:
+        return {"last_scanned": None, "last_reader": None}  # entered by hand: nothing to scan
+    try:
+        parsed = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
+    except ValueError:
+        parsed = {}
+    created = import_log.created_at.isoformat(timespec='seconds') if import_log.created_at else None
+    reads = [(parsed.get('read_at') or created, parsed.get('parser') or 'standard')]
+    if (parsed.get('recheck') or {}).get('checked_at'):
+        reads.append((parsed['recheck']['checked_at'], 'ai_recheck'))
+    # Latest first; on a tie, the later event (a re-check comes after the reading it checks)
+    when, reader = max((r for r in reads if r[0]), key=lambda r: (r[0], reads.index(r)), default=(None, None))
+    return {"last_scanned": when, "last_reader": reader}
+
+
+async def _read_content(content: bytes, db: Session, use_ai: bool = False, patient_id: int = 1) -> dict:
     """Parse a PDF, falling back to the AI parser (when enabled) if the standard parser finds nothing."""
     if use_ai:
         try:
@@ -1191,6 +1215,7 @@ async def get_import_history(db: Session = Depends(get_db)):
         item.pop("parsed_data", None)  # large, and the page loads it per import when needed
         item["results_saved"] = saved.get(str(import_log.id), 0)
         item["has_file"] = bool(import_log.file_path)  # results entered by hand have no PDF
+        item.update(_last_scanned(import_log))
         history.append(item)
     return history
 

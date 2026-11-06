@@ -77,3 +77,19 @@ def test_only_saved_and_hand_entries(client, ai):
         "provider_id": 1, "manual_date": "2026-02-01"}]}).json()["data"]["files"][0]
     r = client.post(f"/api/pdf/{manual['import_id']}/recheck")
     assert r.status_code == 400 and "no PDF" in r.json()["detail"]
+
+
+def test_last_scanned_in_history(client, ai):
+    iid = imported(client)
+    entry = lambda: next(h for h in client.get("/api/pdf/history").json() if str(h["id"]) == str(iid))  # noqa: E731
+    first = entry()
+    assert first["last_reader"] == "standard" and first["last_scanned"]
+    ai.reply = AI_READING
+    client.post(f"/api/pdf/{iid}/recheck")
+    after = entry()
+    assert after["last_reader"] == "ai_recheck" and after["last_scanned"] >= first["last_scanned"]
+    manual = client.post("/api/pdf/batch-confirm", json={"individual_confirmations": [{
+        "key": 1, "manual": {"tests": [{"name": "Glucose", "result": "90", "unit": "mg/dL"}]}, "selected_tests": [0],
+        "provider_id": 1, "manual_date": "2026-02-01"}]}).json()["data"]["files"][0]
+    hand = next(h for h in client.get("/api/pdf/history").json() if h["id"] == manual["import_id"])
+    assert hand["last_scanned"] is None and hand["last_reader"] is None
