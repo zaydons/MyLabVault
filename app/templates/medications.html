@@ -20,6 +20,13 @@
 
 <section class="content">
   <div class="container-fluid">
+    <!-- After a delete: what was deleted, with Undo (stays until dismissed or the next delete) -->
+    <div class="alert alert-secondary d-flex flex-wrap align-items-center" id="undoBar" role="status" hidden>
+      <i class="mdi mdi-delete-outline mr-2" aria-hidden="true"></i>
+      <span class="mr-auto" id="undoText"></span>
+      <button type="button" class="btn btn-sm btn-primary ml-2" id="undoDelete"><i class="mdi mdi-undo mr-1" aria-hidden="true"></i>Undo</button>
+      <button type="button" class="close ml-2" id="undoDismiss" aria-label="Dismiss"><span aria-hidden="true">&times;</span></button>
+    </div>
     <div class="card">
       <div class="card-header"><h2 class="card-title" id="currentTitle">Current</h2></div>
       <div class="card-body" id="currentList" aria-labelledby="currentTitle"><p class="text-muted mb-0">Loading…</p></div>
@@ -220,13 +227,17 @@ function groups() {
         .sort((a, b) => a[0].name.localeCompare(b[0].name));
 }
 
+const sameMed = m => meds.filter(o => o.name.trim().toLowerCase() === m.name.trim().toLowerCase());
+const periodText = m => `${m.dose ? `${m.dose} ` : ''}(${showDate(m.start_date)} – ${m.end_date ? showDate(m.end_date) : 'now'})`;
+
 function actions(m) {
     const name = esc(m.name);
+    const hasHistory = sameMed(m).length > 1;
     return `<div class="btn-group-wrap mt-2">
         ${m.current ? `<button type="button" class="btn btn-outline-primary btn-sm mr-1 mb-1" data-action="dose" data-id="${m.id}" aria-label="Change dose of ${name}">Change dose</button>
         <button type="button" class="btn btn-outline-secondary btn-sm mr-1 mb-1" data-action="stop" data-id="${m.id}" aria-label="Stop ${name}">Stop</button>` : ''}
         <button type="button" class="btn btn-outline-secondary btn-sm mr-1 mb-1" data-action="edit" data-id="${m.id}" aria-label="Edit ${name}${m.dose ? ` ${esc(m.dose)}` : ''}">Edit</button>
-        <button type="button" class="btn btn-outline-danger btn-sm mb-1" data-action="delete" data-id="${m.id}" aria-label="Delete ${name}${m.dose ? ` ${esc(m.dose)}` : ''}">Delete</button>
+        <button type="button" class="btn btn-outline-danger btn-sm mb-1" data-action="delete" data-id="${m.id}" aria-label="Delete ${name} ${esc(periodText(m))}">${hasHistory ? 'Delete this dose' : 'Delete'}</button>
     </div>`;
 }
 
@@ -407,14 +418,51 @@ async function saveStop(event) {
     } catch (error) { showError(box, error.message); }
 }
 
+// The record most recently deleted, so Undo can add it back as it was
+let lastDeleted = null;
+
+function deleteMessage(med) {
+    const others = sameMed(med).filter(o => o.id !== med.id);
+    const what = `Delete ${med.name} ${periodText(med)}?`;
+    const rest = others.length
+        ? `Only this dose is deleted. The other ${others.length === 1 ? 'dose' : `${others.length} doses`} of ${med.name} (${others.map(o => periodText(o)).join('; ')}) stay in its history.`
+        : `This is the only record of ${med.name}, so it will no longer be listed.`;
+    const stop = med.current ? ' If it was taken and has ended, use Stop instead to keep it in the history.' : '';
+    return `${what} ${rest}${stop} You can undo this right after.`;
+}
+
 async function deleteMed(med) {
-    const ok = await showConfirmation(`Delete ${med.name}${med.dose ? ` ${med.dose}` : ''} from ${showDate(med.start_date)}? To keep it in the history, use Stop instead.`,
-        'Delete medication', 'Delete', 'Cancel');
+    const ok = await showConfirmation(deleteMessage(med), 'Delete medication', 'Delete', 'Cancel');
     if (!ok) return;
     try {
         await send(`/api/medications/${encodeURIComponent(med.id)}`, 'DELETE');
+        lastDeleted = med;
+        $id('undoText').textContent = `Deleted ${med.name} ${periodText(med)}.`;
+        $id('undoDelete').hidden = false;
+        $id('undoBar').hidden = false;
         await load();
+        $id('undoDelete').focus();
     } catch (error) { showNotification(error.message, 'error', 'Delete failed'); }
+}
+
+async function undoDelete() {
+    if (!lastDeleted) return;
+    const m = lastDeleted;
+    const body = { patient_id: m.patient_id, name: m.name, kind: m.kind, dose: m.dose, frequency: m.frequency, route: m.route,
+                   start_date: m.start_date, end_date: m.end_date, reason: m.reason, provider_id: m.provider_id, notes: m.notes };
+    try {
+        await send('/api/medications/', 'POST', body);
+        lastDeleted = null;
+        await load();
+        $id('undoText').textContent = `Restored ${m.name} ${periodText(m)}.`;
+        $id('undoDelete').hidden = true;
+        $id('undoDismiss').focus();
+    } catch (error) { showNotification(error.message, 'error', 'Undo failed'); }
+}
+
+function dismissUndo() {
+    lastDeleted = null;
+    $id('undoBar').hidden = true;
 }
 
 $(document).ready(async function () {
@@ -423,6 +471,8 @@ $(document).ready(async function () {
     $id('medForm').addEventListener('submit', saveMed);
     $id('doseForm').addEventListener('submit', saveDose);
     $id('stopForm').addEventListener('submit', saveStop);
+    $id('undoDelete').addEventListener('click', undoDelete);
+    $id('undoDismiss').addEventListener('click', dismissUndo);
     document.querySelector('.content').addEventListener('click', e => {
         const button = e.target.closest('[data-action]');
         if (!button) return;
