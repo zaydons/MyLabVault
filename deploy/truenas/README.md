@@ -32,6 +32,7 @@ MyLabVault can use Claude through Amazon Bedrock to read lab reports the built-i
 
 When it's on:
 - Uploads that the built-in parser can't read, or where it finds no tests, are retried with AI automatically.
+- Imported reports get a **Re-check with AI** button (robot icon) in the import history, to compare a fresh AI reading with the saved results and correct or re-add them.
 - Each uploaded file gets a **Re-scan with AI** button on the import screen. Afterwards a comparison shows what the AI found that the built-in reader didn't (and vice versa), and you can switch back to the built-in results.
 - Results parsed by AI are marked with an **AI** badge. You still review and confirm them before anything is saved.
 - **Visit summaries** from your doctor are read too: their vitals and medication changes appear on the review card, to save on the Vitals page and apply to the Medications page. The names of the patient's current medications are sent along so the AI can match them.

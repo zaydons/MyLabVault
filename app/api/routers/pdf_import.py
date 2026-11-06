@@ -16,12 +16,12 @@ from werkzeug.utils import secure_filename
 from ..database import get_db
 from .. import paths
 from ..models import PDFImportLog, LabResult, Lab, Provider, Patient, Panel, Unit, ImportTemplate
-from ..schemas import APIResponse, ManualPasteRequest, ManualReviewRequest, ManualRow, PDFImportPreview, PDFImportConfirm
+from ..schemas import APIResponse, ManualPasteRequest, ManualReviewRequest, ManualRow, PDFImportPreview, PDFImportConfirm, RecheckApply
 from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
 from ..logging_setup import audit
-from ..services import visit_review
+from ..services import recheck, visit_review
 from ..services.import_review import (apply_edit, compare_parses, find_lab, find_lab_in_unit, manual_test, normalize_unit,
                                       parse_pasted, review_rows, row_date, row_status)
 import logging
@@ -409,6 +409,83 @@ async def switch_reading(import_id: int, request: Request, db: Session = Depends
     _save_parse(import_log, other, db)
     audit("import.reading_switched", import_id=import_log.id, now_using=other.get('parser', 'standard'))
     return _build_preview(other, import_log, import_log.filename, db, _patient_id(request))
+
+
+# ---------- re-checking an import with saved results ----------
+
+def _recheck_import(import_id: int, db: Session) -> PDFImportLog:
+    import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+    if not import_log:
+        raise HTTPException(status_code=404, detail="Import not found")
+    if not import_log.file_path:
+        raise HTTPException(status_code=400, detail="Results entered by hand have no PDF to re-check")
+    return import_log
+
+
+@router.post("/{import_id}/recheck")
+async def recheck_with_ai(import_id: int, request: Request, db: Session = Depends(get_db)):
+    """Read an import's PDF again with AI and compare it with the results saved from it.
+
+    The original reading is kept; the fresh one is stored for applying corrections. Nothing is saved.
+    """
+    if not ai_parser.is_enabled():
+        raise HTTPException(status_code=400, detail="AI parsing is not enabled")
+    import_log = _recheck_import(import_id, db)
+    file_path = Path(import_log.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    patient_id = _patient_id(request)
+    try:
+        reading = await _parse_with_ai(file_path.read_bytes(), db, patient_id)
+    except AIParseError as e:
+        raise HTTPException(status_code=400, detail=f"AI parsing failed: {e}")
+    reading['checked_at'] = datetime.now().isoformat(timespec='seconds')
+    parsed_data = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
+    parsed_data['recheck'] = reading
+    import_log.parsed_data = json.dumps(parsed_data)
+    db.commit()
+    comparison = recheck.compare_with_saved(import_log, reading, patient_id, db)
+    audit("import.rechecked", import_id=import_log.id, **comparison['summary'])
+    return comparison
+
+
+@router.get("/{import_id}/recheck")
+def get_recheck(import_id: int, request: Request, db: Session = Depends(get_db)):
+    """The last AI re-check of an import, compared with what's saved now."""
+    import_log = _recheck_import(import_id, db)
+    reading = (json.loads(import_log.parsed_data) if import_log.parsed_data else {}).get('recheck')
+    if not reading:
+        raise HTTPException(status_code=404, detail="This import hasn't been re-checked with AI")
+    return recheck.compare_with_saved(import_log, reading, _patient_id(request), db)
+
+
+@router.post("/{import_id}/recheck/apply")
+def apply_recheck(import_id: int, body: RecheckApply, request: Request, db: Session = Depends(get_db)):
+    """Correct saved results to the AI re-check's values and add results it found that aren't saved.
+
+    Example: POST /api/pdf/12/recheck/apply {"indices": [3, 7], "provider_id": 2}
+    """
+    import_log = _recheck_import(import_id, db)
+    reading = (json.loads(import_log.parsed_data) if import_log.parsed_data else {}).get('recheck')
+    if not reading:
+        raise HTTPException(status_code=400, detail="Re-check this import with AI first")
+    provider_id = body.provider_id or import_log.provider_id
+    if provider_id and not db.query(Provider).filter_by(id=provider_id).first():
+        raise HTTPException(status_code=400, detail="Provider not found")
+    try:
+        changes = recheck.apply_recheck(import_log, reading, body.indices, provider_id, _patient_id(request), _create_lab, db)
+        if changes['added']:
+            import_log.status = "completed"
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    from ..utils.cache import api_cache
+    api_cache.invalidate_pattern('results')
+    api_cache.invalidate_pattern('dashboard')
+    audit("import.recheck_applied", import_id=import_log.id, updated=len(changes['updated']), added=len(changes['added']))
+    return APIResponse(success=True, message=f"Corrected {len(changes['updated'])} and added {len(changes['added'])} results",
+                       data={**changes, "comparison": recheck.compare_with_saved(import_log, reading, _patient_id(request), db)})
 
 
 @router.post("/bulk-upload")

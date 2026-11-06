@@ -136,6 +136,27 @@
   </div>
 </div>
 
+<!-- Re-check an imported report with AI -->
+<div class="modal fade" id="recheckModal" tabindex="-1" role="dialog" aria-labelledby="recheckModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="recheckModalLabel">Re-check with AI</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="recheckError" role="alert"></div>
+        <div id="recheckStatus" role="status" aria-live="polite"></div>
+        <div id="recheckContent"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="recheckApply" disabled><i class="mdi mdi-check-all mr-1" aria-hidden="true"></i><span>Nothing selected</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- New provider -->
 <div class="modal fade" id="newProviderModal" tabindex="-1" role="dialog" aria-labelledby="newProviderModalLabel" aria-hidden="true">
   <div class="modal-dialog" role="document">
@@ -212,6 +233,9 @@ function initializeHistoryTable() {
                 }
                 if (row.has_file) {
                     html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportPdf(${id})" aria-label="View PDF ${name}" title="View PDF"><i class="mdi mdi-file-pdf-box" aria-hidden="true"></i></button>`;
+                }
+                if (aiEnabled && row.has_file && row.results_saved > 0) {
+                    html += `<button type="button" class="btn btn-outline-primary btn-sm mr-1" onclick="openRecheck(${id})" aria-label="Re-check ${name} with AI" title="Re-check with AI"><i class="mdi mdi-robot-outline" aria-hidden="true"></i></button>`;
                 }
                 html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportDetails(${id})" aria-label="Details for ${name}" title="Details"><i class="mdi mdi-information-outline" aria-hidden="true"></i></button>`;
                 const locked = row.results_saved > 0;
@@ -313,9 +337,113 @@ async function formatAllDatesOnPage() {
     }
 }
 
+// ---------- re-check an imported report with AI ----------
+let aiEnabled = false;
+let recheckId = null;
+const RECHECK_STATUS = {
+    different: '<span class="badge badge-status-out"><i class="mdi mdi-swap-horizontal" aria-hidden="true"></i> Different</span>',
+    missing: '<span class="badge badge-status-info"><i class="mdi mdi-plus-circle-outline" aria-hidden="true"></i> Not saved</span>',
+    same: '<span class="badge badge-status-normal"><i class="mdi mdi-check" aria-hidden="true"></i> Matches</span>',
+};
+const RECHECK_ORDER = { different: 0, missing: 1, same: 2 };
+const recheckPlural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const isoDate = iso => iso ? `<span class="format-date" data-iso-date="${escapeHtml(iso)}">${escapeHtml(iso)}</span>` : '<span class="text-muted">Unknown</span>';
+
+function renderRecheck(c) {
+    const s = c.summary;
+    const rows = c.rows.slice().sort((a, b) => RECHECK_ORDER[a.status] - RECHECK_ORDER[b.status] || a.name.localeCompare(b.name));
+    const lead = s.different || s.missing
+        ? 'Tick the corrections to make and the results to add, then apply them. Check each one against the PDF first.'
+        : 'Everything the AI read matches what\'s saved.';
+    document.getElementById('recheckContent').innerHTML = `
+        <p class="mb-2"><strong>${escapeHtml(c.filename)}</strong> · collected ${isoDate(c.date_collected)} ·
+            <a href="/api/pdf/${Number(c.import_id)}/file" target="_blank" rel="noopener">Open the PDF</a></p>
+        <p class="mb-2">${s.same} ${s.same === 1 ? 'match' : 'matches'} · ${recheckPlural(s.different, 'different value')} · ${s.missing} not saved${s.only_saved ? ` · ${s.only_saved} saved but not found this time` : ''}</p>
+        <p class="small text-muted">${lead}</p>
+        ${rows.length ? `<div class="table-responsive"><table class="table table-sm mb-0" id="recheckTable">
+            <caption class="sr-only">What the AI read compared with the saved results</caption>
+            <thead><tr><th scope="col" style="width: 2.5rem;"><span class="sr-only">Apply</span></th><th scope="col">Test</th><th scope="col">Date</th>
+                <th scope="col">Saved</th><th scope="col">AI read</th><th scope="col">Range</th><th scope="col">Status</th></tr></thead>
+            <tbody>${rows.map(r => {
+                const can = r.status === 'different' || r.status === 'missing';
+                const label = r.status === 'different' ? `Correct ${r.name} from ${r.saved_value} to ${r.ai_value}` : `Add ${r.name} ${r.ai_value}`;
+                return `<tr>
+                    <td>${can ? `<div class="custom-control custom-checkbox"><input type="checkbox" class="custom-control-input recheck-check" id="recheck-${r.index}" data-index="${r.index}" aria-label="${escapeHtml(label)}"><label class="custom-control-label" for="recheck-${r.index}"></label></div>` : ''}</td>
+                    <td>${escapeHtml(r.name)}${r.lab_name && r.lab_name !== r.name ? `<div class="small text-muted">Saved as ${escapeHtml(r.lab_name)}</div>` : ''}${r.status === 'missing' && !r.lab_name ? '<div class="small text-muted">New test</div>' : ''}</td>
+                    <td>${isoDate(r.date)}</td>
+                    <td>${r.saved_value !== null ? `${escapeHtml(r.saved_value)} ${escapeHtml(r.unit)}` : '<span class="text-muted">—</span>'}</td>
+                    <td class="${r.status === 'different' ? 'font-weight-bold' : ''}">${escapeHtml(r.ai_value)} ${escapeHtml(r.unit)}</td>
+                    <td>${escapeHtml(r.reference_range)}</td>
+                    <td>${RECHECK_STATUS[r.status]}</td></tr>`;
+            }).join('')}</tbody></table></div>` : '<p class="text-muted">The AI found no results in this PDF.</p>'}
+        ${c.only_saved.length ? `<h3 class="h6 mt-3">Saved, but not found this time</h3>
+            <p class="small text-muted mb-1">These stay as they are. The AI may have missed them; check the PDF.</p>
+            <ul class="mb-0">${c.only_saved.map(o => `<li>${escapeHtml(o.name)}: ${escapeHtml(o.value)} ${escapeHtml(o.unit)} (${isoDate(o.date)})</li>`).join('')}</ul>` : ''}`;
+    updateRecheckButton();
+    formatAllDatesOnPage();
+}
+
+function updateRecheckButton() {
+    const n = document.querySelectorAll('.recheck-check:checked').length;
+    const button = document.getElementById('recheckApply');
+    button.disabled = n === 0;
+    button.querySelector('span').textContent = n ? `Apply ${recheckPlural(n, 'change')}` : 'Nothing selected';
+}
+
+function recheckError(text) {
+    const box = document.getElementById('recheckError');
+    box.textContent = text || '';
+    box.classList.toggle('d-none', !text);
+}
+
+async function openRecheck(importId) {
+    recheckId = importId;
+    recheckError('');
+    document.getElementById('recheckContent').innerHTML = '';
+    document.getElementById('recheckStatus').innerHTML = '<p class="mb-0"><i class="mdi mdi-loading mdi-spin mr-1" aria-hidden="true"></i>Reading the PDF with AI. This can take up to a minute…</p>';
+    updateRecheckButton();
+    $('#recheckModal').modal('show');
+    try {
+        const response = await fetch(`/api/pdf/${importId}/recheck`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The re-check failed.');
+        document.getElementById('recheckStatus').innerHTML = '';
+        renderRecheck(data);
+    } catch (error) {
+        document.getElementById('recheckStatus').innerHTML = '';
+        recheckError(error.message);
+    }
+}
+
+async function applyRecheck() {
+    const indices = Array.from(document.querySelectorAll('.recheck-check:checked')).map(b => parseInt(b.dataset.index, 10));
+    if (!indices.length || recheckId === null) return;
+    const button = document.getElementById('recheckApply');
+    button.disabled = true;
+    try {
+        const response = await fetch(`/api/pdf/${recheckId}/recheck/apply`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ indices }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The changes couldn\'t be applied.');
+        const d = data.data;
+        const done = [d.updated.length ? `Corrected ${recheckPlural(d.updated.length, 'result')}` : '',
+                      d.added.length ? `added ${recheckPlural(d.added.length, 'result')}` : ''].filter(Boolean).join(' and ');
+        document.getElementById('recheckStatus').innerHTML = `<div class="alert alert-success py-2"><i class="mdi mdi-check-circle mr-1" aria-hidden="true"></i>${escapeHtml(done.charAt(0).toUpperCase() + done.slice(1))}.</div>`;
+        renderRecheck(d.comparison);
+        refreshHistory();
+    } catch (error) {
+        recheckError(error.message);
+        updateRecheckButton();
+    }
+}
+
 $(document).ready(async function () {
+    try { aiEnabled = !!(await (await fetch('/api/pdf/ai-status')).json()).enabled; } catch (e) { aiEnabled = false; }
     initializeHistoryTable();
     refreshHistory();
+    document.getElementById('recheckContent').addEventListener('change', e => { if (e.target.classList.contains('recheck-check')) updateRecheckButton(); });
+    document.getElementById('recheckApply').addEventListener('click', applyRecheck);
     await PdfReview.init();
 });
 </script>
