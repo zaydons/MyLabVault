@@ -11,7 +11,7 @@ import logging
 import os
 import time
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import anthropic
 from dateutil import parser as date_parser
@@ -65,8 +65,50 @@ class ExtractedTest(BaseModel):
     )
 
 
+VitalKind = Literal["weight", "height", "blood_pressure", "heart_rate", "temperature", "oxygen_saturation",
+                    "respiratory_rate", "blood_glucose"]
+
+
+class ExtractedVital(BaseModel):
+    """One vital sign measurement, e.g. from a visit summary's Vitals section."""
+    kind: VitalKind = Field(description="What was measured")
+    value: float = Field(description="The measurement; for blood pressure, the systolic (top) number")
+    value2: Optional[float] = Field(None, description="Blood pressure only: the diastolic (bottom) number")
+    unit: Optional[str] = Field(
+        None,
+        description="Unit, as one of: lb, kg, in, cm, mmHg, bpm, °F, °C, %, breaths/min, mg/dL, mmol/L. Convert "
+                    "pounds and ounces to decimal pounds (286 lb 6.4 oz is 286.4 lb), feet and inches to inches "
+                    "(5' 8\" is 68 in) and grams to kg. Null if no unit is printed",
+    )
+    date: Optional[str] = Field(
+        None,
+        description="Date measured as YYYY-MM-DD when the document lists vitals from several dates; null when "
+                    "they were measured at the visit the document is about",
+    )
+
+
+class ExtractedMedication(BaseModel):
+    """One medication or supplement listed on a visit or health summary."""
+    name: str = Field(description="Medication name as printed, e.g. 'Sertraline HCL'")
+    matched_medication: Optional[str] = Field(
+        None,
+        description="If this is the same medication as one in the provided list of the patient's current "
+                    "medications (same drug, even if written differently, e.g. a salt name added), that name "
+                    "copied exactly; otherwise null",
+    )
+    dose: Optional[str] = Field(None, description="Strength per dose as printed, e.g. '25 mg'")
+    frequency: Optional[str] = Field(None, description="How often, in plain words, e.g. 'once daily', 'twice daily', 'weekly', 'as needed'")
+    route: Optional[str] = Field(None, description="How it's taken, e.g. 'by mouth', 'injection', 'topical'")
+    action: Literal["new", "continue", "stop", "listed"] = Field(
+        description="What the document says happened at this visit: 'new' (started or prescribed), 'continue' "
+                    "(keep taking), 'stop' (discontinued), or 'listed' when it's only listed without saying",
+    )
+    prescriber: Optional[str] = Field(None, description="Prescribing provider's name, if printed")
+    reason: Optional[str] = Field(None, description="What it's for, if printed (e.g. a diagnosis name), without codes")
+
+
 class ExtractedReport(BaseModel):
-    """Structured content of one lab report."""
+    """Structured content of one lab report, visit summary or health summary."""
     collection_date: Optional[str] = Field(
         None,
         description="Date the specimen was COLLECTED, as YYYY-MM-DD. Not the date of birth, "
@@ -79,11 +121,19 @@ class ExtractedReport(BaseModel):
         description="Whether the report states the patient was fasting (true) or not fasting (false); "
                     "null if the report does not say",
     )
-    tests: List[ExtractedTest]
+    visit_date: Optional[str] = Field(
+        None,
+        description="For a visit summary (after-visit or clinical visit summary): the date of the visit, as "
+                    "YYYY-MM-DD. Null for other documents",
+    )
+    tests: List[ExtractedTest] = Field(default_factory=list, description="Lab test results; empty if there are none")
+    vitals: List[ExtractedVital] = Field(default_factory=list, description="Vital signs; empty if there are none")
+    medications: List[ExtractedMedication] = Field(
+        default_factory=list, description="Medications and supplements listed; empty if there are none")
 
 
-SYSTEM_PROMPT = """You extract lab test results from medical lab reports into structured data for a \
-personal health records app. The person uploading the report is the patient or their caregiver.
+SYSTEM_PROMPT = """You extract lab test results, vital signs and medications from medical documents (lab \
+reports, visit summaries, health summaries) into structured data for a personal health records app. The person uploading the report is the patient or their caregiver.
 
 Extract every test result in the report, including qualitative ones. Report values exactly as \
 printed; do not convert units or infer missing values. Skip calculated commentary, interpretive \
@@ -97,7 +147,15 @@ collection_date and include every result from every date.
 For matched_lab, compare each test with the list of existing test names provided. Fill it in only \
 when it is clearly the same measurement under a different spelling or wording (for example \
 "Cholesterol, Total" and "Total Cholesterol"). Different tests that share a word, such as \
-"Hemoglobin" and "Hemoglobin A1c", are not matches."""
+"Hemoglobin" and "Hemoglobin A1c", are not matches.
+
+Documents can also be visit summaries or health summaries with vital signs and medications, and \
+may have no lab results at all. Record vital signs (blood pressure, temperature, pulse, respiratory \
+rate, weight, height, oxygen saturation, blood glucose) in vitals; skip derived values such as BMI, \
+ideal body weight, weight in a second unit or weight change. Record every medication in medications, \
+with the action the document gives it at this visit: medications under headings such as "New" or \
+"Started" are new, "Continue" or "Current" are continue, "Discontinue" or "Stopped" are stop. For \
+matched_medication, compare with the patient's current medications provided."""
 
 
 def _inline_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -184,6 +242,48 @@ def _to_parser_test(test: ExtractedTest, known_names: Dict[str, str]) -> Dict[st
     }
 
 
+# Units the AI may print for each vital type, mapped to the app's unit and a factor to it
+_VITAL_UNITS = {
+    "weight": {"lb": ("lb", 1), "lbs": ("lb", 1), "pound": ("lb", 1), "pounds": ("lb", 1), "kg": ("kg", 1), "g": ("kg", 0.001)},
+    "height": {"in": ("in", 1), "inch": ("in", 1), "inches": ("in", 1), '"': ("in", 1), "cm": ("cm", 1), "m": ("cm", 100)},
+    "blood_pressure": {"mmhg": ("mmHg", 1), "mm[hg]": ("mmHg", 1), "mm hg": ("mmHg", 1)},
+    "heart_rate": {"bpm": ("bpm", 1), "/min": ("bpm", 1), "beats/min": ("bpm", 1)},
+    "temperature": {"°f": ("°F", 1), "f": ("°F", 1), "degf": ("°F", 1), "[degf]": ("°F", 1),
+                    "°c": ("°C", 1), "c": ("°C", 1), "degc": ("°C", 1), "cel": ("°C", 1)},
+    "oxygen_saturation": {"%": ("%", 1)},
+    "respiratory_rate": {"breaths/min": ("breaths/min", 1), "/min": ("breaths/min", 1), "br/min": ("breaths/min", 1)},
+    "blood_glucose": {"mg/dl": ("mg/dL", 1), "mmol/l": ("mmol/L", 1)},
+}
+
+
+def _to_vital(vital: ExtractedVital) -> Optional[Dict[str, Any]]:
+    """A vital in the app's units, or None when it can't be saved (unknown unit, missing number)."""
+    printed = (vital.unit or "").strip().lower()
+    if printed:
+        unit, factor = _VITAL_UNITS[vital.kind].get(printed, (None, None))
+        if unit is None:
+            return None
+    else:
+        unit, factor = next(iter(_VITAL_UNITS[vital.kind].values()))
+    value = vital.value * factor
+    value2 = vital.value2 * factor if vital.value2 is not None else None
+    if value <= 0 or (vital.kind == "blood_pressure" and not value2):
+        return None
+    return {"vital_type": vital.kind, "value": round(value, 3), "value2": round(value2, 3) if value2 else None,
+            "unit": unit, "date": _normalize_date(vital.date)}
+
+
+def _to_medication(med: ExtractedMedication, known: Dict[str, str]) -> Dict[str, Any]:
+    clean = lambda text: (text or "").strip() or None  # noqa: E731
+    return {
+        "name": med.name.strip(),
+        # Only trust a match that names one of the patient's current medications
+        "matched_medication": known.get(med.matched_medication.strip().lower()) if med.matched_medication else None,
+        "dose": clean(med.dose), "frequency": clean(med.frequency), "route": clean(med.route),
+        "action": med.action, "prescriber": clean(med.prescriber), "reason": clean(med.reason),
+    }
+
+
 async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str, tool_description: str,
                     schema, input_schema: Optional[Dict[str, Any]] = None, max_tokens: int = 16000):
     """Ask Claude (through Bedrock) to answer by calling one tool, and return its input validated as `schema`.
@@ -259,8 +359,9 @@ async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str,
     raise AIParseError("The AI service returned an invalid result")
 
 
-async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[str, Any]:
-    """Parse a lab report PDF with Claude.
+async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
+                            current_medications: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Parse a lab report, visit summary or health summary PDF with Claude.
 
     Returns a dict in the same shape as PDFParser.parse_pdf_content.
     Raises AIParseError when AI parsing is disabled or fails.
@@ -274,6 +375,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
 
     known_names = {name.strip().lower(): name for name in known_lab_names if name}
     names_list = "\n".join(f"- {name}" for name in sorted(known_names.values())) or "(none yet)"
+    known_meds = {name.strip().lower(): name for name in (current_medications or []) if name}
+    meds_list = "\n".join(f"- {name}" for name in sorted(known_meds.values())) or "(none recorded)"
 
     messages = [{
         "role": "user",
@@ -289,7 +392,9 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
             {
                 "type": "text",
                 "text": f"Existing test names in the app:\n{names_list}\n\n"
-                        f"Extract the results from this lab report and record them with the {TOOL_NAME} tool.",
+                        f"The patient's current medications in the app:\n{meds_list}\n\n"
+                        f"Extract the lab results, vital signs and medications from this document and record "
+                        f"them with the {TOOL_NAME} tool.",
             },
         ],
     }]
@@ -297,7 +402,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
         system=SYSTEM_PROMPT,
         messages=messages,
         tool_name=TOOL_NAME,
-        tool_description="Record every test result extracted from the lab report.",
+        tool_description="Record every lab result, vital sign and medication extracted from the document.",
         schema=ExtractedReport,
         input_schema=TOOL_INPUT_SCHEMA,
     )
@@ -305,7 +410,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
 
     tests = [_to_parser_test(t, known_names) for t in report.tests if t.name and t.name.strip()]
     row_dates = sorted({t["date_collected"] for t in tests if t["date_collected"]})
-    report_date = _normalize_date(report.collection_date)
+    report_date = _normalize_date(report.collection_date) or _normalize_date(report.visit_date)
     if not report_date and row_dates and all(t["date_collected"] for t in tests):
         report_date = row_dates[-1]
     return {
@@ -314,6 +419,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str]) -> Dict[
         "lab_company": report.lab_company,
         "fasting": report.fasting,
         "tests": tests,
+        "vitals": [v for v in (_to_vital(v) for v in report.vitals) if v],
+        "medications": [_to_medication(m, known_meds) for m in report.medications if m.name and m.name.strip()],
         "ordered_panels": [],
         "panels": [],
         "errors": [],

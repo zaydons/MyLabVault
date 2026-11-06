@@ -184,6 +184,9 @@ class PDFImportPreview(BaseModel):
     fasting: Optional[bool] = None
     # Built-in parser vs AI, when both have read this report
     comparison: Optional[Dict[str, Any]] = None
+    # Vital signs and medications read from a visit or health summary (AI reader)
+    vitals: List[Dict[str, Any]] = []
+    medications: List[Dict[str, Any]] = []
 
 
 class PDFTestEdit(BaseModel):
@@ -225,6 +228,8 @@ class PDFImportConfirm(BaseModel):
     patient_id: int = 1
     manual_date: Optional[str] = None
     edits: Dict[str, PDFTestEdit] = {}  # keyed by the row's position, as a string
+    selected_vitals: List[int] = []  # positions in the document's vitals
+    selected_medications: List[int] = []  # positions in the document's medications
 
 
 class PaginatedLabResults(BaseModel):

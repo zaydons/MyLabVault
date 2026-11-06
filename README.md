@@ -22,8 +22,9 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **No copies of existing tests**: A result is never saved as a new copy of a test that already exists in that unit, including when several reports are imported together
 - **Several reports at once**: Each file uploads and is read separately with its own progress, and a summary afterwards lists what was saved and what's out of range
 - **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history. A re-uploaded report with nothing saved from it yet is read again, so improvements to the reader apply (an earlier AI reading is kept to compare with)
-- **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
+- **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports and for visit summaries (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 - **Enter results by hand**: *Import → Enter by hand* uses the same review table for results from a visit without a PDF. Type each test (saved test names are suggested) or paste lines such as `Glucose  105  mg/dL  70-99` copied from a patient portal or spreadsheet. Rows are matched to your saved tests as you type, with the same unit warnings, "already saved" check, live High/Low status and summary as a report, so they never create copies of existing tests. Each card is one visit (one date and one provider), and you choose the panel for any new tests. Entries appear in the import history as *Entered by hand*
+- **Visit summaries (vitals and medications)**: With AI parsing on, upload the *Clinical Visit Summary* or *After Visit Summary* your doctor gives you after a visit (or a health summary). The AI reads its vital signs (blood pressure, temperature, pulse, respiratory rate, weight, height, oxygen saturation, blood glucose) and its medications along with any lab results. The review card lists the vitals to save on the visit date (ones already saved are left unticked) and compares each medication with the patient's list: a new one is added, a new dose becomes a dose change, a discontinued one is marked stopped, and anything already on the list as written needs no change. Nothing is saved until you import, and the summary afterwards lists each medication change. Saved vitals and medication changes are ordinary entries on the Vitals and Medications pages: deleting the import from the history removes its lab results but not those
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
 
 ### 📊 **Dashboard, Visits and Charts**
@@ -34,7 +35,7 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Plain-language descriptions**: Each test's page explains what it measures (built in for about 70 common tests, or write your own)
 
 ### ❤️ **Vitals**
-- **Record vitals**: Log weight, blood pressure and heart rate in one form from the dashboard or the Vitals page
+- **Record vitals**: Log weight, blood pressure and heart rate in one form from the dashboard or the Vitals page, or import them from a visit summary (see *Visit summaries* above)
 - **Blood pressure categories**: Readings are labelled Normal, Elevated, Stage 1, Stage 2 or Hypertensive crisis (AHA adult categories)
 - **More measurements**: Height, temperature, oxygen saturation, respiratory rate and blood glucose
 - **Your units**: Choose lb or kg, feet and inches or cm, °F or °C and mg/dL or mmol/L (or *US units* / *Metric units* in one click) in *Settings → General*. Every reading, chart, change and typical range is shown in those units and new readings default to them; readings keep the unit they were entered in, so switching never alters your data
@@ -43,7 +44,8 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Medications and supplements**: Record what each patient takes: name, dose, how often, how it's taken, start date, and optionally the stop date, reason, prescriber and notes. Supplements (vitamin D, biotin, ...) are tracked too and labelled as such
 - **Dose changes**: *Change dose* ends the current dose the day before and starts the new one, so each medication keeps its full dose history (e.g. 100 mg from Jan 5, then 140 mg from Jun 3)
 - **Current and past**: The Medications page lists what's taken now (with the previous dose) and what was stopped (with how long it was taken); the dashboard shows the current ones
-- Charts with dose-change markers, a timeline and importing medications from health summaries are planned ([#71](https://github.com/zaydons/MyLabVault/issues/71), [#72](https://github.com/zaydons/MyLabVault/issues/72), [#73](https://github.com/zaydons/MyLabVault/issues/73))
+- **From visit summaries**: Medications started, continued at a new dose or discontinued at a visit can be applied from the visit summary on the Import page (see *Visit summaries* above)
+- Charts with dose-change markers and a timeline are planned ([#71](https://github.com/zaydons/MyLabVault/issues/71), [#72](https://github.com/zaydons/MyLabVault/issues/72))
 
 ### 💉 **Vaccines**
 - **Vaccine record**: Record each dose a patient was given: the vaccine (common ones are suggested), date, dose (e.g. 1 of 2, booster), manufacturer or brand, lot number, where it was given, who gave it (a provider or a clinic or pharmacy) and notes
@@ -173,6 +175,7 @@ MyLabVault/
 │   │       ├── import_review.py  # Review rows, test matching, reader comparison, pasted rows
 │   │       ├── cleanup.py        # Duplicate suggestions and merging
 │   │       ├── visits.py         # Results grouped by draw date, range-bar positions
+│   │       ├── visit_review.py   # Vitals and medication changes from visit summaries (review and saving)
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
 │   ├── templates/                # Jinja2 pages and components

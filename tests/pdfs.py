@@ -1,6 +1,7 @@
 """Generated PDFs for tests. Real lab reports hold personal data and must never be committed."""
 
 import io
+import re
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -70,4 +71,27 @@ def health_summary(rows, tag=""):
     c.drawString(34, y - 22, "None recorded." + (f" {tag}" if tag else ""))
     c.showPage()
     c.save()
+    return buffer.getvalue()
+
+
+def visit_summary(visit="03/02/2026", vitals='BP: 128/82 T: 98.4 Pulse: 72 Resp: 16 Wt: 180lb 8.00oz Ht: 70" BMI: 25.9 O2SatR: 97',
+                  new=(("Lisinopril", "10 mg, 1 by mouth every day"),), keep=(("Metformin", "500 mg, 1 by mouth twice a day"),),
+                  stop=(("Amlodipine", "5 mg, 1 by mouth every day"),), tag=""):
+    """A clinic's "Clinical Visit Summary": visit header, a one-line Vitals section with bold labels,
+    and Medications split into New, Continue and Discontinue. Names and values are made up."""
+    buffer = io.BytesIO()
+    styles = getSampleStyleSheet()
+    body, heading = styles["Normal"], styles["Heading3"]
+    bold = re.sub(r"(\b[A-Za-z0-9]+):", r"<b>\1</b>:", vitals)
+    story = [Paragraph("EXAMPLE FAMILY CLINIC", styles["Title"]), Paragraph("Clinical Visit Summary of Today's Visit", styles["Heading2"]),
+             Paragraph("Pat Example", body), Paragraph(f"{visit}  Visit with Alex Doe, PA-C", body),
+             Paragraph("Today's Diagnosis", heading), Paragraph("Essential hypertension (I10)", body),
+             Paragraph("Vitals", heading), Paragraph(bold, body), Paragraph("Medications", heading)]
+    for label, meds in (("New", new), ("Continue", keep), ("Discontinue", stop)):
+        if meds:
+            story.append(Paragraph(label, body))
+            story.append(Paragraph("&nbsp;&nbsp;Alex Doe, PA-C", body))
+            story += [Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;{name} : {how}", body) for name, how in meds]
+    story += [Paragraph("Follow Up", heading), Paragraph("3 months." + (f" {tag}" if tag else ""), body)]
+    SimpleDocTemplate(buffer).build(story)
     return buffer.getvalue()

@@ -416,3 +416,34 @@ def test_visit_page(page):
     page.wait_for_url("**/visits/2025-10-13")
     page.goto(page.base + "/visits", wait_until="networkidle")
     axe_clean(page, ".content")
+
+
+def test_visit_summary_vitals_and_medications(page, ai, tmp_path):
+    from test_visit_summary import AI_READING
+    ready(page)
+    api(page, "POST", "/api/medications/", {"patient_id": 1, "name": "Amlodipine", "dose": "5 mg", "start_date": "2025-01-01"})
+    ai.reply = AI_READING
+    summary = tmp_path / "visit.pdf"
+    summary.write_bytes(pdfs.visit_summary(tag="browser"))
+    page.goto(page.base + "/import", wait_until="networkidle")
+    page.set_input_files("#fileInput", str(summary))
+    page.wait_for_selector(".vitals-table")
+    assert "7 vitals, 5 medications found" in page.text_content("#uploadList")
+    assert page.locator(".vital-check:checked").count() == 7
+    # Stopping a medication that isn't on the list does nothing, so it can't be ticked
+    assert page.is_disabled("[aria-label='No change: Zolpidem']")
+    assert page.is_checked("[aria-label='Mark stopped: Amlodipine']") and page.is_checked("[aria-label='Add to your list: Lisinopril']")
+    page.uncheck("[aria-label='Add to your list: Atorvastatin']", force=True)
+    key = page.get_attribute(".review-card", "data-key")
+    assert page.input_value(f"#date-{key}") == "2026-03-02" and "Visit date" in page.text_content(f"label[for='date-{key}']")
+    assert page.text_content("#importButton").strip() == "Import 10 items"
+    axe_clean(page, ".review-card")
+
+    page.select_option(f"#provider-{key}", "1")
+    page.click("#importButton")
+    page.wait_for_selector("#importSummary:not([hidden])")
+    summary_text = page.text_content("#importSummary")
+    assert "7 vitals" in summary_text and "3 medication changes" in summary_text and "Stopped" in summary_text
+    names = {(m["name"], m["end_date"]) for m in api(page, "GET", "/api/medications/?patient_id=1")}
+    assert ("Lisinopril", None) in names and ("Amlodipine", "2026-03-02") in names and not any(n == "Atorvastatin" for n, _ in names)
+    assert len(api(page, "GET", "/api/vitals/?patient_id=1")) == 7
