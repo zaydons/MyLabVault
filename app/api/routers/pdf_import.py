@@ -21,6 +21,7 @@ from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
 from ..logging_setup import audit
+from ..services import visit_review
 from ..services.import_review import (apply_edit, compare_parses, find_lab, find_lab_in_unit, manual_test, normalize_unit,
                                       parse_pasted, review_rows, row_date, row_status)
 import logging
@@ -43,13 +44,14 @@ _NAME_NOISE = {
 def _name_tokens(name: str) -> List[str]:
     """Normalize a person's name to lowercase tokens without titles, credentials or initials."""
     name = name.strip()
-    # "Smith, Jane MD" -> "Jane MD Smith"
+    words = lambda text: re.findall(r"[a-z][a-z'\-]*", text.lower())  # noqa: E731
+    is_noise = lambda token: token.replace('-', '').replace("'", '') in _NAME_NOISE  # noqa: E731
+    # "Smith, Jane MD" -> "Jane MD Smith"; "Jane Smith, PA-C" stays as it is
     if name.count(',') == 1:
         last, rest = name.split(',')
-        if last.strip() and rest.strip():
+        if last.strip() and rest.strip() and not all(is_noise(t) for t in words(rest)):
             name = f"{rest} {last}"
-    tokens = re.findall(r"[a-z][a-z'\-]*", name.lower())
-    return [t for t in tokens if t not in _NAME_NOISE and len(t) > 1]
+    return [t for t in words(name) if not is_noise(t) and len(t) > 1]
 
 
 def _match_provider(physician: Optional[str], db: Session) -> Optional[Provider]:
@@ -88,7 +90,21 @@ def _imported_indices(import_log: PDFImportLog, db: Session) -> set:
     return indices
 
 
-def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session) -> PDFImportPreview:
+def _patient_id(request: Optional[Request]) -> int:
+    """The patient selected in the browser (pages keep it in a cookie)."""
+    try:
+        return int(request.cookies.get("selectedPatientId", "1")) if request else 1
+    except (ValueError, TypeError):
+        return 1
+
+
+def _anything_saved(import_log: PDFImportLog, parsed_data: dict) -> bool:
+    """Results, vitals or medications from this import have been saved."""
+    return bool(import_log.tests_imported or parsed_data.get('saved_vitals') or parsed_data.get('saved_medications'))
+
+
+def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session,
+                   patient_id: int = 1) -> PDFImportPreview:
     """Match parsed tests and provider against the database and build the review data."""
     rows = review_rows(parsed_data.get('tests', []), db, _imported_indices(import_log, db), parsed_data.get('date_collected'),
                        typed=parsed_data.get('parser') == 'manual')
@@ -107,6 +123,8 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
         import_status=import_log.status,
         fasting=parsed_data.get('fasting') if isinstance(parsed_data.get('fasting'), bool) else None,
         comparison=compare_parses(parsed_data, parsed_data['other_parse'], db) if parsed_data.get('other_parse') else None,
+        vitals=visit_review.vital_rows(parsed_data, patient_id, db),
+        medications=visit_review.medication_rows(parsed_data, patient_id, db),
     )
 
 
@@ -127,17 +145,19 @@ def _report_details(test: dict, parsed_data: dict) -> dict:
     }
 
 
-async def _parse_with_ai(content: bytes, db: Session) -> dict:
-    """Parse with the AI parser, passing existing test names so results map onto them."""
+async def _parse_with_ai(content: bytes, db: Session, patient_id: int = 1) -> dict:
+    """Parse with the AI parser, passing existing test names and the patient's current medications so
+    what it reads maps onto them."""
     known_lab_names = [name for (name,) in db.query(Lab.name).all()]
-    return await ai_parser.parse_pdf_with_ai(content, known_lab_names)
+    medications = [m.name for m in visit_review.current_medications(patient_id, db)]
+    return await ai_parser.parse_pdf_with_ai(content, known_lab_names, medications)
 
 
-async def _parse_content(content: bytes, db: Session, use_ai: bool = False) -> dict:
+async def _parse_content(content: bytes, db: Session, use_ai: bool = False, patient_id: int = 1) -> dict:
     """Parse a PDF, falling back to the AI parser (when enabled) if the standard parser finds nothing."""
     if use_ai:
         try:
-            return await _parse_with_ai(content, db)
+            return await _parse_with_ai(content, db, patient_id)
         except AIParseError as e:
             raise HTTPException(status_code=400, detail=f"AI parsing failed: {e}")
 
@@ -148,7 +168,7 @@ async def _parse_content(content: bytes, db: Session, use_ai: bool = False) -> d
             raise
         logger.info("Standard parser failed, retrying with AI parser")
         try:
-            return await _parse_with_ai(content, db)
+            return await _parse_with_ai(content, db, patient_id)
         except AIParseError as e:
             logger.warning(f"AI parser fallback failed: {e}")
         # Report the standard parser's error, not the fallback's
@@ -157,7 +177,7 @@ async def _parse_content(content: bytes, db: Session, use_ai: bool = False) -> d
     if not parsed_data.get('tests') and ai_parser.is_enabled():
         logger.info("Standard parser found no tests, retrying with AI parser")
         try:
-            return await _parse_with_ai(content, db)
+            return await _parse_with_ai(content, db, patient_id)
         except AIParseError as e:
             logger.warning(f"AI parser fallback failed: {e}")
     return parsed_data
@@ -172,6 +192,7 @@ def get_ai_status():
 
 @router.post("/upload", response_model=PDFImportPreview)
 async def upload_pdf(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     ai: bool = False
@@ -202,11 +223,12 @@ async def upload_pdf(
 
         # Check for duplicate imports
         existing_import = db.query(PDFImportLog).filter_by(file_hash=file_hash).first()
-        if existing_import and not existing_import.tests_imported:
+        patient_id = _patient_id(request)
+        previous = json.loads(existing_import.parsed_data) if existing_import and existing_import.parsed_data else {}
+        if existing_import and not _anything_saved(existing_import, previous):
             # Nothing saved from it yet: read it again, so improvements to the readers since the
             # first upload apply. An earlier AI reading is kept to compare with and switch back to.
-            previous = json.loads(existing_import.parsed_data) if existing_import.parsed_data else {}
-            parsed_data = await _parse_content(content, db, use_ai=ai)
+            parsed_data = await _parse_content(content, db, use_ai=ai, patient_id=patient_id)
             if previous.get('parser') == 'ai' and parsed_data.get('parser') != 'ai':
                 previous.pop('other_parse', None)
                 parsed_data['other_parse'] = previous
@@ -220,7 +242,7 @@ async def upload_pdf(
             _save_parse(existing_import, parsed_data, db)
             audit("import.reread", import_id=existing_import.id, parser=parsed_data.get('parser', 'standard'),
                   tests=len(parsed_data.get('tests', [])))
-            return _build_preview(parsed_data, existing_import, existing_import.filename, db)
+            return _build_preview(parsed_data, existing_import, existing_import.filename, db, patient_id)
         if existing_import:
             return PDFImportPreview(
                 filename=file.filename,
@@ -246,7 +268,7 @@ async def upload_pdf(
             f.write(content)
 
         # Parse PDF (AI parser when requested, or as a fallback when enabled)
-        parsed_data = await _parse_content(content, db, use_ai=ai)
+        parsed_data = await _parse_content(content, db, use_ai=ai, patient_id=patient_id)
 
         # Create import log with cached parsed data
         import_log = PDFImportLog(
@@ -264,7 +286,7 @@ async def upload_pdf(
         audit("import.uploaded", import_id=import_log.id, parser=parsed_data.get('parser', 'standard'),
               tests=len(parsed_data.get('tests', [])), size_kb=len(content) // 1024)
 
-        return _build_preview(parsed_data, import_log, file.filename, db)
+        return _build_preview(parsed_data, import_log, file.filename, db, patient_id)
 
     except HTTPException:
         raise
@@ -287,14 +309,14 @@ async def upload_pdf(
         raise HTTPException(status_code=500, detail="Unable to process PDF. This may not be a compatible lab report format.")
 
 @router.get("/review/{import_id}", response_model=PDFImportPreview)
-def get_import_review(import_id: int, db: Session = Depends(get_db)):
+def get_import_review(import_id: int, request: Request, db: Session = Depends(get_db)):
     """Review data for an earlier upload, to finish importing it (rows already saved are marked)."""
     import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
     if not import_log:
         raise HTTPException(status_code=404, detail="Import not found")
     if not import_log.parsed_data:
         raise HTTPException(status_code=400, detail="This import has no parsed results to review")
-    return _build_preview(json.loads(import_log.parsed_data), import_log, import_log.filename, db)
+    return _build_preview(json.loads(import_log.parsed_data), import_log, import_log.filename, db, _patient_id(request))
 
 
 @router.get("/{import_id}/file")
@@ -316,7 +338,7 @@ def get_import_file(import_id: int, download: bool = False, db: Session = Depend
 
 
 @router.post("/rescan-ai/{import_id}", response_model=PDFImportPreview)
-async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
+async def rescan_with_ai(import_id: int, request: Request, db: Session = Depends(get_db)):
     """Re-parse a pending import's PDF with the AI parser and replace its cached results."""
     if not ai_parser.is_enabled():
         raise HTTPException(status_code=400, detail="AI parsing is not enabled")
@@ -324,7 +346,8 @@ async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
     import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
     if not import_log:
         raise HTTPException(status_code=404, detail="Import not found")
-    if import_log.tests_imported:
+    current = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
+    if _anything_saved(import_log, current):
         raise HTTPException(status_code=400, detail="Tests from this import have already been saved; it can no longer be re-scanned")
 
     file_path = Path(import_log.file_path)
@@ -332,15 +355,15 @@ async def rescan_with_ai(import_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="PDF file not found")
     content = file_path.read_bytes()
 
-    current = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
-    parsed_data = await _parse_content(content, db, use_ai=True)
+    patient_id = _patient_id(request)
+    parsed_data = await _parse_content(content, db, use_ai=True, patient_id=patient_id)
     # Keep the built-in parser's reading so the two can be compared and the user can switch back
     parsed_data['other_parse'] = await _standard_reading(current, content)
     _save_parse(import_log, parsed_data, db)
     audit("import.rescanned", import_id=import_log.id, tests=len(parsed_data.get('tests', [])),
           built_in_tests=len(parsed_data['other_parse'].get('tests', [])))
 
-    return _build_preview(parsed_data, import_log, import_log.filename, db)
+    return _build_preview(parsed_data, import_log, import_log.filename, db, patient_id)
 
 
 async def _standard_reading(current: dict, content: bytes) -> dict:
@@ -370,7 +393,7 @@ def _save_parse(import_log: PDFImportLog, parsed_data: dict, db: Session) -> Non
 
 
 @router.post("/{import_id}/switch-reading", response_model=PDFImportPreview)
-async def switch_reading(import_id: int, db: Session = Depends(get_db)):
+async def switch_reading(import_id: int, request: Request, db: Session = Depends(get_db)):
     """Swap between the built-in parser's and the AI's reading of a pending import."""
     import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
     if not import_log:
@@ -379,13 +402,13 @@ async def switch_reading(import_id: int, db: Session = Depends(get_db)):
     other = parsed_data.pop('other_parse', None)
     if not other:
         raise HTTPException(status_code=400, detail="This report has only been read one way")
-    if import_log.tests_imported:
+    if _anything_saved(import_log, parsed_data):
         # Saved results are tied to row positions in the reading they came from
         raise HTTPException(status_code=400, detail="Tests from this import have already been saved; the reading can no longer be switched")
     other['other_parse'] = parsed_data
     _save_parse(import_log, other, db)
     audit("import.reading_switched", import_id=import_log.id, now_using=other.get('parser', 'standard'))
-    return _build_preview(other, import_log, import_log.filename, db)
+    return _build_preview(other, import_log, import_log.filename, db, _patient_id(request))
 
 
 @router.post("/bulk-upload")
@@ -586,6 +609,8 @@ async def confirm_batch_import(
                 patient_id=confirmation.get("patient_id") or global_settings.get("patient_id") or cookie_patient_id,
                 manual_date=confirmation.get("manual_date") or global_settings.get("manual_date"),
                 edits=confirmation.get("edits") or {},
+                selected_vitals=confirmation.get("selected_vitals") or [],
+                selected_medications=confirmation.get("selected_medications") or [],
             )
             result = await confirm_pdf_import(request, merged, db)
             files.append({**result.data, "key": confirmation.get("key")})
@@ -767,6 +792,16 @@ async def confirm_pdf_import(
             report_date = report_date or _collection_date(confirmation, import_log)
             collected = report_date
         rows.append((index, test, edit, collected))
+    # Vitals without their own date, and medication changes, happen on the visit date
+    wants_visit_day = confirmation.selected_medications or any(
+        not ((parsed_data.get('vitals') or [])[i] if 0 <= i < len(parsed_data.get('vitals') or []) else {}).get('date')
+        for i in confirmation.selected_vitals)
+    visit_day = None
+    if wants_visit_day:
+        try:
+            visit_day = (report_date or _collection_date(confirmation, import_log)).date()
+        except HTTPException:
+            problems.append("enter the visit date to save its vitals and medication changes")
     if problems:
         raise HTTPException(status_code=400, detail=f"{import_log.filename}: " + "; ".join(problems))
 
@@ -810,6 +845,12 @@ async def confirm_pdf_import(
             saved.append(result)
 
         db.flush()
+        source_note = f"From {import_log.filename}"
+        vitals = visit_review.save_vitals(parsed_data, confirmation.selected_vitals, visit_day, patient_id, source_note, db)
+        medication_changes = visit_review.save_medications(
+            parsed_data, confirmation.selected_medications, visit_day, patient_id,
+            lambda name: _match_provider(name, db), confirmation.provider_id, source_note, db)
+        import_log.parsed_data = json.dumps(parsed_data)
         import_log.tests_imported = len(already) + len(saved)
         import_log.tests_skipped = max(len(parsed_tests) - import_log.tests_imported, 0)
         import_log.provider_id = confirmation.provider_id
@@ -821,11 +862,12 @@ async def confirm_pdf_import(
         raise HTTPException(status_code=500, detail=f"Saving results from {import_log.filename} failed.") from e
     audit("import.confirmed", import_id=import_log.id, source="manual" if manual else "pdf", saved=len(saved), new_tests=len(created),
           dates=len({r.date_collected.date() for r in saved}), provider_id=confirmation.provider_id,
-          patient_id=patient_id)
+          patient_id=patient_id, vitals=len(vitals), medication_changes=len(medication_changes))
 
     from ..utils.cache import api_cache
     api_cache.invalidate_pattern('results')
     api_cache.invalidate_pattern('dashboard')
+    api_cache.invalidate_pattern('vitals')
 
     results = [{
         "lab_id": r.lab_id,
@@ -834,17 +876,21 @@ async def confirm_pdf_import(
         "unit": r.lab.unit.name if r.lab.unit else "",
         "status": r.status,
     } for r in saved]
-    dates = sorted({r.date_collected.date().isoformat() for r in saved})
+    dates = sorted({r.date_collected.date().isoformat() for r in saved} | {v.measured_at.date().isoformat() for v in vitals})
+    extra = [f"{len(vitals)} vital{'s' if len(vitals) != 1 else ''}"] if vitals else []
+    extra += [f"{len(medication_changes)} medication change{'s' if len(medication_changes) != 1 else ''}"] if medication_changes else []
     return APIResponse(
         success=True,
         message=(f"Saved {len(saved)} results entered by hand" if manual
-                 else f"Imported {len(saved)} results from {import_log.filename}"),
+                 else f"Imported {len(saved)} results" + "".join(f", {e}" for e in extra) + f" from {import_log.filename}"),
         data={
             "import_id": import_log.id,
             "filename": import_log.filename,
             "date_collected": dates[-1] if dates else None,
             "dates": dates,
             "imported_count": len(saved),
+            "vitals_count": len(vitals),
+            "medication_changes": medication_changes,
             "skipped_count": len(parsed_tests) - len(saved) - len(already),
             "results": results,
             "out_of_range": [r for r in results if r["status"] in ("high", "low", "abnormal")],
