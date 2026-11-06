@@ -74,3 +74,8 @@ def test_logging(client, caplog):
     assert "api.change method=PUT route=/api/providers/{provider_id}" in text
     assert "GET /api/pdf/review/{import_id} 404" in text
     assert response.headers.get("x-request-id")
+
+
+def test_import_page_title(client):
+    page = client.get("/import").text
+    assert "<title>Import - MyLabVault</title>" in page and "Import Lab Results" not in page
