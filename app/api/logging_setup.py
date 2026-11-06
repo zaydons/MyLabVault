@@ -129,6 +129,14 @@ def new_request_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
+_REDACTED = "[REDACTED]"
+_SENSITIVE_AUDIT_KEYS = {"patient_id"}
+
+
+def _is_sensitive_audit_key(key: str) -> bool:
+    return key in _SENSITIVE_AUDIT_KEYS or key.endswith("_patient_id")
+
+
 def audit(event: str, **fields: Any) -> None:
     """Record a change, e.g. audit("import.confirmed", import_id=12, saved=37).
 
@@ -137,8 +145,9 @@ def audit(event: str, **fields: Any) -> None:
     state = request_state.get()
     if state is not None:
         state["audited"] = True
-    parts = " ".join(f"{k}={_value(v)}" for k, v in fields.items() if v is not None)
-    audit_log.info(f"{event} {parts}".rstrip(), extra={"fields": {"event": event, **fields}})
+    safe_fields = {k: (_REDACTED if _is_sensitive_audit_key(k) and v is not None else v) for k, v in fields.items()}
+    parts = " ".join(f"{k}={_value(v)}" for k, v in safe_fields.items() if v is not None)
+    audit_log.info(f"{event} {parts}".rstrip(), extra={"fields": {"event": event, **safe_fields}})
 
 
 def _value(v: Any) -> str:
