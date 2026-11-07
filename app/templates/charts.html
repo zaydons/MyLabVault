@@ -96,6 +96,8 @@
       </div>
     </div>
 
+    <div class="alert alert-danger" id="chartsError" role="alert" hidden></div>
+
     <!-- One test, larger -->
     <div class="card" id="individualChartContainer" hidden>
       <div class="card-header d-flex align-items-center">
@@ -236,6 +238,23 @@ function sparkSvg(results) {
         <circle cx="${X(pts.length - 1)}" cy="${Y(num(last.value))}" r="3.5" fill="currentColor" class="${OUT.includes(last.status) ? 'spark-out' : ''}"/></svg>`;
 }
 
+function showError(text) {
+    const box = document.getElementById('chartsError');
+    box.textContent = text || '';
+    box.hidden = !text;
+}
+
+// Draws one card's chart; if it fails, that card says so and the rest of the panel still shows
+function drawCard(canvas, data, options) {
+    try {
+        return LabChart.create(canvas, data, options);
+    } catch (error) {
+        console.error(`Chart for ${data.name} failed`, error);
+        canvas.closest('.chart-body').innerHTML = '<div class="chart-message text-muted">This chart couldn\'t be drawn. Reload the page; <em>Show as table</em> still lists the results.</div>';
+        return null;
+    }
+}
+
 function destroyCharts() {
     state.charts.forEach(c => c && c.destroy());
     state.charts = [];
@@ -281,26 +300,34 @@ function renderPanel() {
 
     labs.forEach(lab => {
         const canvas = document.getElementById(`panelChart_${Number(lab.id)}`);
-        if (canvas) state.charts.push(LabChart.create(canvas, chartData(lab, inRange(lab.results)), { compact: true, ...span }));
+        if (canvas) state.charts.push(drawCard(canvas, chartData(lab, inRange(lab.results)), { compact: true, ...span }));
     });
 }
 
 function loadPanel(panelId, panelName) {
     $('#loadingIndicator').prop('hidden', false);
+    showError('');
     fetch(`/api/results/charts/panel/${encodeURIComponent(panelId)}`)
-        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(r => { if (!r.ok) throw new Error(`The server answered ${r.status}`); return r.json(); })
+        .catch(error => {
+            $('#loadingIndicator').prop('hidden', true);
+            showError(`The results for ${panelName} couldn't be loaded (${error.message}). Try again.`);
+            throw error;
+        })
         .then(data => {
             state.labs = data.labs;
             state.panelName = panelName;
             state.tables.clear();
             $('#loadingIndicator').prop('hidden', true);
             $('#panelChartsContainer').prop('hidden', false);
-            renderPanel();
+            try {
+                renderPanel();
+            } catch (error) {
+                console.error('Charts failed to draw', error);
+                showError('The charts couldn\'t be drawn. Reload the page (Ctrl+Shift+R, or Cmd+Shift+R on a Mac) so the browser picks up the latest version.');
+            }
         })
-        .catch(() => {
-            $('#loadingIndicator').prop('hidden', true);
-            showNotification('The charts couldn\'t be loaded. Try again.', 'error', 'Charts');
-        });
+        .catch(() => { /* reported above */ });
 }
 
 // ---------- one test, larger ----------
@@ -323,7 +350,12 @@ function renderIndividual() {
         return;
     }
     box.innerHTML = '<canvas id="individualChart"></canvas>';
-    individualChart = LabChart.create(document.getElementById('individualChart'), chartData(lab, results));
+    try {
+        individualChart = LabChart.create(document.getElementById('individualChart'), chartData(lab, results));
+    } catch (error) {
+        console.error(`Chart for ${lab.name} failed`, error);
+        box.innerHTML = '<div class="chart-message text-muted h-100">This chart couldn\'t be drawn. Reload the page.</div>';
+    }
 }
 
 function loadIndividual(labId) {
@@ -334,7 +366,7 @@ function loadIndividual(labId) {
             $('#individualChartContainer').prop('hidden', false);
             renderIndividual();
         })
-        .catch(() => showNotification('The chart couldn\'t be loaded. Try again.', 'error', 'Charts'));
+        .catch(() => showError('That test\'s results couldn\'t be loaded. Try again.'));
 }
 
 // ---------- larger view of a card ----------

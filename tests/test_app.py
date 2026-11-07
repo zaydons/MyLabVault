@@ -79,3 +79,9 @@ def test_logging(client, caplog):
 def test_import_page_title(client):
     page = client.get("/import").text
     assert "<title>Import - MyLabVault</title>" in page and "Import Lab Results" not in page
+
+
+def test_static_files_are_revalidated(client):
+    # After an update the browser must check for new scripts instead of reusing a stale copy
+    r = client.get("/static/js/lab-chart.js")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache" and r.headers.get("etag")

@@ -145,8 +145,21 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
+class RevalidatedStaticFiles(StaticFiles):
+	"""Static files the browser may cache but must check before reusing (a quick 304 when unchanged).
+
+	Without this the browser guesses how long a file stays fresh, and after an update it can keep
+	running an old script against a new page.
+	"""
+
+	def file_response(self, *args, **kwargs):
+		response = super().file_response(*args, **kwargs)
+		response.headers["Cache-Control"] = "no-cache"
+		return response
+
+
 # Mount static files
-app.mount("/static", StaticFiles(directory=Path(__file__).parent.parent / "static"), name="static")
+app.mount("/static", RevalidatedStaticFiles(directory=Path(__file__).parent.parent / "static"), name="static")
 
 # Page routes
 app.include_router(pages.router, tags=["pages"])
