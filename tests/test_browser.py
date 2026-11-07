@@ -543,3 +543,60 @@ def test_dialog_closes_when_asked_while_opening(page):
     page.evaluate("$('#vaccineModal').modal('show'); $('#vaccineModal').modal('hide')")
     modal_closed(page, "#vaccineModal")
     assert page.is_hidden("#vaccineModal")
+
+
+def test_charts_redesign(page):
+    from datetime import date, timedelta
+    ready(page)
+    panel = api(page, "POST", "/api/panels/", {"name": "Lipid"})["data"]
+    unit = api(page, "POST", "/api/units/", {"name": "mg/dL"})
+    unit_id = unit["data"]["id"] if "data" in unit else unit["id"]
+    chol = api(page, "POST", "/api/labs/", {"name": "Cholesterol, Total", "panel_id": panel["id"], "unit_id": unit_id, "ref_low": 100, "ref_high": 199})["data"]
+    hdl = api(page, "POST", "/api/labs/", {"name": "HDL Cholesterol", "panel_id": panel["id"], "unit_id": unit_id, "ref_low": 40, "ref_high": 90})["data"]
+    days_ago = lambda n: (date.today() - timedelta(days=n)).isoformat() + "T08:00:00"  # noqa: E731
+    for lab, values in ((chol, (230, 210, 205, 215)), (hdl, (45, 41, 43, 38))):
+        for value, ago in zip(values, (1500, 800, 200, 60)):
+            api(page, "POST", "/api/results/", {"lab_id": lab["id"], "patient_id": 1, "provider_id": 1, "result": value, "date_collected": days_ago(ago)})
+
+    page.goto(page.base + f"/charts?panel={panel['id']}", wait_until="networkidle")
+    page.wait_for_function("() => document.querySelectorAll('#panelChartsContent canvas').length === 2")
+    card = lambda lab: page.locator(f"article[data-lab-id='{lab['id']}']")  # noqa: E731
+    summary = card(chol).locator(".chart-summary").text_content()
+    assert "215" in summary and "High" in summary and "▲ up 10" in summary and "range 100–199" in summary
+    assert "▼ down 5" in card(hdl).locator(".chart-summary").text_content() and "Low" in card(hdl).text_content()
+    assert page.text_content("#panelChartsSummary").strip() == "2 tests · 2 out of range now"
+
+    scales = """id => { const s = Chart.getChart(document.getElementById('panelChart_' + id)).scales;
+                        return {xmin: s.x.min, xmax: s.x.max, ymin: s.y.min, ymax: s.y.max, n: Chart.getChart(document.getElementById('panelChart_' + id)).data.datasets[0].data.length} }"""
+    c, h = page.evaluate(scales, chol["id"]), page.evaluate(scales, hdl["id"])
+    assert c["ymin"] >= 0 and h["ymin"] >= 0 and c["ymax"] > 230 and c["n"] == 4
+    assert (c["xmin"], c["xmax"]) == (h["xmin"], h["xmax"])  # every card on the same dates
+    bounds = page.evaluate("[LabChart.yBounds([0, 149, 221]), LabChart.yBounds([135, 140, 145]), LabChart.yBounds([-3, 2])]")
+    assert bounds[0]["min"] == 0 and bounds[1]["min"] > 100 and bounds[2]["min"] < 0
+    axe_clean(page, ".content")
+
+    # Time range: one year keeps the last two results, and is remembered
+    page.click("button[data-years='1']")
+    page.wait_for_function(f"() => Chart.getChart(document.getElementById('panelChart_{chol['id']}')).data.datasets[0].data.length === 2")
+    assert page.get_attribute("button[data-years='1']", "aria-pressed") == "true"
+    page.reload(wait_until="networkidle")
+    page.wait_for_function(f"() => Chart.getChart(document.getElementById('panelChart_{chol['id']}'))?.data.datasets[0].data.length === 2")
+
+    # Show as table, then back
+    card(chol).locator(".chart-table-toggle").click()
+    assert card(chol).locator("tbody tr").count() == 2 and card(chol).locator("canvas").count() == 0
+    card(chol).locator(".chart-table-toggle").click()
+    page.wait_for_function(f"() => !!Chart.getChart(document.getElementById('panelChart_{chol['id']}'))")
+
+    # Larger view
+    card(hdl).locator(".chart-enlarge").click()
+    page.wait_for_selector("#chartModal.show")
+    page.wait_for_function("() => !!Chart.getChart(document.getElementById('modalChart'))")
+    assert page.get_attribute("#viewLabPageBtn", "href") == f"/lab/{hdl['id']}"
+    page.keyboard.press("Escape")
+    modal_closed(page, "#chartModal")
+
+    # Compact: numbers and a sparkline, no charts
+    page.check("#compactView", force=True)
+    assert page.is_hidden(f"#panelChart_{chol['id']}") and page.is_visible(f"article[data-lab-id='{chol['id']}'] .chart-spark svg")
+    axe_clean(page, ".content")

@@ -107,6 +107,7 @@ def _chart_point(result: LabResultModel) -> dict:
     return {
         'date': result.date_collected.strftime('%Y-%m-%d'),
         'value': result.result,
+        'value_text': result.result_text,
         'ref_low': result.effective_ref_low,
         'ref_high': result.effective_ref_high,
         'status': result.status,
