@@ -678,3 +678,58 @@ def test_vaccine_import_review(page, ai, tmp_path):
     assert "Imported 2 vaccines" in summary and "Tdap" in summary
     names = sorted(s["vaccine"] for s in api(page, "GET", "/api/vaccines/?patient_id=1"))
     assert names == ["COVID-19", "Influenza (flu)", "Tdap"]
+
+
+def test_diagnoses(page):
+    ready(page)
+    page.goto(page.base + "/diagnoses", wait_until="networkidle")
+    assert "No ongoing diagnoses" in page.text_content("#activeList")
+    page.click("#addDiagnosis")
+    page.wait_for_selector("#diagnosisModal.show")
+    assert page.is_hidden("#resolvedGroup")
+    page.fill("#diagnosisName", "Essential hypertension")
+    page.fill("#diagnosisCode", "I10")
+    page.fill("#diagnosisOnset", "2024-03-01")
+    page.select_option("#diagnosisProvider", "1")
+    page.click("#diagnosisForm button[type=submit]")
+    modal_closed(page, "#diagnosisModal")
+    page.wait_for_selector(".diagnosis-table")
+    assert "Ongoing (1 diagnosis)" in page.text_content("#activeTitle") and page.is_hidden("#resolvedCard")
+
+    # Mark resolved opens the form set to Resolved, dated today
+    page.click("[aria-label='Mark Essential hypertension resolved']")
+    page.wait_for_selector("#diagnosisModal.show")
+    assert page.input_value("#diagnosisStatus") == "resolved" and page.input_value("#diagnosisResolved") == date.today().isoformat()
+    page.click("#diagnosisForm button[type=submit]")
+    modal_closed(page, "#diagnosisModal")
+    page.wait_for_selector("#resolvedCard:not([hidden])")
+    assert "I10" in page.text_content("#resolvedList") and "No ongoing diagnoses" in page.text_content("#activeList")
+    axe_clean(page, ".content")
+
+
+def test_diagnosis_import_review(page, ai, tmp_path):
+    ready(page)
+    api(page, "POST", "/api/diagnoses/", {"patient_id": 1, "name": "Hyperlipidemia", "icd10_code": "E78.5"})
+    visit = (date.today() - timedelta(days=10)).isoformat()
+    ai.reply = {"visit_date": visit, "tests": [], "diagnoses": [
+        {"name": "Essential hypertension", "icd10_code": "I10", "context": "visit"},
+        {"name": "Hyperlipidemia", "icd10_code": "E78.5", "context": "problem_list"},
+        {"name": "Fractured wrist", "context": "history", "status": "resolved"}]}
+    summary = tmp_path / "visit.pdf"
+    summary.write_bytes(pdfs.visit_summary(tag="browser dx"))
+    page.goto(page.base + "/import", wait_until="networkidle")
+    page.set_input_files("#fileInput", str(summary))
+    page.wait_for_selector(".dx-table")
+    table = page.text_content(".dx-table")
+    assert "Add as ongoing" in table and "Already on your list" in table and "Add as resolved" in table and "Medical history" in table
+    assert page.eval_on_selector_all(".dx-check", "bs => bs.map(b => b.checked)") == [True, False, True]
+    assert "2 diagnosis changes" in page.text_content(".review-counts")
+    axe_clean(page, ".review-card")
+
+    page.select_option(".review-card select[id^='provider-']", "1")
+    page.click("#importButton")
+    page.wait_for_selector("#importSummary:not([hidden])")
+    summary_text = page.text_content("#importSummary")
+    assert "Imported 2 diagnosis changes" in summary_text and "Diagnosis added:" in summary_text and "Past diagnosis added:" in summary_text
+    names = sorted((d["name"], d["status"]) for d in api(page, "GET", "/api/diagnoses/?patient_id=1"))
+    assert names == [("Essential hypertension", "active"), ("Fractured wrist", "resolved"), ("Hyperlipidemia", "active")]

@@ -132,6 +132,26 @@ class ExtractedImmunization(BaseModel):
     next_due: Optional[str] = Field(None, description="Date the next dose is due as YYYY-MM-DD, if printed")
 
 
+class ExtractedDiagnosis(BaseModel):
+    """One condition on a visit summary, health summary or records export."""
+    name: str = Field(description="Diagnosis or problem name as printed, without the code, e.g. 'Essential hypertension'")
+    matched_diagnosis: Optional[str] = Field(
+        None,
+        description="If this is the same condition as one in the provided list of the patient's diagnoses (even if "
+                    "worded differently), that name copied exactly; otherwise null",
+    )
+    icd10_code: Optional[str] = Field(None, description="ICD-10 code if printed, e.g. 'I10' or 'E78.5'")
+    context: Optional[Literal["visit", "problem_list", "history"]] = Field(
+        None,
+        description="'visit' for a diagnosis addressed at this visit (e.g. Today's Diagnosis, Assessment), "
+                    "'problem_list' for the ongoing problem list, 'history' for past medical history",
+    )
+    status: Literal["active", "resolved"] = Field(
+        "active", description="'resolved' when the document marks it resolved, inactive or historical; otherwise 'active'")
+    onset_date: Optional[str] = Field(None, description="Date diagnosed or noted as YYYY-MM-DD, if printed")
+    resolved_date: Optional[str] = Field(None, description="Date resolved as YYYY-MM-DD, if printed")
+
+
 class ExtractedReport(BaseModel):
     """Structured content of one lab report, visit summary or health summary."""
     collection_date: Optional[str] = Field(
@@ -158,6 +178,9 @@ class ExtractedReport(BaseModel):
     immunizations: List[ExtractedImmunization] = Field(
         default_factory=list, description="Vaccine doses given (immunization history); empty if there are none. "
                                           "Not vaccines that are only recommended or due")
+    diagnoses: List[ExtractedDiagnosis] = Field(
+        default_factory=list, description="Diagnoses and problems (today's diagnoses, problem list, medical history); "
+                                          "empty if there are none. Not family history")
 
 
 SYSTEM_PROMPT = """You extract lab test results, vital signs and medications from medical documents (lab \
@@ -187,7 +210,10 @@ records and medication history tables often print start and stop dates and an ac
 status: record those too. For matched_medication, compare with the patient's medications provided. \
 Immunization records, and immunization sections of other documents, list vaccine doses: record one \
 entry in immunizations per dose given, with its own date; a vaccine listed only as due or recommended \
-is not a dose. For matched_vaccine, compare with the vaccine names provided."""
+is not a dose. For matched_vaccine, compare with the vaccine names provided. Record each condition under \
+diagnoses once, from Today's Diagnosis, Assessment, Problem List or past medical history (not family \
+history), with its ICD-10 code when printed beside it. For matched_diagnosis, compare with the \
+patient's diagnoses provided."""
 
 
 def _inline_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -327,6 +353,16 @@ def _to_medication(med: ExtractedMedication, known: Dict[str, str]) -> Dict[str,
     }
 
 
+def _to_diagnosis(item: ExtractedDiagnosis, known: Dict[str, str]) -> Dict[str, Any]:
+    return {
+        "name": item.name.strip(),
+        # Only trust a match that names one of the patient's diagnoses sent
+        "matched_diagnosis": known.get(item.matched_diagnosis.strip().lower()) if item.matched_diagnosis else None,
+        "icd10_code": (item.icd10_code or "").strip() or None, "context": item.context, "status": item.status,
+        "onset_date": _normalize_date(item.onset_date), "resolved_date": _normalize_date(item.resolved_date),
+    }
+
+
 def _to_immunization(shot: ExtractedImmunization, known: Dict[str, str]) -> Dict[str, Any]:
     clean = lambda text: (text or "").strip() or None  # noqa: E731
     return {
@@ -416,7 +452,8 @@ async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str,
 
 async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
                             current_medications: Optional[List[str]] = None,
-                            vaccine_names: Optional[List[str]] = None) -> Dict[str, Any]:
+                            vaccine_names: Optional[List[str]] = None,
+                            diagnosis_names: Optional[List[str]] = None) -> Dict[str, Any]:
     """Parse a lab report, visit summary or health summary PDF with Claude.
 
     Returns a dict in the same shape as PDFParser.parse_pdf_content.
@@ -438,6 +475,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
     meds_list = "\n".join(f"- {name}" for name in sorted(known_meds.values())) or "(none recorded)"
     known_vaccines = {name.strip().lower(): name for name in (vaccine_names or []) if name}
     vaccines_list = "\n".join(f"- {name}" for name in known_vaccines.values()) or "(none)"
+    known_diagnoses = {name.strip().lower(): name for name in (diagnosis_names or []) if name}
+    diagnoses_list = "\n".join(f"- {name}" for name in sorted(known_diagnoses.values())) or "(none recorded)"
 
     messages = [{
         "role": "user",
@@ -455,7 +494,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
                 "text": f"Existing test names in the app:\n{names_list}\n\n"
                         f"The patient's medications in the app (current and past):\n{meds_list}\n\n"
                         f"Vaccine names in the app:\n{vaccines_list}\n\n"
-                        f"Extract the lab results, vital signs, medications and vaccines from this document and record "
+                        f"The patient's diagnoses in the app:\n{diagnoses_list}\n\n"
+                        f"Extract the lab results, vital signs, medications, vaccines and diagnoses from this document and record "
                         f"them with the {TOOL_NAME} tool.",
             },
         ],
@@ -464,7 +504,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
         system=SYSTEM_PROMPT,
         messages=messages,
         tool_name=TOOL_NAME,
-        tool_description="Record every lab result, vital sign, medication and vaccine dose extracted from the document.",
+        tool_description="Record every lab result, vital sign, medication, vaccine dose and diagnosis extracted from the document.",
         schema=ExtractedReport,
         input_schema=TOOL_INPUT_SCHEMA,
     )
@@ -484,6 +524,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
         "vitals": [v for v in (_to_vital(v) for v in report.vitals) if v],
         "medications": [_to_medication(m, known_meds) for m in report.medications if m.name and m.name.strip()],
         "immunizations": [_to_immunization(i, known_vaccines) for i in report.immunizations if i.vaccine and i.vaccine.strip()],
+        "diagnoses": [_to_diagnosis(d, known_diagnoses) for d in report.diagnoses if d.name and d.name.strip()],
         "ordered_panels": [],
         "panels": [],
         "errors": [],

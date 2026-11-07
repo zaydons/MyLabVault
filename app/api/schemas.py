@@ -188,6 +188,7 @@ class PDFImportPreview(BaseModel):
     vitals: List[Dict[str, Any]] = []
     medications: List[Dict[str, Any]] = []
     immunizations: List[Dict[str, Any]] = []  # vaccine doses, from an immunization record or a summary
+    diagnoses: List[Dict[str, Any]] = []  # conditions, from a visit or health summary
 
 
 class PDFTestEdit(BaseModel):
@@ -238,6 +239,7 @@ class PDFImportConfirm(BaseModel):
     selected_vitals: List[int] = []  # positions in the document's vitals
     selected_medications: List[int] = []  # positions in the document's medications
     selected_immunizations: List[int] = []  # positions in the document's vaccine doses
+    selected_diagnoses: List[int] = []  # positions in the document's diagnoses
     immunization_dates: Dict[str, str] = {}  # date given entered for a dose the document has no date for, by position
 
 

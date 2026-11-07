@@ -2,7 +2,7 @@
 
 **Your personal health data, organized and accessible.**
 
-MyLabVault is a self-hosted app for tracking your lab results, vitals, medications and vaccines over time. Upload PDF lab reports, review what was extracted, and follow your trends on a dashboard and charts. Everything is stored on your own server.
+MyLabVault is a self-hosted app for tracking your lab results, vitals, medications, vaccines and diagnoses over time. Upload PDF lab reports, review what was extracted, and follow your trends on a dashboard and charts. Everything is stored on your own server.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
@@ -24,8 +24,9 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Duplicate detection**: Re-uploading a report is recognised; unfinished imports can be reopened from the import history. A re-uploaded report with nothing saved from it yet is read again, so improvements to the reader apply (an earlier AI reading is kept to compare with)
 - **Optional AI parsing**: Use Claude through Amazon Bedrock for scanned or unusual reports and for visit summaries (off by default; see [deploy/truenas/README.md](deploy/truenas/README.md#optional-ai-parsing-with-amazon-bedrock))
 - **Enter results by hand**: *Import → Enter by hand* uses the same review table for results from a visit without a PDF. Type each test (saved test names are suggested) or paste lines such as `Glucose  105  mg/dL  70-99` copied from a patient portal or spreadsheet. Rows are matched to your saved tests as you type, with the same unit warnings, "already saved" check, live High/Low status and summary as a report, so they never create copies of existing tests. Each card is one visit (one date and one provider), and you choose the panel for any new tests. Entries appear in the import history as *Entered by hand*
-- **Visit summaries (vitals and medications)**: With AI parsing on, upload the *Clinical Visit Summary* or *After Visit Summary* your doctor gives you after a visit (or a health summary). The AI reads its vital signs (blood pressure, temperature, pulse, respiratory rate, weight, height, oxygen saturation, blood glucose) and its medications along with any lab results. The review card lists the vitals to save on the visit date (ones already saved are left unticked) and compares each medication with the patient's medications, current and past: a new one is added, a new dose becomes a dose change, a discontinued one is marked stopped, and anything already on the list as written needs no change. Older records (a records export or continuity-of-care document) are history: a medication with a printed stop date, marked inactive, or on a document more than six months old is added as a past medication with its printed start and stop dates (else the document's date), never changes what's current, and is shown as *Already in your history* when a recorded period covers those dates. The AI reader takes PDFs up to 14 MB and 100 pages; split a larger export into smaller PDFs. Nothing is saved until you import, and the summary afterwards lists each medication change. Saved vitals and medication changes are ordinary entries on the Vitals and Medications pages: deleting the import from the history removes its lab results but not those
+- **Visit summaries (vitals, medications and diagnoses)**: With AI parsing on, upload the *Clinical Visit Summary* or *After Visit Summary* your doctor gives you after a visit (or a health summary). The AI reads its vital signs (blood pressure, temperature, pulse, respiratory rate, weight, height, oxygen saturation, blood glucose) and its medications along with any lab results. The review card lists the vitals to save on the visit date (ones already saved are left unticked) and compares each medication with the patient's medications, current and past: a new one is added, a new dose becomes a dose change, a discontinued one is marked stopped, and anything already on the list as written needs no change. Older records (a records export or continuity-of-care document) are history: a medication with a printed stop date, marked inactive, or on a document more than six months old is added as a past medication with its printed start and stop dates (else the document's date), never changes what's current, and is shown as *Already in your history* when a recorded period covers those dates. The AI reader takes PDFs up to 14 MB and 100 pages; split a larger export into smaller PDFs. Nothing is saved until you import, and the summary afterwards lists each medication change. Saved vitals and medication changes are ordinary entries on the Vitals and Medications pages: deleting the import from the history removes its lab results but not those
 - **Immunization records (vaccines)**: With AI parsing on, upload an immunization record (from a patient portal, clinic, pharmacy or state registry); vaccines in a visit or health summary are read the same way. The review card's *Vaccines* group lists each dose with its date, dose, manufacturer, lot number, site and where it was given, under the closest of your vaccine names (or a common one). A dose already recorded for that vaccine on the same date is marked *Already saved* and left unticked, and importing it again never adds a second copy. A dose without a date on the document is marked *No date* and can't be imported until you enter the date it was given. Ticked doses are saved on the Vaccines page; a printed *next dose due* date is saved too, so the dashboard's *Vaccines due* card picks it up
+- **Diagnoses**: With AI parsing on, the diagnoses in a visit summary, health summary or records export are read too: *Today's Diagnosis* or *Assessment*, the *Problem List* and past medical history, each with its ICD-10 code when printed (family history is left out). The review card's *Diagnoses* group compares each with the patient's diagnoses, by name, the AI's match or the ICD-10 code: a new one is added as ongoing, dated by its printed onset date (else the visit's); one the document marks resolved is added as resolved, or marks an ongoing one resolved; and one already recorded needs no change. A diagnosis recorded as resolved is never reopened by a document; change it on the Diagnoses page if it's back
 - **Import history**: Every upload with its status, how many results were saved, collection and upload dates, and *Last scanned*: when its PDF was last read and by which reader (built-in, AI, or an AI re-check)
 - **Re-check an import with AI**: For a report already imported, the robot button in the import history reads its PDF again with AI and compares that with what's saved from it: results that match, saved values the AI read differently (tick to correct them), and results on the report that aren't saved, whether never imported or deleted since (tick to add them back). Results saved but not found this time are listed and left alone. Nothing changes until you apply the ticked rows, and the original reading is kept
 - **Compare readings**: After *Re-scan with AI*, a side-by-side table shows what the built-in reader and the AI each found: values that differ, results only one of them caught, and a different collection date or provider. Rows in the review are marked too, and you can switch back to the built-in reader's results before importing
@@ -49,13 +50,17 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Delete with undo**: *Delete* removes one dose period (on a medication with history the button reads *Delete this dose*), and the confirmation says which doses stay in the history. After deleting, an *Undo* button puts the record back as it was. To keep a medication that ended in the history, use *Stop* rather than *Delete*
 - **Current and past**: The Medications page lists what's taken now (with the previous dose) and what was stopped (with how long it was taken); the dashboard shows the current ones
 - **From visit summaries**: Medications started, continued at a new dose or discontinued at a visit can be applied from the visit summary on the Import page (see *Visit summaries* above)
-- Charts with dose-change markers and a timeline are planned ([#71](https://github.com/zaydons/MyLabVault/issues/71), [#72](https://github.com/zaydons/MyLabVault/issues/72))
 
 ### 💉 **Vaccines**
 - **Vaccine record**: Record each dose a patient was given: the vaccine (common ones are suggested), date, dose (e.g. 1 of 2, booster), manufacturer or brand, lot number, where it was given, who gave it (a provider or a clinic or pharmacy) and notes
 - **From immunization records**: Import doses from an immunization record or visit summary on the Import page (see *Immunization records* above)
 - **Next doses**: Add the date the next dose or booster is due. The Vaccines page lists next doses as *Overdue*, *Due soon* (within 30 days) or *Scheduled*, and the dashboard shows a *Vaccines due* card when one is due soon or overdue
 - **Another dose**: Starts the next dose of a vaccine with its name and brand filled in
+
+### 🩺 **Diagnoses**
+- **Problem list**: Record each patient's conditions: the name, ICD-10 code, when it was diagnosed, who diagnosed it and notes. The Diagnoses page lists the ongoing ones, and resolved ones with their dates
+- **Mark resolved**: Keeps a condition that's over in the history, with the date it resolved
+- **From visit summaries**: Import diagnoses from a visit or health summary on the Import page (see *Diagnoses* above)
 
 ### 🏥 **Health Data Management**
 - **Multiple patients**: Keep results for family members separately and switch between them from the top bar
@@ -142,7 +147,7 @@ Install as a custom app via YAML on TrueNAS SCALE 24.10+. See [deploy/truenas/RE
 2. **Import a PDF**: Go to *Import* and upload a lab report (or use *Enter by hand* for results without a PDF)
 3. **Review and import**: Check the results against the PDF, fix anything that's off, confirm the collection date and provider (often filled in for you), and import
 4. **Explore**: Open the dashboard, *Visits* for everything from one draw, a test's page or *Charts* to see trends
-5. **Record vitals and medications**: Use *Record vitals* on the dashboard, the *Medications* page for medications and supplements, and the *Vaccines* page for vaccines
+5. **Record vitals and medications**: Use *Record vitals* on the dashboard, the *Medications* page for medications and supplements, the *Vaccines* page for vaccines and the *Diagnoses* page for conditions
 
 ## 🔄 Updating
 
@@ -173,7 +178,7 @@ MyLabVault/
 │   │   ├── schemas.py            # Request/response schemas
 │   │   ├── build_info.py         # Build version and update check
 │   │   ├── logging_setup.py      # Log format, request IDs, audit lines
-│   │   ├── routers/              # API and page routes (results, labs, vitals, medications, vaccines, pdf_import, search, setup, ...)
+│   │   ├── routers/              # API and page routes (results, labs, vitals, medications, vaccines, diagnoses, pdf_import, search, setup, ...)
 │   │   └── services/
 │   │       ├── pdf_parser.py     # Built-in PDF parser
 │   │       ├── summary_parser.py # Results tables with several collection dates (health summaries)
@@ -182,6 +187,7 @@ MyLabVault/
 │   │       ├── visits.py         # Results grouped by draw date, range-bar positions
 │   │       ├── visit_review.py   # Vitals and medication changes from visit summaries (review and saving)
 │   │       ├── vaccine_review.py # Vaccine doses from immunization records and summaries (review and saving)
+│   │       ├── diagnosis_review.py  # Diagnoses from visit and health summaries (review and saving)
 │   │       ├── recheck.py        # AI re-check of an imported report against its saved results
 │   │       ├── ai_parser.py      # Optional AI parsing (Amazon Bedrock)
 │   │       └── test_descriptions.py  # Plain-language test descriptions
@@ -207,6 +213,7 @@ MyLabVault/
 - **Vitals**: Weight, blood pressure and other measurements
 - **Medications**: Medications and supplements per patient, one row per dose period
 - **Immunizations**: Vaccine doses per patient, with the next dose's due date
+- **Diagnoses**: Conditions per patient, ongoing or resolved, with ICD-10 code and dates
 - **PDFImportLog**: Import history and parsed data
 - **UserSettings**: Preferences such as dark mode and first-run setup
 
@@ -297,6 +304,7 @@ GET  /api/medications/         # Medications (filter with patient_id, status=cur
 POST /api/medications/{id}/change-dose  # End the current dose and start a new one
 POST /api/medications/{id}/stop         # Record the stop date
 GET  /api/vaccines/            # Vaccine doses (filter with patient_id), each with its due status
+GET  /api/diagnoses/           # Diagnoses (filter with patient_id), ongoing first
 GET  /api/search/?q=           # Quick search for tests and pages
 GET  /api/cleanup/suggestions  # Likely duplicate tests, panels, units and providers
 POST /api/cleanup/suggestions/ai  # The same, plus an AI review of the names

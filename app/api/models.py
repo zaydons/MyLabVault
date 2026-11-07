@@ -62,6 +62,7 @@ class Patient(Base):
     vitals = relationship("Vital", back_populates="patient")
     medications = relationship("Medication", back_populates="patient")
     immunizations = relationship("Immunization", back_populates="patient")
+    diagnoses = relationship("Diagnosis", back_populates="patient")
 
     def get_age(self) -> Optional[int]:
         """Calculate patient age with proper leap year handling."""
@@ -537,6 +538,43 @@ class Immunization(Base):
             "next_due": self.next_due.isoformat() if self.next_due else None,
             "notes": self.notes,
             "due_status": self.due_status(),
+        }
+
+
+DIAGNOSIS_STATUSES = ("active", "resolved")
+
+
+class Diagnosis(Base):
+    """A condition diagnosed for a patient: ongoing (on the problem list) or resolved."""
+    __tablename__ = "diagnoses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False, index=True)    # e.g. "Essential hypertension"
+    icd10_code = Column(String(20), nullable=True)            # e.g. "I10"
+    status = Column(String(20), nullable=False, default="active")
+    onset_date = Column(Date, nullable=True)                  # diagnosed or first noted
+    resolved_date = Column(Date, nullable=True)
+    provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)  # diagnosed by
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    patient = relationship("Patient", back_populates="diagnoses")
+    provider = relationship("Provider")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "patient_id": self.patient_id,
+            "name": self.name,
+            "icd10_code": self.icd10_code,
+            "status": self.status,
+            "onset_date": self.onset_date.isoformat() if self.onset_date else None,
+            "resolved_date": self.resolved_date.isoformat() if self.resolved_date else None,
+            "provider_id": self.provider_id,
+            "provider_name": self.provider.name if self.provider else None,
+            "notes": self.notes,
         }
 
 

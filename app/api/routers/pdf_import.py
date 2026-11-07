@@ -21,7 +21,7 @@ from ..services.pdf_parser import PDFParser
 from ..services import ai_parser
 from ..services.ai_parser import AIParseError
 from ..logging_setup import audit
-from ..services import recheck, vaccine_review, visit_review
+from ..services import diagnosis_review, recheck, vaccine_review, visit_review
 from ..services.import_review import (apply_edit, compare_parses, find_lab, find_lab_in_unit, manual_test, normalize_unit,
                                       parse_pasted, review_rows, row_date, row_status)
 import logging
@@ -99,9 +99,9 @@ def _patient_id(request: Optional[Request]) -> int:
 
 
 def _anything_saved(import_log: PDFImportLog, parsed_data: dict) -> bool:
-    """Results, vitals, medications or vaccines from this import have been saved."""
+    """Results, vitals, medications, vaccines or diagnoses from this import have been saved."""
     return bool(import_log.tests_imported or parsed_data.get('saved_vitals') or parsed_data.get('saved_medications')
-                or parsed_data.get('saved_immunizations'))
+                or parsed_data.get('saved_immunizations') or parsed_data.get('saved_diagnoses'))
 
 
 def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, db: Session,
@@ -127,6 +127,7 @@ def _build_preview(parsed_data: dict, import_log: PDFImportLog, filename: str, d
         vitals=visit_review.vital_rows(parsed_data, patient_id, db),
         medications=visit_review.medication_rows(parsed_data, patient_id, db),
         immunizations=vaccine_review.immunization_rows(parsed_data, patient_id, db),
+        diagnoses=diagnosis_review.diagnosis_rows(parsed_data, patient_id, db),
     )
 
 
@@ -149,11 +150,12 @@ def _report_details(test: dict, parsed_data: dict) -> dict:
 
 async def _parse_with_ai(content: bytes, db: Session, patient_id: int = 1) -> dict:
     """Parse with the AI parser, passing existing test names, the patient's medications (current and
-    past) and vaccine names so what it reads maps onto them."""
+    past), vaccine names and diagnoses so what it reads maps onto them."""
     known_lab_names = [name for (name,) in db.query(Lab.name).all()]
     medications = sorted({m.name for m in visit_review.all_medications(patient_id, db)})
     return await ai_parser.parse_pdf_with_ai(content, known_lab_names, medications,
-                                             vaccine_review.known_vaccines(patient_id, db))
+                                             vaccine_review.known_vaccines(patient_id, db),
+                                             sorted({d.name for d in diagnosis_review.all_diagnoses(patient_id, db)}))
 
 
 async def _parse_content(content: bytes, db: Session, use_ai: bool = False, patient_id: int = 1) -> dict:
@@ -716,6 +718,7 @@ async def confirm_batch_import(
                 selected_vitals=confirmation.get("selected_vitals") or [],
                 selected_medications=confirmation.get("selected_medications") or [],
                 selected_immunizations=confirmation.get("selected_immunizations") or [],
+                selected_diagnoses=confirmation.get("selected_diagnoses") or [],
                 immunization_dates=confirmation.get("immunization_dates") or {},
             )
             result = await confirm_pdf_import(request, merged, db)
@@ -908,6 +911,12 @@ async def confirm_pdf_import(
             visit_day = (report_date or _collection_date(confirmation, import_log)).date()
         except HTTPException:
             problems.append("enter the visit date to save its vitals and medication changes")
+    elif confirmation.selected_diagnoses:
+        # Diagnoses are dated by the visit when it's known; without it they're saved undated
+        try:
+            visit_day = (report_date or _collection_date(confirmation, import_log)).date()
+        except HTTPException:
+            visit_day = None
     problems += vaccine_review.check_immunizations(parsed_data, confirmation.selected_immunizations,
                                                    confirmation.immunization_dates)
     if problems:
@@ -960,6 +969,8 @@ async def confirm_pdf_import(
             lambda name: _match_provider(name, db), confirmation.provider_id, source_note, db)
         vaccines = vaccine_review.save_immunizations(parsed_data, confirmation.selected_immunizations,
                                                      confirmation.immunization_dates, patient_id, source_note, db)
+        diagnosis_changes = diagnosis_review.save_diagnoses(parsed_data, confirmation.selected_diagnoses, visit_day,
+                                                            patient_id, confirmation.provider_id, source_note, db)
         import_log.parsed_data = json.dumps(parsed_data)
         import_log.tests_imported = len(already) + len(saved)
         import_log.tests_skipped = max(len(parsed_tests) - import_log.tests_imported, 0)
@@ -972,7 +983,7 @@ async def confirm_pdf_import(
         raise HTTPException(status_code=500, detail=f"Saving results from {import_log.filename} failed.") from e
     audit("import.confirmed", import_id=import_log.id, source="manual" if manual else "pdf", saved=len(saved), new_tests=len(created),
           dates=len({r.date_collected.date() for r in saved}), provider_id=confirmation.provider_id,
-          patient_id=patient_id, vitals=len(vitals), medication_changes=len(medication_changes), vaccines=len(vaccines))
+          patient_id=patient_id, vitals=len(vitals), medication_changes=len(medication_changes), vaccines=len(vaccines), diagnosis_changes=len(diagnosis_changes))
 
     from ..utils.cache import api_cache
     api_cache.invalidate_pattern('results')
@@ -990,6 +1001,7 @@ async def confirm_pdf_import(
     extra = [f"{len(vitals)} vital{'s' if len(vitals) != 1 else ''}"] if vitals else []
     extra += [f"{len(medication_changes)} medication change{'s' if len(medication_changes) != 1 else ''}"] if medication_changes else []
     extra += [f"{len(vaccines)} vaccine{'s' if len(vaccines) != 1 else ''}"] if vaccines else []
+    extra += [f"{len(diagnosis_changes)} diagnosis change{'s' if len(diagnosis_changes) != 1 else ''}"] if diagnosis_changes else []
     return APIResponse(
         success=True,
         message=(f"Saved {len(saved)} results entered by hand" if manual
@@ -1003,6 +1015,7 @@ async def confirm_pdf_import(
             "vitals_count": len(vitals),
             "medication_changes": medication_changes,
             "vaccines": vaccines,
+            "diagnosis_changes": diagnosis_changes,
             "skipped_count": len(parsed_tests) - len(saved) - len(already),
             "results": results,
             "out_of_range": [r for r in results if r["status"] in ("high", "low", "abnormal")],
