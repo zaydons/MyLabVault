@@ -464,6 +464,7 @@ def test_medication_delete_and_undo(page):
         api(page, "POST", "/api/medications/", {"patient_id": 1, "name": "Lisinopril", "frequency": "once daily", **body})
     api(page, "POST", "/api/medications/", {"patient_id": 1, "name": "Vitamin D", "kind": "supplement", "start_date": "2025-01-01"})
     page.goto(page.base + "/medications", wait_until="networkidle")
+    assert page.is_hidden("#undoBar")  # nothing to undo yet
 
     # A medication with history deletes one dose, and says what stays
     button = page.locator("#currentList .med-item", has_text="Lisinopril").locator("[data-action='delete']").first
@@ -493,10 +494,20 @@ def test_medication_delete_and_undo(page):
     assert back[0]["reason"] == "Blood pressure" and back[0]["notes"] == "Morning" and back[0]["frequency"] == "once daily"
     assert "Lisinopril" in page.text_content("#currentList")
 
-    # The only record says so
+    # The bar can be dismissed
+    page.click("#undoDismiss")
+    assert page.is_hidden("#undoBar")
+
+    # The only record says so; dismissing the bar gives up the undo
     page.locator("#currentList .med-item", has_text="Vitamin D").locator("[data-action='delete']").click()
     page.wait_for_selector("#confirmationModal.show")
     assert "only record of Vitamin D" in page.text_content("#confirmationModalMessage")
+    page.click("#confirmationModalConfirmBtn")
+    page.wait_for_selector("#undoBar:not([hidden])")
+    modal_closed(page, "#confirmationModal")
+    page.click("#undoDismiss")
+    assert page.is_hidden("#undoBar")
+    assert "Vitamin D" not in page.text_content("#currentList") + page.text_content("#pastList")
 
 
 def test_recheck_imported_report(page, ai):
