@@ -115,6 +115,23 @@ class ExtractedMedication(BaseModel):
     reason: Optional[str] = Field(None, description="What it's for, if printed (e.g. a diagnosis name), without codes")
 
 
+class ExtractedImmunization(BaseModel):
+    """One dose of a vaccine on an immunization record, or in a visit or health summary."""
+    vaccine: str = Field(description="Vaccine name as printed, e.g. 'COVID-19 mRNA (Pfizer) 2024-25' or 'Tdap'")
+    matched_vaccine: Optional[str] = Field(
+        None,
+        description="The name from the provided list of vaccine names that is the same vaccine (e.g. 'Influenza (flu)' "
+                    "for 'Flu shot, quadrivalent'), copied exactly; otherwise null",
+    )
+    date_given: Optional[str] = Field(None, description="Date this dose was given as YYYY-MM-DD; null if not printed")
+    dose: Optional[str] = Field(None, description="Which dose, as printed, e.g. '2 of 2', 'booster'")
+    manufacturer: Optional[str] = Field(None, description="Manufacturer or brand, if printed, e.g. 'Pfizer', 'Shingrix'")
+    lot_number: Optional[str] = Field(None, description="Lot number, if printed")
+    site: Optional[str] = Field(None, description="Where it was given on the body, in plain words, e.g. 'left arm'")
+    location: Optional[str] = Field(None, description="Clinic, pharmacy or provider that gave it, if printed")
+    next_due: Optional[str] = Field(None, description="Date the next dose is due as YYYY-MM-DD, if printed")
+
+
 class ExtractedReport(BaseModel):
     """Structured content of one lab report, visit summary or health summary."""
     collection_date: Optional[str] = Field(
@@ -138,6 +155,9 @@ class ExtractedReport(BaseModel):
     vitals: List[ExtractedVital] = Field(default_factory=list, description="Vital signs; empty if there are none")
     medications: List[ExtractedMedication] = Field(
         default_factory=list, description="Medications and supplements listed; empty if there are none")
+    immunizations: List[ExtractedImmunization] = Field(
+        default_factory=list, description="Vaccine doses given (immunization history); empty if there are none. "
+                                          "Not vaccines that are only recommended or due")
 
 
 SYSTEM_PROMPT = """You extract lab test results, vital signs and medications from medical documents (lab \
@@ -164,7 +184,10 @@ ideal body weight, weight in a second unit or weight change. Record every medica
 with the action the document gives it at this visit: medications under headings such as "New" or \
 "Started" are new, "Continue" or "Current" are continue, "Discontinue" or "Stopped" are stop. Older \
 records and medication history tables often print start and stop dates and an active or inactive \
-status: record those too. For matched_medication, compare with the patient's medications provided."""
+status: record those too. For matched_medication, compare with the patient's medications provided. \
+Immunization records, and immunization sections of other documents, list vaccine doses: record one \
+entry in immunizations per dose given, with its own date; a vaccine listed only as due or recommended \
+is not a dose. For matched_vaccine, compare with the vaccine names provided."""
 
 
 def _inline_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -195,15 +218,16 @@ def get_model() -> str:
     return os.getenv("MYLABVAULT_AI_MODEL", DEFAULT_MODEL)
 
 
-def _normalize_date(raw: Optional[str]) -> Optional[str]:
-    """Return an ISO date, or None if missing, unparseable or implausible."""
+def _normalize_date(raw: Optional[str], future: bool = False) -> Optional[str]:
+    """Return an ISO date, or None if missing, unparseable or implausible (in the future, unless
+    future is set, e.g. for when a next dose is due)."""
     if not raw:
         return None
     try:
         parsed = date_parser.parse(raw).date()
     except (ValueError, OverflowError):
         return None
-    if parsed > date.today() or parsed.year < 1900:
+    if (parsed > date.today() and not future) or not 1900 <= parsed.year <= 2200:
         return None
     return parsed.isoformat()
 
@@ -303,6 +327,18 @@ def _to_medication(med: ExtractedMedication, known: Dict[str, str]) -> Dict[str,
     }
 
 
+def _to_immunization(shot: ExtractedImmunization, known: Dict[str, str]) -> Dict[str, Any]:
+    clean = lambda text: (text or "").strip() or None  # noqa: E731
+    return {
+        "vaccine": shot.vaccine.strip(),
+        # Only trust a match that names one of the vaccine names sent
+        "matched_vaccine": known.get(shot.matched_vaccine.strip().lower()) if shot.matched_vaccine else None,
+        "date_given": _normalize_date(shot.date_given), "dose": clean(shot.dose), "manufacturer": clean(shot.manufacturer),
+        "lot_number": clean(shot.lot_number), "site": clean(shot.site), "location": clean(shot.location),
+        "next_due": _normalize_date(shot.next_due, future=True),
+    }
+
+
 async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str, tool_description: str,
                     schema, input_schema: Optional[Dict[str, Any]] = None, max_tokens: int = 16000):
     """Ask Claude (through Bedrock) to answer by calling one tool, and return its input validated as `schema`.
@@ -379,7 +415,8 @@ async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str,
 
 
 async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
-                            current_medications: Optional[List[str]] = None) -> Dict[str, Any]:
+                            current_medications: Optional[List[str]] = None,
+                            vaccine_names: Optional[List[str]] = None) -> Dict[str, Any]:
     """Parse a lab report, visit summary or health summary PDF with Claude.
 
     Returns a dict in the same shape as PDFParser.parse_pdf_content.
@@ -399,6 +436,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
     names_list = "\n".join(f"- {name}" for name in sorted(known_names.values())) or "(none yet)"
     known_meds = {name.strip().lower(): name for name in (current_medications or []) if name}
     meds_list = "\n".join(f"- {name}" for name in sorted(known_meds.values())) or "(none recorded)"
+    known_vaccines = {name.strip().lower(): name for name in (vaccine_names or []) if name}
+    vaccines_list = "\n".join(f"- {name}" for name in known_vaccines.values()) or "(none)"
 
     messages = [{
         "role": "user",
@@ -415,7 +454,8 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
                 "type": "text",
                 "text": f"Existing test names in the app:\n{names_list}\n\n"
                         f"The patient's medications in the app (current and past):\n{meds_list}\n\n"
-                        f"Extract the lab results, vital signs and medications from this document and record "
+                        f"Vaccine names in the app:\n{vaccines_list}\n\n"
+                        f"Extract the lab results, vital signs, medications and vaccines from this document and record "
                         f"them with the {TOOL_NAME} tool.",
             },
         ],
@@ -424,7 +464,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
         system=SYSTEM_PROMPT,
         messages=messages,
         tool_name=TOOL_NAME,
-        tool_description="Record every lab result, vital sign and medication extracted from the document.",
+        tool_description="Record every lab result, vital sign, medication and vaccine dose extracted from the document.",
         schema=ExtractedReport,
         input_schema=TOOL_INPUT_SCHEMA,
     )
@@ -443,6 +483,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
         "tests": tests,
         "vitals": [v for v in (_to_vital(v) for v in report.vitals) if v],
         "medications": [_to_medication(m, known_meds) for m in report.medications if m.name and m.name.strip()],
+        "immunizations": [_to_immunization(i, known_vaccines) for i in report.immunizations if i.vaccine and i.vaccine.strip()],
         "ordered_panels": [],
         "panels": [],
         "errors": [],

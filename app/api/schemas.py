@@ -187,6 +187,7 @@ class PDFImportPreview(BaseModel):
     # Vital signs and medications read from a visit or health summary (AI reader)
     vitals: List[Dict[str, Any]] = []
     medications: List[Dict[str, Any]] = []
+    immunizations: List[Dict[str, Any]] = []  # vaccine doses, from an immunization record or a summary
 
 
 class PDFTestEdit(BaseModel):
@@ -236,6 +237,8 @@ class PDFImportConfirm(BaseModel):
     edits: Dict[str, PDFTestEdit] = {}  # keyed by the row's position, as a string
     selected_vitals: List[int] = []  # positions in the document's vitals
     selected_medications: List[int] = []  # positions in the document's medications
+    selected_immunizations: List[int] = []  # positions in the document's vaccine doses
+    immunization_dates: Dict[str, str] = {}  # date given entered for a dose the document has no date for, by position
 
 
 class PaginatedLabResults(BaseModel):

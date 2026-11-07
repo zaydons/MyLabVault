@@ -95,3 +95,18 @@ def visit_summary(visit="03/02/2026", vitals='BP: 128/82 T: 98.4 Pulse: 72 Resp:
     story += [Paragraph("Follow Up", heading), Paragraph("3 months." + (f" {tag}" if tag else ""), body)]
     SimpleDocTemplate(buffer).build(story)
     return buffer.getvalue()
+
+
+def immunization_record(rows=(("COVID-19 mRNA (Pfizer)", "09/15/2025", "Booster", "Pfizer", "FA1234", "Left deltoid"),
+                              ("Influenza, quadrivalent", "10/01/2025", "", "Sanofi", "UT5678", "Right deltoid"),
+                              ("Tdap", "", "", "", "", "")), tag=""):
+    """A generic "Immunization Record" export: one table row per dose. Names and values are made up."""
+    buffer = io.BytesIO()
+    styles = getSampleStyleSheet()
+    body = styles["Normal"]
+    story = [Paragraph("EXAMPLE HEALTH PORTAL", styles["Title"]), Paragraph("Immunization Record", styles["Heading2"]),
+             Paragraph("Pat Example", body), Paragraph("Vaccine &nbsp; Date given &nbsp; Dose &nbsp; Manufacturer &nbsp; Lot &nbsp; Site", body)]
+    story += [Paragraph(" &nbsp; ".join(cell or "-" for cell in row), body) for row in rows]
+    story.append(Paragraph("Printed from the patient portal." + (f" {tag}" if tag else ""), body))
+    SimpleDocTemplate(buffer).build(story)
+    return buffer.getvalue()
