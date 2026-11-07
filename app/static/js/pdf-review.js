@@ -366,7 +366,9 @@
         stop: '<span class="badge badge-status-out"><i class="mdi mdi-stop-circle-outline" aria-hidden="true"></i> Stop</span>',
         listed: '<span class="badge badge-status-none">Listed</span>',
     };
-    const MED_PLANS = { add: 'Add to your list', change_dose: 'Change the dose', stop: 'Mark stopped', none: 'No change' };
+    const MED_PLANS = { add: 'Add to your list', change_dose: 'Change the dose', stop: 'Mark stopped', history: 'Add to history', none: 'No change' };
+    // Matches OLD_DOCUMENT_DAYS in services/visit_review.py
+    const OLD_DOCUMENT_DAYS = 180;
 
     function checkCell(cls, key, index, checked, disabled, label) {
         const id = `${cls}-${key}-${index}`;
@@ -404,18 +406,26 @@
         if (!rows.length) return '';
         return `
         <h4 class="h6 mt-4 mb-2" id="meds-${key}-title"><i class="mdi mdi-pill mr-1" aria-hidden="true"></i>Medications</h4>
-        <p class="small text-muted mb-2">Compared with this patient's medication list. Tick the changes to make; they take effect on the visit date.</p>
+        ${(() => {
+            const d = p.date_collected ? new Date(`${p.date_collected.slice(0, 10)}T12:00:00`) : null;
+            return d && (Date.now() - d) / 86400000 > OLD_DOCUMENT_DAYS
+                ? `<div class="alert alert-info py-2 mb-2"><i class="mdi mdi-history mr-1" aria-hidden="true"></i>This document is from ${esc(displayDate(p.date_collected))}. Its medications are added to the history as past ones; they don't change what's on the current list.</div>` : '';
+        })()}
+        <p class="small text-muted mb-2">Compared with this patient's medications, current and past. Tick the changes to make.</p>
         <div class="table-responsive-md">
             <table class="table table-sm meds-table mb-0" aria-labelledby="meds-${key}-title">
                 <thead><tr><th scope="col" style="width: 2.5rem;"><span class="sr-only">Apply</span></th>
                     <th scope="col">Medication</th><th scope="col">On the summary</th><th scope="col">What happens</th></tr></thead>
                 <tbody>${rows.map(m => {
                     const what = [m.dose, m.frequency].filter(Boolean).join(', ');
+                    const dates = m.start_date || m.stop_date
+                        ? `${m.start_date ? esc(displayDate(m.start_date)) : '?'} – ${m.stop_date ? esc(displayDate(m.stop_date)) : (m.status === 'inactive' ? '?' : 'now')}`
+                        : (m.status === 'inactive' ? 'Inactive' : '');
                     const actionable = m.plan !== 'none' && !m.already_imported;
                     return `
                     <tr data-med="${m.index}">
                         ${checkCell('med-check', key, m.index, actionable, !actionable, `${MED_PLANS[m.plan] || 'Apply'}: ${m.name}`)}
-                        <td><strong>${esc(m.name)}</strong>${what ? `<div class="small">${esc(what)}</div>` : ''}
+                        <td><strong>${esc(m.name)}</strong>${what ? `<div class="small">${esc(what)}</div>` : ''}${dates ? `<div class="small">${dates}</div>` : ''}
                             ${m.prescriber ? `<div class="small text-muted">${esc(m.prescriber)}</div>` : ''}</td>
                         <td>${MED_ACTIONS[m.action] || MED_ACTIONS.listed}</td>
                         <td>${m.already_imported ? '<span class="badge badge-status-normal"><i class="mdi mdi-check" aria-hidden="true"></i> Done</span>'
@@ -1025,7 +1035,7 @@
                         ? `collected on ${f.dates.length} dates (${f.dates.map(d => esc(displayDate(d))).join(', ')})` : `${f.imported_count ? 'collected' : 'visit on'} ${esc(displayDate(f.date_collected))}`}</span>
                 </div>
                 ${(f.medication_changes || []).length ? `<ul class="list-unstyled mb-0 mt-2">${f.medication_changes.map(c => `
-                    <li class="mb-1"><i class="mdi mdi-pill mr-1" aria-hidden="true"></i>${esc({ add: 'Added', change_dose: 'Dose changed:', stop: 'Stopped' }[c.plan] || '')}
+                    <li class="mb-1"><i class="mdi mdi-pill mr-1" aria-hidden="true"></i>${esc({ add: 'Added', change_dose: 'Dose changed:', stop: 'Stopped', history: 'Added to history:' }[c.plan] || '')}
                         <a href="/medications">${esc(c.name)}</a>${c.plan !== 'stop' && c.dose ? ` ${esc(c.dose)}` : ''}</li>`).join('')}</ul>` : ''}
                 ${f.out_of_range.length ? `<ul class="list-unstyled mb-0 mt-2">${f.out_of_range.map(r => `
                     <li class="mb-1"><a href="/lab/${Number(r.lab_id)}">${esc(r.name)}</a>

@@ -146,10 +146,10 @@ def _report_details(test: dict, parsed_data: dict) -> dict:
 
 
 async def _parse_with_ai(content: bytes, db: Session, patient_id: int = 1) -> dict:
-    """Parse with the AI parser, passing existing test names and the patient's current medications so
-    what it reads maps onto them."""
+    """Parse with the AI parser, passing existing test names and the patient's medications (current and
+    past) so what it reads maps onto them."""
     known_lab_names = [name for (name,) in db.query(Lab.name).all()]
-    medications = [m.name for m in visit_review.current_medications(patient_id, db)]
+    medications = sorted({m.name for m in visit_review.all_medications(patient_id, db)})
     return await ai_parser.parse_pdf_with_ai(content, known_lab_names, medications)
 
 
