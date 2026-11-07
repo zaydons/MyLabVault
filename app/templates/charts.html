@@ -2,199 +2,147 @@
 
 {% block title %}Charts - MyLabVault{% endblock %}
 
+{% block extra_head %}
+<style>
+  /* Toolbar: what to show and over what time */
+  .chart-toolbar .card-body { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem 1.5rem; }
+  .chart-toolbar .toolbar-field { flex: 1 1 16rem; min-width: 0; margin: 0; }
+  .toolbar-label { display: block; font-weight: 600; margin-bottom: .5rem; }
+  .chart-range .btn { min-width: 4.5rem; }
+  /* Bootstrap's selected outline button is #007bff, too light behind white text; use the app's primary */
+  .chart-range .btn-outline-primary:not(:disabled):not(.disabled).active,
+  .chart-range .btn-outline-primary:not(:disabled):not(.disabled):active { background-color: #0062cc; border-color: #0062cc; color: #fff; }
+  .chart-delta { color: #212529; font-weight: 600; }
+  .dark-mode .chart-delta { color: #f1f3f5; }
+  .chart-toolbar .custom-switch { padding-bottom: .4rem; }
+
+  /* Panel cards: the same height in a row, the chart filling what the summary leaves */
+  .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 1rem; }
+  .chart-card { display: flex; flex-direction: column; margin: 0; min-width: 0; }
+  .chart-card-head { display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem 0; }
+  .chart-card-head h3 { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+  .chart-count { font-size: .85rem; white-space: nowrap; }
+  .chart-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; padding: .35rem 1rem .25rem; }
+  .chart-latest { font-size: 1.75rem; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .chart-latest small { font-size: .85rem; font-weight: 500; margin-left: .2rem; }
+  .chart-meta { width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .chart-body { flex: 1 1 auto; display: flex; flex-direction: column; padding: .25rem .75rem 0; min-height: 15rem; }
+  .chart-canvas { position: relative; flex: 1 1 auto; min-height: 15rem; }
+  .chart-message { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 1rem; }
+  .chart-table { overflow-x: auto; }
+  .chart-table table { margin: 0; font-variant-numeric: tabular-nums; }
+  .chart-card-foot { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .35rem 1rem .75rem; font-size: .85rem; }
+  .chart-spark { display: none; padding: 0 1rem .75rem; color: #0062cc; }
+  .chart-spark svg { display: block; width: 100%; height: 2.25rem; }
+  .chart-spark .spark-out { fill: #c82333; }
+  .dark-mode .chart-spark { color: #8ec5ff; }
+  .dark-mode .chart-spark .spark-out { fill: #ff8a95; }
+  .charts-compact .chart-body, .charts-compact .chart-card-foot { display: none; }
+  .charts-compact .chart-spark { display: block; }
+  .charts-compact .chart-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
+  .panel-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem; margin-bottom: .75rem; }
+  .panel-heading h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+</style>
+{% endblock %}
+
 {% block content %}
-<!-- Content Header -->
 <div class="content-header">
   <div class="container-fluid">
-    <div class="row mb-2">
-      <div class="col-sm-12">
-        <h1 class="m-0">
-          <i class="mdi mdi-chart-line mr-2"></i>
-          Lab Result Charts
-        </h1>
-      </div>
-    </div>
+    <h1 class="m-0"><i class="mdi mdi-chart-line mr-2" aria-hidden="true"></i>Charts</h1>
   </div>
 </div>
 
-<!-- Main content -->
 <section class="content">
   <div class="container-fluid">
-    
-    <!-- Panel Selection Section -->
-    <div class="row mb-4">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-view-grid mr-2"></i>
-              View Charts by Lab Panel
-            </h2>
+
+    <div class="card chart-toolbar" role="group" aria-label="What to chart">
+      <div class="card-body">
+        <div class="form-group toolbar-field">
+          <label for="panelSelect">Panel</label>
+          <select id="panelSelect" class="form-control" data-default="{{ default_panel_id or '' }}"
+                  data-search-select data-search-placeholder="Search panels…" data-search-empty="No panels match">
+            <option value="">Choose a panel...</option>
+            {% for panel in panels %}
+            <option value="{{ panel.id }}" data-detail="{{ panel.lab_count }} {{ 'test' if panel.lab_count == 1 else 'tests' }}">{{ panel.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group toolbar-field">
+          <label for="labSelect">Or one test</label>
+          <select id="labSelect" class="form-control"
+                  data-search-select data-search-placeholder="Search tests…" data-search-empty="No tests match">
+            <option value="">Choose a test...</option>
+            {% for panel in grouped_labs %}
+            <optgroup label="{{ panel.name }}">
+              {% for lab in panel.labs %}
+              <option value="{{ lab.id }}" data-detail="{{ lab.result_count }} {{ 'result' if lab.result_count == 1 else 'results' }}">{{ lab.name }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="chart-range">
+          <span class="toolbar-label" id="rangeLabel">Time range</span>
+          <div class="btn-group" role="group" aria-labelledby="rangeLabel">
+            <button type="button" class="btn btn-outline-primary" data-years="1" aria-pressed="false">1 year</button>
+            <button type="button" class="btn btn-outline-primary" data-years="3" aria-pressed="false">3 years</button>
+            <button type="button" class="btn btn-outline-primary" data-years="0" aria-pressed="true">All</button>
           </div>
-          <div class="card-body">
-            <div class="row align-items-center">
-              <div class="col-md-4">
-                <label for="panelSelect" class="form-label">Select Lab Panel:</label>
-                <select id="panelSelect" class="form-control" data-default="{{ default_panel_id or '' }}"
-                        data-search-select data-search-placeholder="Search panels…" data-search-empty="No panels match">
-                  <option value="">Choose a panel...</option>
-                  {% for panel in panels %}
-                  <option value="{{ panel.id }}" data-detail="{{ panel.lab_count }} {{ 'test' if panel.lab_count == 1 else 'tests' }}">{{ panel.name }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="col-md-8">
-                <div class="text-muted">
-                  <small>
-                    <i class="mdi mdi-information mr-1"></i>
-                    Type to search, or pick from the list; charts load as soon as you choose a panel
-                  </small>
-                </div>
-              </div>
-            </div>
-          </div>
+        </div>
+        <div class="custom-control custom-switch">
+          <input type="checkbox" class="custom-control-input" id="compactView">
+          <label class="custom-control-label" for="compactView">Compact</label>
         </div>
       </div>
     </div>
 
-    <!-- Panel Charts Container -->
-    <div id="panelChartsContainer" style="display: none;">
-      <div class="row mb-4">
-        <div class="col-12">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title" id="panelChartsTitle">
-                <i class="mdi mdi-chart-multiple mr-2"></i>
-                Panel Charts
-              </h2>
-            </div>
-            <div class="card-body">
-              <div id="panelChartsContent" class="row">
-                <!-- Charts will be loaded here -->
-              </div>
-            </div>
-          </div>
+    <!-- One test, larger -->
+    <div class="card" id="individualChartContainer" hidden>
+      <div class="card-header d-flex align-items-center">
+        <h2 class="card-title mr-auto" id="individualChartTitle">Test</h2>
+        <a class="btn btn-outline-secondary btn-sm mr-2" id="individualLabLink" href="#">Test page</a>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="closeIndividual" aria-label="Close this chart">
+          <i class="mdi mdi-close" aria-hidden="true"></i> Close</button>
+      </div>
+      <div class="card-body">
+        <div class="chart-summary px-0" id="individualSummary"></div>
+        <div id="individualChartBox" style="height: 380px; position: relative;">
+          <canvas id="individualChart"></canvas>
         </div>
       </div>
     </div>
 
-    <hr class="my-4">
-
-    <!-- Individual Lab Selection Section -->
-    <div class="row mb-4">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">
-              <i class="mdi mdi-flask mr-2"></i>
-              View Individual Lab Chart
-            </h2>
-          </div>
-          <div class="card-body">
-            <div class="row align-items-center">
-              <div class="col-md-4">
-                <label for="labSelect" class="form-label">Select Individual Lab:</label>
-                <select id="labSelect" class="form-control"
-                        data-search-select data-search-placeholder="Search tests…" data-search-empty="No tests match">
-                  <option value="">Choose a lab test...</option>
-                  {% for panel in grouped_labs %}
-                  <optgroup label="{{ panel.name }}">
-                    {% for lab in panel.labs %}
-                    <option value="{{ lab.id }}" data-detail="{{ lab.result_count }} {{ 'result' if lab.result_count == 1 else 'results' }}">{{ lab.name }}</option>
-                    {% endfor %}
-                  </optgroup>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="col-md-8">
-                <div class="text-muted">
-                  <small>
-                    <i class="mdi mdi-information mr-1"></i>
-                    Type part of a test's name to find it and see its detailed trend
-                  </small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <!-- The panel's tests -->
+    <div id="panelChartsContainer" hidden>
+      <div class="panel-heading">
+        <h2 id="panelChartsTitle">Panel</h2>
+        <span class="text-muted" id="panelChartsSummary"></span>
       </div>
+      <div id="panelChartsContent" class="chart-grid"></div>
     </div>
 
-    <!-- Individual Chart Container -->
-    <div id="individualChartContainer" style="display: none;">
-      <div class="row">
-        <div class="col-12">
-          <div class="card">
-            <div class="card-header">
-              <h2 class="card-title" id="individualChartTitle">
-                <i class="mdi mdi-chart-line mr-2"></i>
-                Individual Lab Chart
-              </h2>
-            </div>
-            <div class="card-body">
-              <div id="individualChartBox" style="height: 400px; position: relative;">
-                <canvas id="individualChart" style="width: 100%; height: 100%;"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div id="loadingIndicator" class="text-center py-5" hidden>
+      <div class="spinner-border text-primary" role="status"><span class="sr-only">Loading…</span></div>
+      <div class="mt-2">Loading charts…</div>
     </div>
-
-    <!-- Loading Indicator -->
-    <div id="loadingIndicator" class="row" style="display: none;">
-      <div class="col-12">
-        <div class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="sr-only">Loading...</span>
-          </div>
-          <div class="mt-2">Loading charts...</div>
-        </div>
-      </div>
-    </div>
-
   </div>
 </section>
 
-<!-- Chart Modal -->
-<div class="modal fade" id="chartModal" tabindex="-1" role="dialog" aria-labelledby="chartModalLabel" aria-hidden="true">
+<!-- Larger chart of one card -->
+<div class="modal fade" id="chartModal" tabindex="-1" role="dialog" aria-labelledby="modalChartTitle" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="chartModalLabel">
-          <i class="mdi mdi-chart-line mr-2"></i>
-          <span id="modalChartTitle">Chart</span>
-        </h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
+        <h2 class="modal-title h5" id="modalChartTitle">Chart</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
       </div>
       <div class="modal-body">
-        <div class="row">
-          <div class="col-12 mb-3">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <span class="badge badge-info" id="modalLabUnit">Unit</span>
-                <span class="badge badge-secondary ml-2" id="modalDataPoints">Data Points</span>
-              </div>
-              <button type="button" class="btn btn-primary" id="viewLabPageBtn">
-                <i class="mdi mdi-flask mr-1"></i>
-                View Lab Page
-              </button>
-            </div>
-          </div>
-          <div class="col-12">
-            <div style="height: 500px; position: relative;">
-              <canvas id="modalChart" style="width: 100%; height: 100%;"></canvas>
-            </div>
-          </div>
-        </div>
+        <div class="chart-summary px-0" id="modalSummary"></div>
+        <div style="height: 460px; position: relative;"><canvas id="modalChart"></canvas></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">
-          <i class="mdi mdi-close mr-1"></i>
-          Close
-        </button>
+        <a class="btn btn-primary" id="viewLabPageBtn" href="#"><i class="mdi mdi-flask mr-1" aria-hidden="true"></i>Test page</a>
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -204,228 +152,273 @@
 {% block extra_scripts %}
 <script src="/static/js/search-select.js"></script>
 <script>
-function chartNumber(value) {
-    return (value === null || value === undefined || isNaN(parseFloat(value))) ? null : parseFloat(value);
+/*
+ * Charts: the tests of a panel as summary cards (latest value, status, change since the last result,
+ * and a chart filling the rest), all over one shared time span; or one test, larger.
+ * Time range and Compact are remembered in this browser.
+ */
+const OUT = ['high', 'low', 'abnormal'];
+const state = { labs: [], panelName: '', years: 0, compact: false, tables: new Set(), charts: [], dateFormat: 'MM/DD/YYYY' };
+const num = v => (v === null || v === undefined || v === '' || isNaN(parseFloat(v))) ? null : parseFloat(v);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const showDate = iso => { try { return formatDateSync(`${iso}T12:00:00`, state.dateFormat); } catch (e) { return iso; } };
+const fmtNum = v => String(Math.round(v * 1000) / 1000);
+const remember = (key, value) => { try { localStorage.setItem(`charts.${key}`, JSON.stringify(value)); } catch (e) { /* not kept */ } };
+const recall = (key, fallback) => { try { const v = localStorage.getItem(`charts.${key}`); return v === null ? fallback : JSON.parse(v); } catch (e) { return fallback; } };
+
+function badge(status) {
+    switch (status) {
+        case 'normal': return '<span class="badge badge-status-normal">Normal</span>';
+        case 'high': return '<span class="badge badge-status-out"><i class="mdi mdi-arrow-up-bold" aria-hidden="true"></i> High</span>';
+        case 'low': return '<span class="badge badge-status-out"><i class="mdi mdi-arrow-down-bold" aria-hidden="true"></i> Low</span>';
+        case 'abnormal': return '<span class="badge badge-status-abnormal"><i class="mdi mdi-alert" aria-hidden="true"></i> Abnormal</span>';
+        default: return '<span class="badge badge-status-none">No range</span>';
+    }
+}
+const rangeText = (low, high) => low !== null && high !== null ? `${fmtNum(low)}–${fmtNum(high)}` : low !== null ? `≥ ${fmtNum(low)}` : high !== null ? `≤ ${fmtNum(high)}` : '';
+const unitOf = lab => lab.unit ? lab.unit.name : '';
+const shown = r => num(r.value) !== null ? fmtNum(num(r.value)) : (r.value_text || '—');
+
+// Results newest first (as the API sends them), limited to the chosen time range
+function inRange(results) {
+    if (!state.years) return results;
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - state.years);
+    const from = cutoff.toISOString().slice(0, 10);
+    return results.filter(r => r.date >= from);
 }
 
-$(document).ready(function() {
-    $('select[data-search-select]').each((_, select) => SearchSelect.enhance(select));
-    // Charts load as soon as a panel or test is picked
-    $('#panelSelect').on('change', function() {
-        if (!this.value) return;
-        loadPanelCharts(this.value, $('#panelSelect option:selected').text());
-        rememberSelection('panel', this.value);
-    });
-    $('#labSelect').on('change', function() {
-        if (!this.value) return;
-        loadIndividualChart(this.value, $('#labSelect option:selected').text());
-        rememberSelection('lab', this.value);
-    });
-
-    // Open what the link asks for (?panel= or ?lab=), else the panel of the latest result
-    const params = new URLSearchParams(window.location.search);
-    const pick = (selector, value) => value && $(`${selector} option[value="${CSS.escape(value)}"]`).length
-        ? $(selector).val(value).trigger('change') && true : false;
-    if (!pick('#labSelect', params.get('lab'))) {
-        pick('#panelSelect', params.get('panel') || $('#panelSelect').data('default') + '');
+// Latest result, its status and the change since the previous numeric result
+function summaryHtml(lab) {
+    const latest = lab.results[0];
+    if (!latest) return '<span class="text-muted">No results yet</span>';
+    const value = num(latest.value);
+    const prev = value === null ? null : lab.results.slice(1).find(r => num(r.value) !== null);
+    let change = 'First result';
+    if (value === null) change = '';
+    else if (prev) {
+        const diff = value - num(prev.value);
+        change = diff === 0 ? `No change since ${showDate(prev.date)}`
+            : `<span class="chart-delta">${diff > 0 ? '▲ up' : '▼ down'} ${fmtNum(Math.abs(diff))}</span> since ${showDate(prev.date)}`;
     }
-});
+    const range = rangeText(num(latest.ref_low), num(latest.ref_high));
+    const meta = [showDate(latest.date), change, range ? `<span class="text-nowrap">range ${range}</span>` : ''].filter(Boolean).join(' · ');
+    return `<span class="chart-latest">${escapeHtml(shown(latest))}${unitOf(lab) && value !== null ? `<small class="text-muted">${escapeHtml(unitOf(lab))}</small>` : ''}</span>
+        ${badge(latest.status)}<span class="chart-meta text-muted">${meta}</span>`;
+}
+
+function chartData(lab, results) {
+    return {
+        name: lab.name, unit: unitOf(lab),
+        points: results.map(r => ({ date: r.date, value: r.value, low: r.ref_low, high: r.ref_high, status: r.status, flag: r.flag, fasting: r.fasting })),
+    };
+}
+
+function tableHtml(lab, results) {
+    return `<div class="chart-table"><table class="table table-sm">
+        <caption class="sr-only">${escapeHtml(lab.name)} results, newest first</caption>
+        <thead><tr><th scope="col">Date</th><th scope="col">Result</th><th scope="col">Range</th><th scope="col">Status</th></tr></thead>
+        <tbody>${results.map(r => `<tr><td>${showDate(r.date)}</td>
+            <td>${escapeHtml(shown(r))}${num(r.value) !== null && unitOf(lab) ? ` ${escapeHtml(unitOf(lab))}` : ''}</td>
+            <td>${rangeText(num(r.ref_low), num(r.ref_high)) || '—'}</td><td>${badge(r.status)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// A tiny line of the numeric results, oldest to newest, with the newest point marked (Compact view)
+function sparkSvg(results) {
+    const pts = results.filter(r => num(r.value) !== null).slice().reverse();
+    if (pts.length < 2) return '';
+    const vals = pts.map(r => num(r.value)), mn = Math.min(...vals), mx = Math.max(...vals), w = 200, h = 36;
+    const X = i => 3 + i / (pts.length - 1) * (w - 6), Y = v => 4 + (1 - (v - mn) / ((mx - mn) || 1)) * (h - 8);
+    const last = pts[pts.length - 1];
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <polyline points="${pts.map((r, i) => `${X(i)},${Y(num(r.value))}`).join(' ')}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        <circle cx="${X(pts.length - 1)}" cy="${Y(num(last.value))}" r="3.5" fill="currentColor" class="${OUT.includes(last.status) ? 'spark-out' : ''}"/></svg>`;
+}
+
+function destroyCharts() {
+    state.charts.forEach(c => c && c.destroy());
+    state.charts = [];
+}
+
+function renderPanel() {
+    destroyCharts();
+    const labs = state.labs;
+    // One date span for every card, from the results in the time range
+    const dates = labs.flatMap(lab => inRange(lab.results).filter(r => num(r.value) !== null).map(r => LabChart.parseDate(r.date)));
+    const span = dates.length ? { xMin: Math.min(...dates), xMax: Math.max(...dates) } : {};
+    const outNow = labs.filter(lab => lab.results[0] && OUT.includes(lab.results[0].status)).length;
+    $('#panelChartsTitle').text(state.panelName);
+    $('#panelChartsSummary').text(`${plural(labs.length, 'test')}${outNow ? ` · ${outNow} out of range now` : ''}`);
+
+    $('#panelChartsContent').html(labs.map(lab => {
+        const id = Number(lab.id);
+        const results = inRange(lab.results);
+        const numeric = results.some(r => num(r.value) !== null);
+        const table = state.tables.has(id) || (results.length && !numeric);
+        const out = results.filter(r => OUT.includes(r.status)).length;
+        let body;
+        if (!lab.results.length) body = '<div class="chart-message text-muted">No results yet</div>';
+        else if (!results.length) body = `<div class="chart-message text-muted">No results in the last ${state.years === 1 ? 'year' : `${state.years} years`}</div>`;
+        else if (table) body = tableHtml(lab, results);
+        else body = `<div class="chart-canvas"><canvas id="panelChart_${id}"></canvas></div>`;
+        return `<article class="card chart-card" data-lab-id="${id}" aria-labelledby="chart-title-${id}">
+            <div class="chart-card-head">
+                <h3 class="h6" id="chart-title-${id}">${escapeHtml(lab.name)}</h3>
+                <span class="chart-count text-muted">${plural(lab.results.length, 'result')}</span>
+                ${numeric ? `<button type="button" class="btn btn-outline-secondary btn-sm chart-enlarge" data-lab-id="${id}" aria-label="Enlarge ${escapeHtml(lab.name)} chart" title="Enlarge">
+                    <i class="mdi mdi-arrow-expand" aria-hidden="true"></i></button>` : ''}
+            </div>
+            <div class="chart-summary">${summaryHtml(lab)}</div>
+            <div class="chart-body">${body}</div>
+            <div class="chart-spark">${sparkSvg(results)}</div>
+            <div class="chart-card-foot">
+                <span class="text-muted">${results.length ? `${out} of ${results.length} out of range` : ''}</span>
+                ${results.length && numeric ? `<button type="button" class="btn btn-link btn-sm p-0 chart-table-toggle" data-lab-id="${id}" aria-pressed="${table}">${table ? 'Show chart' : 'Show as table'}</button>` : ''}
+            </div>
+        </article>`;
+    }).join(''));
+
+    labs.forEach(lab => {
+        const canvas = document.getElementById(`panelChart_${Number(lab.id)}`);
+        if (canvas) state.charts.push(LabChart.create(canvas, chartData(lab, inRange(lab.results)), { compact: true, ...span }));
+    });
+}
+
+function loadPanel(panelId, panelName) {
+    $('#loadingIndicator').prop('hidden', false);
+    fetch(`/api/results/charts/panel/${encodeURIComponent(panelId)}`)
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(data => {
+            state.labs = data.labs;
+            state.panelName = panelName;
+            state.tables.clear();
+            $('#loadingIndicator').prop('hidden', true);
+            $('#panelChartsContainer').prop('hidden', false);
+            renderPanel();
+        })
+        .catch(() => {
+            $('#loadingIndicator').prop('hidden', true);
+            showNotification('The charts couldn\'t be loaded. Try again.', 'error', 'Charts');
+        });
+}
+
+// ---------- one test, larger ----------
+let individual = null, individualChart = null;
+
+function renderIndividual() {
+    if (!individual) return;
+    if (individualChart) individualChart.destroy();
+    individualChart = null;
+    const lab = individual;
+    $('#individualChartTitle').text(lab.name);
+    $('#individualLabLink').attr('href', `/lab/${Number(lab.id)}`);
+    $('#individualSummary').html(summaryHtml(lab));
+    const box = document.getElementById('individualChartBox');
+    const results = inRange(lab.results);
+    if (!results.some(r => num(r.value) !== null)) {
+        box.innerHTML = `<div class="chart-message text-muted h-100">${lab.results.some(r => num(r.value) !== null)
+            ? `No results in the last ${state.years === 1 ? 'year' : `${state.years} years`}`
+            : `${escapeHtml(lab.name)} has only text results, which can't be charted.`}</div>`;
+        return;
+    }
+    box.innerHTML = '<canvas id="individualChart"></canvas>';
+    individualChart = LabChart.create(document.getElementById('individualChart'), chartData(lab, results));
+}
+
+function loadIndividual(labId) {
+    fetch(`/api/results/charts/lab/${encodeURIComponent(labId)}`)
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(data => {
+            individual = data;
+            $('#individualChartContainer').prop('hidden', false);
+            renderIndividual();
+        })
+        .catch(() => showNotification('The chart couldn\'t be loaded. Try again.', 'error', 'Charts'));
+}
+
+// ---------- larger view of a card ----------
+let modalChart = null;
+function openModal(labId) {
+    const lab = state.labs.find(l => Number(l.id) === Number(labId));
+    if (!lab) return;
+    $('#modalChartTitle').text(lab.name);
+    $('#modalSummary').html(summaryHtml(lab));
+    $('#viewLabPageBtn').attr('href', `/lab/${Number(lab.id)}`);
+    $('#chartModal').one('shown.bs.modal', () => {
+        if (modalChart) modalChart.destroy();
+        modalChart = LabChart.create(document.getElementById('modalChart'), chartData(lab, inRange(lab.results)));
+    });
+    $('#chartModal').modal('show');
+}
 
 // Keep the current choice in the address bar so it can be bookmarked or reloaded
 function rememberSelection(key, value) {
     const url = new URL(window.location.href);
-    url.searchParams.delete('panel');
-    url.searchParams.delete('lab');
-    url.searchParams.set(key, value);
+    url.searchParams.delete(key);
+    if (value) url.searchParams.set(key, value);
     history.replaceState(null, '', url);
 }
 
-function loadPanelCharts(panelId, panelName) {
-    
-    $('#loadingIndicator').show();
-    $('#panelChartsContainer').hide();
-    
-    // Fetch panel chart data (patient filtering handled by cookie on server side)
-    fetch(`/api/results/charts/panel/${panelId}`)
-        .then(response => response.json())
-        .then(data => {
-            
-            $('#panelChartsTitle').html(`
-                <i class="mdi mdi-chart-multiple mr-2"></i>
-                ${escapeHtml(panelName)} - Lab Trends
-            `);
-            
-            renderPanelCharts(data.labs);
-            
-            $('#loadingIndicator').hide();
-            $('#panelChartsContainer').show();
-        })
-        .catch(error => {
-            console.error('Error loading panel charts:', error);
-            $('#loadingIndicator').hide();
-            alert('Failed to load panel charts. Please try again.');
-        });
-}
-
-function loadIndividualChart(labId, labName) {
-    
-    $('#loadingIndicator').show();
-    $('#individualChartContainer').hide();
-    
-    // Fetch individual chart data (patient filtering handled by cookie on server side)
-    fetch(`/api/results/charts/lab/${labId}`)
-        .then(response => response.json())
-        .then(data => {
-            
-            $('#individualChartTitle').html(`
-                <i class="mdi mdi-chart-line mr-2"></i>
-                ${escapeHtml(labName)} - Trend Chart
-            `);
-            
-            renderIndividualChart(data);
-            
-            $('#loadingIndicator').hide();
-            $('#individualChartContainer').show();
-        })
-        .catch(error => {
-            console.error('Error loading individual chart:', error);
-            $('#loadingIndicator').hide();
-            alert('Failed to load individual chart. Please try again.');
-        });
-}
-
-function renderPanelCharts(labs) {
-    const container = $('#panelChartsContent');
-    container.empty();
-    
-    labs.forEach((lab, index) => {
-        const chartId = `panelChart_${Number(lab.id)}`;
-        const colClass = labs.length <= 2 ? 'col-md-6' : 'col-md-4';
-        
-        const chartHtml = `
-            <div class="${colClass} mb-4">
-                <div class="card h-100 chart-card" data-lab-id="${escapeHtml(lab.id)}" ${lab.results.length > 0 ? `style="cursor: pointer;" tabindex="0" role="button" aria-label="Enlarge ${escapeHtml(lab.name)} chart"` : ''}>
-                    <div class="card-header">
-                        <h3 class="card-title mb-0 h6">
-                            <i class="mdi mdi-flask mr-1"></i>
-                            ${escapeHtml(lab.name)}
-                        </h3>
-                        <small class="text-muted ml-2">${lab.results.length} result${lab.results.length === 1 ? '' : 's'}</small>
-                        ${lab.results.length > 0 ? 
-                            `<small class="text-primary ml-2">
-                                <i class="mdi mdi-magnify-plus mr-1"></i>
-                                Click to enlarge
-                            </small>` : ''
-                        }
-                    </div>
-                    <div class="card-body">
-                        ${lab.results.length > 0 ? 
-                            `<div style="height: 250px; position: relative;">
-                                <canvas id="${chartId}" style="width: 100%; height: 100%;"></canvas>
-                            </div>` : 
-                            `<div class="d-flex align-items-center justify-content-center" style="height: 250px;">
-                                <div class="text-center text-muted">
-                                    <i class="mdi mdi-chart-line-variant mb-2" style="font-size: 2rem;"></i>
-                                    <div>No data available</div>
-                                </div>
-                            </div>`
-                        }
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        container.append(chartHtml);
-        
-        // Create chart if there's data
-        if (lab.results.length > 0) {
-            createSmallChart(chartId, lab);
-        }
-    });
-    
-    // Add click handlers for charts
-    $('.chart-card[tabindex]').on('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
-    });
-    $('.chart-card').on('click', function() {
-        const labId = $(this).data('lab-id');
-        const labData = labs.find(lab => lab.id === labId);
-        
-        if (labData && labData.results.length > 0) {
-            openChartModal(labData);
-        }
+function setYears(years) {
+    state.years = years;
+    remember('years', years);
+    document.querySelectorAll('[data-years]').forEach(b => {
+        const on = Number(b.dataset.years) === years;
+        b.setAttribute('aria-pressed', String(on));
+        b.classList.toggle('active', on);
     });
 }
 
-function renderIndividualChart(labData) {
-    createLabChart('individualChart', labData);
-}
+$(document).ready(async function () {
+    try { state.dateFormat = await getUserDateFormat(); } catch (e) { /* default format */ }
+    $('select[data-search-select]').each((_, select) => SearchSelect.enhance(select));
+    setYears([0, 1, 3].includes(recall('years', 0)) ? recall('years', 0) : 0);
+    state.compact = !!recall('compact', false);
+    $('#compactView').prop('checked', state.compact);
+    $('section.content').toggleClass('charts-compact', state.compact);
 
-// Chart data in the shape LabChart expects; each point keeps the range that applied to it
-function chartData(labData) {
-    return {
-        name: labData.name,
-        unit: labData.unit ? labData.unit.name : '',
-        points: labData.results.map(r => ({
-            date: r.date,
-            value: r.value,
-            low: r.ref_low !== undefined ? r.ref_low : labData.ref_low,
-            high: r.ref_high !== undefined ? r.ref_high : labData.ref_high,
-            status: r.status, flag: r.flag, fasting: r.fasting
-        }))
-    };
-}
+    $('#panelSelect').on('change', function () {
+        if (!this.value) return;
+        loadPanel(this.value, $('#panelSelect option:selected').text());
+        rememberSelection('panel', this.value);
+    });
+    $('#labSelect').on('change', function () {
+        if (!this.value) return;
+        loadIndividual(this.value);
+        rememberSelection('lab', this.value);
+    });
+    $('#closeIndividual').on('click', () => {
+        if (individualChart) individualChart.destroy();
+        individualChart = null; individual = null;
+        $('#individualChartContainer').prop('hidden', true);
+        rememberSelection('lab', null);
+        document.getElementById('labSelect-search')?.focus();
+    });
+    document.querySelectorAll('[data-years]').forEach(b => b.addEventListener('click', () => {
+        setYears(Number(b.dataset.years));
+        if (state.labs.length) renderPanel();
+        renderIndividual();
+    }));
+    $('#compactView').on('change', function () {
+        state.compact = this.checked;
+        remember('compact', state.compact);
+        $('section.content').toggleClass('charts-compact', state.compact);
+    });
+    $('#panelChartsContent').on('click', '.chart-enlarge', function () { openModal(this.dataset.labId); });
+    $('#panelChartsContent').on('click', '.chart-table-toggle', function () {
+        const id = Number(this.dataset.labId);
+        state.tables.has(id) ? state.tables.delete(id) : state.tables.add(id);
+        renderPanel();
+        document.querySelector(`.chart-table-toggle[data-lab-id="${id}"]`)?.focus();
+    });
 
-function hasNumericResults(labData) {
-    return labData.results.some(r => chartNumber(r.value) !== null);
-}
-
-function createSmallChart(canvasId, labData) {
-    LabChart.create(document.getElementById(canvasId), chartData(labData), { compact: true });
-}
-
-function createLabChart(canvasId, labData) {
-    if (window.individualChartInstance) window.individualChartInstance.destroy();
-    window.individualChartInstance = null;
-    // Start from a fresh canvas each time (a qualitative-only test replaces it with a message)
-    const box = document.getElementById('individualChartBox');
-    box.innerHTML = `<canvas id="${canvasId}" style="width: 100%; height: 100%;"></canvas>`;
-    const canvas = document.getElementById(canvasId);
-    if (!hasNumericResults(labData)) {
-        box.innerHTML = `
-            <div class="d-flex align-items-center justify-content-center h-100 text-center text-muted">
-                <div>
-                    <i class="mdi mdi-information-outline mb-2" style="font-size: 2.5rem;" aria-hidden="true"></i>
-                    <p class="mb-0">${escapeHtml(labData.name)} has only qualitative results, which can't be charted.</p>
-                </div>
-            </div>`;
-        return;
-    }
-    window.individualChartInstance = LabChart.create(canvas, chartData(labData));
-}
-
-// Modal functions
-function openChartModal(labData) {
-    $('#modalChartTitle').text(labData.name);
-    $('#modalLabUnit').text(labData.unit ? labData.unit.name : 'No unit');
-    $('#modalDataPoints').text(`${labData.results.length} data points`);
-    $('#viewLabPageBtn').data('lab-id', labData.id);
-    // Create the chart once the modal is visible (it needs the canvas size)
-    $('#chartModal').one('shown.bs.modal', () => createModalChart(labData));
-    $('#chartModal').modal('show');
-}
-
-function createModalChart(labData) {
-    if (window.modalChartInstance) window.modalChartInstance.destroy();
-    window.modalChartInstance = LabChart.create(document.getElementById('modalChart'), chartData(labData));
-}
-
-// Handle "View Lab Page" button click
-$(document).on('click', '#viewLabPageBtn', function() {
-    const labId = $(this).data('lab-id');
-    if (labId) {
-        window.location.href = `/lab/${labId}`;
-    }
+    // Open what the link asks for (?panel= and/or ?lab=), else the panel of the latest result
+    const params = new URLSearchParams(window.location.search);
+    const pick = (selector, value) => value && $(`${selector} option[value="${CSS.escape(value)}"]`).length
+        ? !!$(selector).val(value).trigger('change') : false;
+    pick('#panelSelect', params.get('panel') || ($('#panelSelect').data('default') + ''));
+    pick('#labSelect', params.get('lab'));
 });
 </script>
 {% endblock %}

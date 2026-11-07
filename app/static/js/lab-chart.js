@@ -3,15 +3,19 @@
  *
  * - Points sit on a real time axis, so uneven gaps between draws look uneven.
  * - Straight lines between results; values between draws are not interpolated smoothly.
- * - Out-of-range points use a shape and an H/L label as well as color.
- * - The reference range is drawn per point (each result's own range, else the test's).
+ * - Out-of-range points are triangles (up for high, down for low) as well as a color; the newest
+ *   one also gets an H/L label. Every point's status is in its tooltip.
+ * - The current reference range (the newest result's, else the test's) is one shaded band. A point
+ *   whose own range differed shows that range in its tooltip.
+ * - The y-axis has four or five round steps from the data and the current range, and never goes
+ *   below 0 for values that can't be negative.
  * - The canvas gets a text summary for screen readers.
  * - Colors follow the theme, and drawn charts are recolored when body.dark-mode changes.
  *
  * LabChart.create(canvas, {
  *     name, unit,
  *     points: [{date, value, low, high, status, flag, fasting}]
- * }, {compact: false, title: true})
+ * }, {compact: false, title: true, xMin, xMax})    // xMin/xMax (ms): a shared date span for charts side by side
  */
 (function () {
     const OUT = ['high', 'low', 'abnormal'];
@@ -29,18 +33,39 @@
             : { line: '#0062cc', out: '#c82333', range: '#1e7e34', band: 'rgba(30, 126, 52, 0.08)', text: '#495057', grid: 'rgba(0, 0, 0, 0.08)' };
     }
 
+    // Round axis bounds: about four steps of 1, 2, 2.5 or 5 x a power of ten, covering the values with a
+    // little room, and never below 0 when none of the values is negative
+    function yBounds(values) {
+        const nums = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+        if (!nums.length) return null;
+        let lo = Math.min(...nums), hi = Math.max(...nums);
+        const span = hi - lo || Math.abs(hi) || 1;
+        lo -= span * 0.1;
+        hi += span * 0.1;
+        if (Math.min(...nums) >= 0) lo = Math.max(0, lo);
+        const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+        const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(st => st >= raw);
+        const min = Math.floor(lo / step) * step;
+        return { min: Math.min(...nums) >= 0 ? Math.max(0, min) : min, max: Math.ceil(hi / step) * step, step };
+    }
+
+    // The range that applies now: the newest result's own range, else the test's
+    function currentRange(points) {
+        for (let i = points.length - 1; i >= 0; i--) {
+            if (points[i].low !== null || points[i].high !== null) return { low: points[i].low, high: points[i].high };
+        }
+        return { low: null, high: null };
+    }
+
+    const rangeText = (low, high) => low !== null && high !== null ? `${low} - ${high}` : low !== null ? `≥ ${low}` : `≤ ${high}`;
+
     // Sets every theme-dependent color; works on a chart config before creation and on a live chart
     function applyColors(chart, points) {
         const c = colors();
         const isOut = p => OUT.includes(p.status);
-        chart.data.datasets.forEach((ds, i) => {
-            if (i === 0) {
-                ds.borderColor = ds.backgroundColor = c.line;
-                ds.pointBackgroundColor = ds.pointBorderColor = points.map(p => isOut(p) ? c.out : c.line);
-            } else {
-                ds.borderColor = c.range;
-                if (ds.fill) ds.backgroundColor = c.band;
-            }
+        chart.data.datasets.forEach(ds => {
+            ds.borderColor = ds.backgroundColor = c.line;
+            ds.pointBackgroundColor = ds.pointBorderColor = points.map(p => isOut(p) ? c.out : c.line);
         });
         const { plugins, scales } = chart.options;
         plugins.title.color = c.text;
@@ -65,24 +90,47 @@
         }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }
 
-    // Draws "H" / "L" / "!" next to out-of-range points so status isn't conveyed by color alone
+    // Draws "H" / "L" / "!" next to the newest point when it's out of range; earlier points carry their
+    // status in their shape and tooltip, so the chart isn't crowded with labels
     const flagLabels = {
         id: 'labFlagLabels',
         afterDatasetsDraw(chart) {
             const meta = chart.getDatasetMeta(0);
             const points = chart.$labPoints || [];
+            const i = points.length - 1, p = points[i], el = meta.data[i];
+            if (!p || !el || !OUT.includes(p.status)) return;
             const { ctx } = chart;
             ctx.save();
-            ctx.font = '600 11px "IBM Plex Sans", sans-serif';
+            ctx.font = '700 12px "IBM Plex Sans", sans-serif';
             ctx.textAlign = 'center';
             ctx.fillStyle = colors().out;
-            meta.data.forEach((el, i) => {
-                const p = points[i];
-                if (!p || !OUT.includes(p.status)) return;
-                const label = p.status === 'high' ? 'H' : p.status === 'low' ? 'L' : '!';
-                const below = p.status === 'low';
-                ctx.textBaseline = below ? 'top' : 'bottom';
-                ctx.fillText(label, el.x, el.y + (below ? 9 : -9));
+            const below = p.status === 'low';
+            ctx.textBaseline = below ? 'top' : 'bottom';
+            ctx.fillText(p.status === 'high' ? 'H' : p.status === 'low' ? 'L' : '!', el.x, el.y + (below ? 10 : -10));
+            ctx.restore();
+        }
+    };
+
+    // The current reference range as one shaded band with dashed edges, behind the line
+    const rangeBand = {
+        id: 'labRangeBand',
+        beforeDatasetsDraw(chart) {
+            const range = chart.$labRange;
+            if (!range || (range.low === null && range.high === null)) return;
+            const { ctx, chartArea: area, scales: { y } } = chart;
+            const top = range.high !== null ? Math.max(area.top, y.getPixelForValue(range.high)) : area.top;
+            const bottom = range.low !== null ? Math.min(area.bottom, y.getPixelForValue(range.low)) : area.bottom;
+            const c = colors();
+            ctx.save();
+            ctx.fillStyle = c.band;
+            if (bottom > top) ctx.fillRect(area.left, top, area.right - area.left, bottom - top);
+            ctx.strokeStyle = c.range;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 4]);
+            [range.high, range.low].forEach(v => {
+                if (v === null || v <= y.min || v >= y.max) return;
+                const py = Math.round(y.getPixelForValue(v)) + 0.5;
+                ctx.beginPath(); ctx.moveTo(area.left, py); ctx.lineTo(area.right, py); ctx.stroke();
             });
             ctx.restore();
         }
@@ -110,10 +158,8 @@
         canvas.setAttribute('aria-label', summarize(data.name, data.unit, points));
         if (!points.length) return null;
 
-        const lows = points.map(p => ({ x: p.x, y: p.low }));
-        const highs = points.map(p => ({ x: p.x, y: p.high }));
-        const hasLow = lows.some(p => p.y !== null);
-        const hasHigh = highs.some(p => p.y !== null);
+        const range = currentRange(points);
+        const bounds = yBounds([...points.map(p => p.y), range.low, range.high]);
         const pointStyle = p => p.status === 'high' || p.status === 'low' ? 'triangle' : p.status === 'abnormal' ? 'rectRot' : 'circle';
         const radius = opts.compact ? 3 : 5;
 
@@ -129,26 +175,15 @@
             pointHoverRadius: radius + 3,
         }];
 
-        const rangeLine = (label, values) => ({
-            label, data: values, borderWidth: opts.compact ? 1 : 1.5,
-            borderDash: [5, 4], stepped: 'middle', spanGaps: true, fill: false, pointRadius: 0, pointHoverRadius: 0,
-        });
-        if (hasHigh) datasets.push(rangeLine('Upper reference', highs));
-        if (hasLow) {
-            const lower = rangeLine('Lower reference', lows);
-            // Shade the normal range between the two lines when both are known
-            if (hasHigh) lower.fill = '-1';
-            datasets.push(lower);
-        }
-
-        const span = points[points.length - 1].x - points[0].x;
+        const xMin = opts.xMin ?? points[0].x, xMax = opts.xMax ?? points[points.length - 1].x;
+        const span = xMax - xMin;
         const pad = span ? span * 0.04 : 15 * 86400000;
         const font = size => ({ family: 'IBM Plex Sans', size });
 
         const config = {
             type: 'line',
             data: { datasets },
-            plugins: [flagLabels],
+            plugins: [rangeBand, flagLabels],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -168,7 +203,8 @@
                                 const p = points[item.dataIndex];
                                 const lines = [`Status: ${statusWord(p.status)}`];
                                 if (p.low !== null || p.high !== null) {
-                                    lines.push(`Range: ${p.low !== null && p.high !== null ? `${p.low} - ${p.high}` : p.low !== null ? `≥ ${p.low}` : `≤ ${p.high}`}`);
+                                    const differs = p.low !== range.low || p.high !== range.high;
+                                    lines.push(`${differs ? 'Range then' : 'Range'}: ${rangeText(p.low, p.high)}`);
                                 }
                                 if (p.flag) lines.push(`Lab flag: ${p.flag}`);
                                 if (p.fasting === true) lines.push('Fasting');
@@ -180,16 +216,17 @@
                 scales: {
                     x: {
                         type: 'linear',
-                        min: points[0].x - pad,
-                        max: points[points.length - 1].x + pad,
+                        min: xMin - pad,
+                        max: xMax + pad,
                         grid: { display: !opts.compact },
                         ticks: { font: font(opts.compact ? 10 : 12), maxTicksLimit: opts.compact ? 4 : 7, maxRotation: 0, callback: v => shortDate(v) },
                     },
                     y: {
-                        grace: '8%',
+                        min: bounds.min,
+                        max: bounds.max,
                         grid: {},
                         title: { display: !opts.compact && !!data.unit, text: data.unit || '', font: font(12) },
-                        ticks: { font: font(opts.compact ? 10 : 12), maxTicksLimit: opts.compact ? 4 : 8 },
+                        ticks: { font: font(opts.compact ? 10 : 12), stepSize: bounds.step },
                     }
                 }
             }
@@ -197,11 +234,13 @@
         applyColors(config, points);
         const chart = new Chart(canvas.getContext('2d'), config);
         chart.$labPoints = points;
+        chart.$labRange = range;
+        chart.update('none');  // draw the band now that the chart knows its range
         return chart;
     }
 
     if (document.body) watchTheme();
     else document.addEventListener('DOMContentLoaded', watchTheme);
 
-    window.LabChart = { create, summarize };
+    window.LabChart = { create, summarize, yBounds, currentRange, parseDate };
 })();
