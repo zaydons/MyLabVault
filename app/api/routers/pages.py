@@ -497,6 +497,11 @@ def medications_page(request: Request, db: Session = Depends(get_db)):
     """Medications and supplements page."""
     return _render_simple_page("medications.html", request, db)
 
+@router.get("/diagnoses")
+def diagnoses_page(request: Request, db: Session = Depends(get_db)):
+    """Diagnoses (problem list) page."""
+    return _render_simple_page("diagnoses.html", request, db)
+
 @router.get("/vaccines")
 def vaccines_page(request: Request, db: Session = Depends(get_db)):
     """Vaccines (immunizations) page."""

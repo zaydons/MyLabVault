@@ -1,0 +1,247 @@
+{% extends "layout.html" %}
+{% from 'components/notification_modal.html' import notification_modal, confirmation_modal %}
+
+{% block title %}Diagnoses - MyLabVault{% endblock %}
+
+{% block content %}
+<div class="content-header">
+  <div class="container-fluid">
+    <div class="d-flex flex-wrap align-items-center">
+      <div class="mr-auto mb-2">
+        <h1 class="m-0"><i class="mdi mdi-clipboard-pulse-outline mr-2" aria-hidden="true"></i>Diagnoses</h1>
+        <p class="text-muted mb-0">The selected patient's conditions: the ongoing problem list and past ones</p>
+      </div>
+      <button class="btn btn-primary mb-2" type="button" id="addDiagnosis">
+        <i class="mdi mdi-plus mr-1" aria-hidden="true"></i>Add diagnosis
+      </button>
+    </div>
+  </div>
+</div>
+
+<section class="content">
+  <div class="container-fluid">
+    <div class="card">
+      <div class="card-header"><h2 class="card-title" id="activeTitle">Ongoing</h2></div>
+      <div class="card-body" id="activeList"><p class="text-muted mb-0">Loading…</p></div>
+    </div>
+    <div class="card" id="resolvedCard" hidden>
+      <div class="card-header"><h2 class="card-title" id="resolvedTitle">Resolved</h2></div>
+      <div class="card-body" id="resolvedList"></div>
+    </div>
+  </div>
+</section>
+
+<div class="modal fade" id="diagnosisModal" tabindex="-1" role="dialog" aria-labelledby="diagnosisModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <form class="modal-content" id="diagnosisForm" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="diagnosisModalTitle">Add diagnosis</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="diagnosisError" role="alert" tabindex="-1"></div>
+        <input type="hidden" id="diagnosisId">
+        <div class="form-row">
+          <div class="form-group col-md-8">
+            <label for="diagnosisName">Diagnosis <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" class="form-control" id="diagnosisName" maxlength="255" required autocomplete="off" placeholder="e.g. Essential hypertension">
+          </div>
+          <div class="form-group col-md-4">
+            <label for="diagnosisCode">ICD-10 code</label>
+            <input type="text" class="form-control" id="diagnosisCode" maxlength="20" autocomplete="off" placeholder="e.g. I10">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label for="diagnosisStatus">Status</label>
+            <select class="custom-select" id="diagnosisStatus">
+              <option value="active">Ongoing</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+          <div class="form-group col-md-4">
+            <label for="diagnosisOnset">Diagnosed</label>
+            <input type="date" class="form-control" id="diagnosisOnset">
+          </div>
+          <div class="form-group col-md-4" id="resolvedGroup" hidden>
+            <label for="diagnosisResolved">Resolved</label>
+            <input type="date" class="form-control" id="diagnosisResolved">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label for="diagnosisProvider">Diagnosed by</label>
+            <select class="custom-select" id="diagnosisProvider"></select>
+          </div>
+          <div class="form-group col-md-8 mb-0">
+            <label for="diagnosisNotes">Notes</label>
+            <textarea class="form-control" id="diagnosisNotes" rows="2" maxlength="2000" placeholder="Optional"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ notification_modal() }}
+{{ confirmation_modal() }}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let items = [];
+let providers = [];
+let dateFormat = 'MM/DD/YYYY';
+
+const $id = id => document.getElementById(id);
+const esc = v => escapeHtml(v === null || v === undefined ? '' : String(v));
+const patientId = () => parseInt(getCookie('selectedPatientId') || '1', 10) || 1;
+const todayIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const showDate = iso => { try { return formatDateSync(`${iso}T12:00:00`, dateFormat); } catch (e) { return iso; } };
+const plural = (n, word, many) => `${n} ${n === 1 ? word : many || `${word}s`}`;
+
+function table(list, resolved) {
+    const caption = resolved ? 'Resolved diagnoses' : 'Ongoing diagnoses';
+    return `
+        <div class="table-responsive-md">
+            <table class="table table-sm mb-0 diagnosis-table">
+                <caption class="sr-only">${caption}</caption>
+                <thead><tr><th scope="col">Diagnosis</th><th scope="col">ICD-10</th><th scope="col">Diagnosed</th>
+                    ${resolved ? '<th scope="col">Resolved</th>' : ''}<th scope="col">Diagnosed by</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>${list.map(d => `<tr>
+                    <td data-label="Diagnosis"><strong>${esc(d.name)}</strong>${d.notes ? `<div class="small"><i class="mdi mdi-note-text-outline" aria-hidden="true"></i> ${esc(d.notes)}</div>` : ''}</td>
+                    <td data-label="ICD-10">${esc(d.icd10_code || '—')}</td>
+                    <td data-label="Diagnosed">${d.onset_date ? esc(showDate(d.onset_date)) : '—'}</td>
+                    ${resolved ? `<td data-label="Resolved">${d.resolved_date ? esc(showDate(d.resolved_date)) : '—'}</td>` : ''}
+                    <td data-label="Diagnosed by">${esc(d.provider_name || '—')}</td>
+                    <td class="text-nowrap text-right">
+                        ${resolved ? '' : `<button type="button" class="btn btn-link btn-sm p-0 mr-2" data-action="resolve" data-id="${d.id}" aria-label="Mark ${esc(d.name)} resolved">Mark resolved</button>`}
+                        <button type="button" class="btn btn-link btn-sm p-0 mr-2" data-action="edit" data-id="${d.id}" aria-label="Edit ${esc(d.name)}">Edit</button>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-danger-strong" data-action="delete" data-id="${d.id}" aria-label="Delete ${esc(d.name)}">Delete</button>
+                    </td></tr>`).join('')}</tbody>
+            </table>
+        </div>`;
+}
+
+function render() {
+    const active = items.filter(d => d.status === 'active');
+    const resolved = items.filter(d => d.status === 'resolved');
+    $id('activeTitle').textContent = `Ongoing (${plural(active.length, 'diagnosis', 'diagnoses')})`;
+    $id('activeList').innerHTML = active.length ? table(active, false)
+        : '<p class="text-muted mb-0">No ongoing diagnoses. Use <strong>Add diagnosis</strong>, or import them from a visit summary on the Import page.</p>';
+    $id('resolvedCard').hidden = !resolved.length;
+    $id('resolvedTitle').textContent = `Resolved (${resolved.length})`;
+    $id('resolvedList').innerHTML = resolved.length ? table(resolved, true) : '';
+}
+
+async function load() {
+    const [list, providerList] = await Promise.all([
+        fetch(`/api/diagnoses/?patient_id=${patientId()}`).then(r => r.json()),
+        fetch('/api/providers/?limit=1000').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+    items = list;
+    providers = providerList.slice().sort((a, b) => a.name.localeCompare(b.name));
+    render();
+}
+
+function showError(text) { const box = $id('diagnosisError'); box.textContent = text; box.classList.remove('d-none'); box.focus(); }
+
+function syncResolved() {
+    const resolved = $id('diagnosisStatus').value === 'resolved';
+    $id('resolvedGroup').hidden = !resolved;
+    if (resolved && !$id('diagnosisResolved').value) $id('diagnosisResolved').value = todayIso();
+}
+
+function openModal(item, resolve) {
+    $id('diagnosisError').classList.add('d-none');
+    $id('diagnosisForm').reset();
+    $id('diagnosisOnset').max = todayIso();
+    $id('diagnosisResolved').max = todayIso();
+    $id('diagnosisProvider').innerHTML = '<option value="">None</option>' + providers.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    $id('diagnosisModalTitle').textContent = item ? (resolve ? `Mark ${item.name} resolved` : `Edit ${item.name}`) : 'Add diagnosis';
+    $id('diagnosisId').value = item ? item.id : '';
+    if (item) {
+        $id('diagnosisName').value = item.name;
+        $id('diagnosisCode').value = item.icd10_code || '';
+        $id('diagnosisStatus').value = resolve ? 'resolved' : item.status;
+        $id('diagnosisOnset').value = item.onset_date || '';
+        $id('diagnosisResolved').value = item.resolved_date || '';
+        $id('diagnosisProvider').value = item.provider_id || '';
+        $id('diagnosisNotes').value = item.notes || '';
+    }
+    syncResolved();
+    $('#diagnosisModal').modal('show');
+}
+
+async function save(event) {
+    event.preventDefault();
+    const name = $id('diagnosisName').value.trim();
+    const status = $id('diagnosisStatus').value;
+    const onset = $id('diagnosisOnset').value;
+    const resolvedOn = status === 'resolved' ? $id('diagnosisResolved').value : '';
+    if (!name) return showError('Enter the diagnosis.');
+    if ((onset && onset > todayIso()) || (resolvedOn && resolvedOn > todayIso())) return showError('Dates can\'t be in the future.');
+    if (onset && resolvedOn && resolvedOn < onset) return showError('It can\'t be resolved before it was diagnosed.');
+    const id = $id('diagnosisId').value;
+    const body = {
+        patient_id: patientId(), name, icd10_code: $id('diagnosisCode').value, status,
+        onset_date: onset || null, resolved_date: resolvedOn || null,
+        provider_id: parseInt($id('diagnosisProvider').value, 10) || null, notes: $id('diagnosisNotes').value,
+    };
+    try {
+        const response = await fetch(id ? `/api/diagnoses/${encodeURIComponent(id)}` : '/api/diagnoses/', {
+            method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(Array.isArray(data.detail) ? 'Check the dates and fields.' : data.detail || 'Saving failed.');
+        $('#diagnosisModal').modal('hide');
+        await load();
+    } catch (error) { showError(error.message); }
+}
+
+async function remove(item) {
+    const ok = await showConfirmation(`Delete ${item.name}? To keep it in the history, mark it resolved instead.`, 'Delete diagnosis', 'Delete', 'Cancel');
+    if (!ok) return;
+    const response = await fetch(`/api/diagnoses/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+    if (!response.ok) return showNotification('The diagnosis couldn\'t be deleted.', 'error', 'Delete failed');
+    await load();
+}
+
+$(document).ready(async function () {
+    try { dateFormat = await getUserDateFormat(); } catch (e) { /* default format */ }
+    $id('addDiagnosis').addEventListener('click', () => openModal(null));
+    $id('diagnosisForm').addEventListener('submit', save);
+    $id('diagnosisStatus').addEventListener('change', syncResolved);
+    document.querySelector('.content').addEventListener('click', e => {
+        const button = e.target.closest('[data-action]');
+        if (!button) return;
+        const item = items.find(d => String(d.id) === button.dataset.id);
+        if (!item) return;
+        if (button.dataset.action === 'edit') openModal(item);
+        if (button.dataset.action === 'resolve') openModal(item, true);
+        if (button.dataset.action === 'delete') remove(item);
+    });
+    await load();
+});
+</script>
+<style>
+.text-danger-strong { color: #a71d2a; }
+.dark-mode .text-danger-strong { color: #ff9aa4; }
+/* Phones: each diagnosis becomes a stacked block with its field labels */
+@media (max-width: 767.98px) {
+    .diagnosis-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .diagnosis-table tr { display: block; border-bottom: 1px solid #dee2e6; padding: .5rem 0; }
+    .diagnosis-table td { display: block; border: 0; padding: .15rem 0; }
+    .diagnosis-table td[data-label]::before { content: attr(data-label) ": "; font-weight: 600; color: #5a6268; }
+    .dark-mode .diagnosis-table td[data-label]::before { color: #c8cdd2; }
+    .diagnosis-table td.text-right { text-align: left !important; }
+}
+</style>
+{% endblock %}

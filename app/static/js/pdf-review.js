@@ -167,6 +167,7 @@
             if ((preview.vitals || []).length) found.push(plural(preview.vitals.length, 'vital'));
             if ((preview.medications || []).length) found.push(plural(preview.medications.length, 'medication'));
             if ((preview.immunizations || []).length) found.push(plural(preview.immunizations.length, 'vaccine'));
+            if ((preview.diagnoses || []).length) found.push(`${preview.diagnoses.length} ${preview.diagnoses.length === 1 ? 'diagnosis' : 'diagnoses'}`);
             setProgress(key, `<span class="text-success-strong"><i class="mdi mdi-check-circle" aria-hidden="true"></i> ${found.join(', ')} found</span>`);
             addCard(preview);
         }
@@ -469,12 +470,42 @@
         </div>`;
     }
 
+    const DX_PLANS = { add: 'Add as ongoing', add_resolved: 'Add as resolved', resolve: 'Mark resolved', none: 'No change' };
+    const DX_CONTEXT = { visit: 'This visit', problem_list: 'Problem list', history: 'Medical history', listed: 'Listed' };
+
+    function renderDiagnoses(key, p) {
+        const rows = p.diagnoses || [];
+        if (!rows.length) return '';
+        return `
+        <h4 class="h6 mt-4 mb-2" id="dx-${key}-title"><i class="mdi mdi-clipboard-pulse-outline mr-1" aria-hidden="true"></i>Diagnoses</h4>
+        <p class="small text-muted mb-2">Compared with this patient's diagnoses. Tick the changes to make.</p>
+        <div class="table-responsive-md">
+            <table class="table table-sm dx-table mb-0" aria-labelledby="dx-${key}-title">
+                <thead><tr><th scope="col" style="width: 2.5rem;"><span class="sr-only">Apply</span></th>
+                    <th scope="col">Diagnosis</th><th scope="col">On the document</th><th scope="col">What happens</th></tr></thead>
+                <tbody>${rows.map(d => {
+                    const actionable = d.plan !== 'none' && !d.already_imported;
+                    const dates = [d.onset_date ? `since ${displayDate(d.onset_date)}` : '', d.resolved_date ? `resolved ${displayDate(d.resolved_date)}` : ''].filter(Boolean).join(', ');
+                    return `
+                    <tr data-dx="${d.index}">
+                        ${checkCell('dx-check', key, d.index, actionable, !actionable, `${DX_PLANS[d.plan] || 'Apply'}: ${d.name}`)}
+                        <td><strong>${esc(d.name)}</strong>${d.icd10_code ? ` <span class="text-muted">(${esc(d.icd10_code)})</span>` : ''}${dates ? `<div class="small">${esc(dates)}</div>` : ''}</td>
+                        <td>${esc(DX_CONTEXT[d.context] || DX_CONTEXT.listed)}${d.status === 'resolved' ? '<div class="small"><span class="badge badge-status-none"><i class="mdi mdi-check-circle-outline" aria-hidden="true"></i> Resolved</span></div>' : ''}</td>
+                        <td>${d.already_imported ? '<span class="badge badge-status-normal"><i class="mdi mdi-check" aria-hidden="true"></i> Done</span>'
+                            : `<strong>${esc(DX_PLANS[d.plan] || '')}</strong>`}<div class="small">${esc(d.note)}</div></td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>
+        </div>`;
+    }
+
     function renderCard(key, p) {
         if (p.manual) return renderManualCard(key, p);
         const vitalsLeft = (p.vitals || []).filter(v => !v.already_imported).length;
         const medsLeft = (p.medications || []).filter(m => m.plan !== 'none' && !m.already_imported).length;
         const vaccinesLeft = (p.immunizations || []).filter(v => !v.already_imported && !v.already_saved).length;
-        const visitOnly = !(p.tests || []).length && ((p.vitals || []).length || (p.medications || []).length || (p.immunizations || []).length);
+        const dxLeft = (p.diagnoses || []).filter(d => d.plan !== 'none' && !d.already_imported).length;
+        const visitOnly = !(p.tests || []).length && ((p.vitals || []).length || (p.medications || []).length || (p.immunizations || []).length || (p.diagnoses || []).length);
         // Only vitals and medication changes are dated by the visit; vaccine doses carry their own date
         const needsVisit = (p.vitals || []).length || (p.medications || []).length;
         const rows = p.tests || [];
@@ -513,7 +544,7 @@
             </div>
             <div class="card-body">
                 <p class="review-counts mb-3">
-                    ${visitOnly ? '' : `${plural(readable.length, 'result')} to import`}${vitalsLeft ? `${visitOnly ? '' : ' · '}${plural(vitalsLeft, 'vital')}` : ''}${medsLeft ? `${visitOnly && !vitalsLeft ? '' : ' · '}${plural(medsLeft, 'medication change')}` : ''}${vaccinesLeft ? `${visitOnly && !vitalsLeft && !medsLeft ? '' : ' · '}${plural(vaccinesLeft, 'vaccine')}` : ''}${out.length ? ` · <strong>${out.length} out of range</strong>` : ''}${unreadable.length ? ` · ${unreadable.length} couldn't be read` : ''}${done.length ? ` · ${done.length} already imported` : ''}${saved.length ? ` · ${saved.length} already saved` : ''}
+                    ${visitOnly ? '' : `${plural(readable.length, 'result')} to import`}${vitalsLeft ? `${visitOnly ? '' : ' · '}${plural(vitalsLeft, 'vital')}` : ''}${medsLeft ? `${visitOnly && !vitalsLeft ? '' : ' · '}${plural(medsLeft, 'medication change')}` : ''}${vaccinesLeft ? `${visitOnly && !vitalsLeft && !medsLeft ? '' : ' · '}${plural(vaccinesLeft, 'vaccine')}` : ''}${dxLeft ? `${visitOnly && !vitalsLeft && !medsLeft && !vaccinesLeft ? '' : ' · '}${plural(dxLeft, 'diagnosis change')}` : ''}${out.length ? ` · <strong>${out.length} out of range</strong>` : ''}${unreadable.length ? ` · ${unreadable.length} couldn't be read` : ''}${done.length ? ` · ${done.length} already imported` : ''}${saved.length ? ` · ${saved.length} already saved` : ''}
                 </p>
                 ${rowDates.length > 1 ? `<p class="mb-3"><i class="mdi mdi-calendar-multiple mr-1" aria-hidden="true"></i>This report has results from <strong>${rowDates.length} collection dates</strong>. Each date is a heading in the list below; change it there if it's wrong.</p>` : ''}
                 ${saved.length ? `<div class="alert alert-info py-2"><i class="mdi mdi-content-duplicate mr-1" aria-hidden="true"></i>${plural(saved.length, 'result')} ${saved.length === 1 ? 'is' : 'are'} already saved with the same value and date, so ${saved.length === 1 ? 'it isn\'t' : 'they aren\'t'} ticked.</div>` : ''}
@@ -560,6 +591,7 @@
                         ${renderVitals(key, p)}
                         ${renderMedications(key, p)}
                         ${renderVaccines(key, p)}
+                        ${renderDiagnoses(key, p)}
                     </div>
                     <div class="review-pdf col-xl-5" id="card-${key}-pdf" ${showPdf ? '' : 'hidden'}>
                         <div class="review-pdf-inner">
@@ -815,7 +847,7 @@
     function updateCounts() {
         let selected = 0, extras = 0;
         document.querySelectorAll('.review-card').forEach(section => {
-            extras += section.querySelectorAll('.vital-check:checked:not(:disabled), .med-check:checked:not(:disabled), .vaccine-check:checked:not(:disabled)').length;
+            extras += section.querySelectorAll('.vital-check:checked:not(:disabled), .med-check:checked:not(:disabled), .vaccine-check:checked:not(:disabled), .dx-check:checked:not(:disabled)').length;
             const boxes = Array.from(section.querySelectorAll('.row-check:not(:disabled)'));
             const checked = boxes.filter(b => b.checked).length;
             selected += checked;
@@ -914,7 +946,8 @@
             const vitals = Array.from(section.querySelectorAll('.vital-check:checked:not(:disabled)'));
             const meds = Array.from(section.querySelectorAll('.med-check:checked:not(:disabled)'));
             const vaccines = Array.from(section.querySelectorAll('.vaccine-check:checked:not(:disabled)'));
-            if (!selected.length && !vitals.length && !meds.length && !vaccines.length) continue;
+            const diagnoses = Array.from(section.querySelectorAll('.dx-check:checked:not(:disabled)'));
+            if (!selected.length && !vitals.length && !meds.length && !vaccines.length && !diagnoses.length) continue;
             // A dose the document gives no date needs one entered
             const vaccineDates = {};
             vaccines.forEach(b => {
@@ -977,6 +1010,7 @@
                 selected_vitals: vitals.map(b => parseInt(b.dataset.index, 10)),
                 selected_medications: meds.map(b => parseInt(b.dataset.index, 10)),
                 selected_immunizations: vaccines.map(b => parseInt(b.dataset.index, 10)),
+                selected_diagnoses: diagnoses.map(b => parseInt(b.dataset.index, 10)),
                 immunization_dates: vaccineDates,
             });
         }
@@ -1069,23 +1103,26 @@
         const vitals = result.files.reduce((n, f) => n + (f.vitals_count || 0), 0);
         const meds = result.files.reduce((n, f) => n + (f.medication_changes || []).length, 0);
         const shots = result.files.reduce((n, f) => n + (f.vaccines || []).length, 0);
+        const dx = result.files.reduce((n, f) => n + (f.diagnosis_changes || []).length, 0);
         const parts = [];
-        if (result.total_imported || (!vitals && !meds && !shots)) parts.push(plural(result.total_imported, 'result'));
+        if (result.total_imported || (!vitals && !meds && !shots && !dx)) parts.push(plural(result.total_imported, 'result'));
         if (vitals) parts.push(plural(vitals, 'vital'));
         if (meds) parts.push(plural(meds, 'medication change'));
         if (shots) parts.push(plural(shots, 'vaccine'));
+        if (dx) parts.push(plural(dx, 'diagnosis change'));
         $id('summaryTitle').textContent = `Imported ${parts.join(', ')}`;
         $id('summaryLead').textContent = out
             ? `${plural(out, 'result')} ${out === 1 ? 'is' : 'are'} outside the reference range.`
             : result.total_imported ? 'All imported results are within their reference ranges.'
-            : 'They\'re on the Vitals, Medications and Vaccines pages.';
+            : 'They\'re on the Vitals, Medications, Vaccines and Diagnoses pages.';
         $id('summaryFiles').innerHTML = result.files.map(f => `
             <li class="list-group-item">
                 <div class="d-flex flex-wrap justify-content-between">
                     <strong>${esc(f.filename)}</strong>
-                    <span class="text-muted">${[f.imported_count || !(f.vitals_count || (f.medication_changes || []).length || (f.vaccines || []).length) ? plural(f.imported_count, 'result') : '', f.vitals_count ? plural(f.vitals_count, 'vital') : '',
+                    <span class="text-muted">${[f.imported_count || !(f.vitals_count || (f.medication_changes || []).length || (f.vaccines || []).length || (f.diagnosis_changes || []).length) ? plural(f.imported_count, 'result') : '', f.vitals_count ? plural(f.vitals_count, 'vital') : '',
                         (f.medication_changes || []).length ? plural(f.medication_changes.length, 'medication change') : '',
-                        (f.vaccines || []).length ? plural(f.vaccines.length, 'vaccine') : ''].filter(Boolean).join(' · ')} · ${(f.dates || []).length > 1
+                        (f.vaccines || []).length ? plural(f.vaccines.length, 'vaccine') : '',
+                        (f.diagnosis_changes || []).length ? plural(f.diagnosis_changes.length, 'diagnosis change') : ''].filter(Boolean).join(' · ')} · ${(f.dates || []).length > 1
                         ? `collected on ${f.dates.length} dates (${f.dates.map(d => esc(displayDate(d))).join(', ')})` : `${f.imported_count ? 'collected' : 'visit on'} ${esc(displayDate(f.date_collected))}`}</span>
                 </div>
                 ${(f.medication_changes || []).length ? `<ul class="list-unstyled mb-0 mt-2">${f.medication_changes.map(c => `
@@ -1093,6 +1130,9 @@
                         <a href="/medications">${esc(c.name)}</a>${c.plan !== 'stop' && c.dose ? ` ${esc(c.dose)}` : ''}</li>`).join('')}</ul>` : ''}
                 ${(f.vaccines || []).length ? `<ul class="list-unstyled mb-0 mt-2">${f.vaccines.map(v => `
                     <li class="mb-1"><i class="mdi mdi-needle mr-1" aria-hidden="true"></i>Vaccine: <a href="/vaccines">${esc(v.name)}</a>, ${esc(displayDate(v.date_given))}</li>`).join('')}</ul>` : ''}
+                ${(f.diagnosis_changes || []).length ? `<ul class="list-unstyled mb-0 mt-2">${f.diagnosis_changes.map(c => `
+                    <li class="mb-1"><i class="mdi mdi-clipboard-pulse-outline mr-1" aria-hidden="true"></i>${esc({ add: 'Diagnosis added:', add_resolved: 'Past diagnosis added:', resolve: 'Marked resolved:' }[c.plan] || '')}
+                        <a href="/diagnoses">${esc(c.name)}</a></li>`).join('')}</ul>` : ''}
                 ${f.out_of_range.length ? `<ul class="list-unstyled mb-0 mt-2">${f.out_of_range.map(r => `
                     <li class="mb-1"><a href="/lab/${Number(r.lab_id)}">${esc(r.name)}</a>
                         <span class="result-number ml-1">${esc(r.value)} ${esc(r.unit)}</span> ${statusBadge(r.status)}</li>`).join('')}</ul>` : ''}
