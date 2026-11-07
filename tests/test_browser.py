@@ -600,3 +600,27 @@ def test_charts_redesign(page):
     page.check("#compactView", force=True)
     assert page.is_hidden(f"#panelChart_{chol['id']}") and page.is_visible(f"article[data-lab-id='{chol['id']}'] .chart-spark svg")
     axe_clean(page, ".content")
+
+
+def test_charts_report_drawing_problems(page):
+    ready(page)
+    panel = api(page, "POST", "/api/panels/", {"name": "Lipid"})["data"]
+    labs = [api(page, "POST", "/api/labs/", {"name": n, "panel_id": panel["id"], "ref_low": 0, "ref_high": 200})["data"] for n in ("Cholesterol", "HDL")]
+    for lab in labs:
+        for v, d in ((180, "2025-01-10"), (190, "2026-01-10")):
+            api(page, "POST", "/api/results/", {"lab_id": lab["id"], "patient_id": 1, "provider_id": 1, "result": v, "date_collected": d})
+    page.goto(page.base + "/charts", wait_until="networkidle")
+    page.wait_for_function("() => document.querySelectorAll('#panelChartsContent canvas').length === 2")
+    pick = "() => { const s = document.getElementById('panelSelect'); s.value = '%s'; s.dispatchEvent(new Event('change')); }" % panel["id"]
+
+    # One chart failing leaves the others, with a note on its card and no pop-up
+    page.evaluate("() => { const create = LabChart.create; LabChart.create = (c, d, o) => { if (d.name === 'HDL') throw new Error('test'); return create(c, d, o); }; }")
+    page.evaluate(pick)
+    page.wait_for_function("() => /couldn't be drawn/.test(document.getElementById('panelChartsContent').textContent)")
+    assert page.locator("#panelChartsContent canvas").count() == 1 and page.is_hidden("#chartsError")
+
+    # An outdated chart script (a browser's stale copy) says to reload, without a pop-up
+    page.evaluate("() => { delete LabChart.parseDate; }")
+    page.evaluate(pick)
+    page.wait_for_selector("#chartsError:not([hidden])")
+    assert "Reload the page" in page.text_content("#chartsError")
