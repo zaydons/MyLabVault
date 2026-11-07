@@ -17,7 +17,9 @@ from ..models import Medication, Provider, Vital
 from ..routers.vitals import VITAL_TYPES, convert, format_reading, preferred_units
 
 # What the plan for a medication does, shown on the review screen
-PLAN_ADD, PLAN_CHANGE, PLAN_STOP, PLAN_NONE = "add", "change_dose", "stop", "none"
+PLAN_ADD, PLAN_CHANGE, PLAN_STOP, PLAN_HISTORY, PLAN_NONE = "add", "change_dose", "stop", "history", "none"
+# A document older than this is history: its medications are added as past ones, never as current
+OLD_DOCUMENT_DAYS = 180
 
 
 def _day(raw: Optional[str]) -> Optional[date]:
@@ -111,29 +113,78 @@ def _dose_key(dose: Optional[str]) -> str:
     return re.sub(r"\s+", "", (dose or "").lower())
 
 
-def _find_current(med: Dict[str, Any], current: List[Medication]) -> Optional[Medication]:
+def _same_medication(med: Dict[str, Any], periods: List[Medication]) -> List[Medication]:
+    """The recorded dose periods of the medication a document row names (by the AI's match, else the drug's first word)."""
     wanted = (med.get("matched_medication") or "").strip().lower()
-    for m in current:
-        if wanted and m.name.strip().lower() == wanted:
-            return m
     key = _med_key(med.get("name"))
-    return next((m for m in current if key and _med_key(m.name) == key), None)
+    named = [m for m in periods if wanted and m.name.strip().lower() == wanted]
+    if named:
+        wanted_key = _med_key(named[0].name)
+        return [m for m in periods if _med_key(m.name) == wanted_key]
+    return [m for m in periods if key and _med_key(m.name) == key]
 
 
-def plan_medication(med: Dict[str, Any], current: List[Medication], visit_day: Optional[date]) -> Dict[str, Any]:
-    """What confirming this medication would do to the patient's list, with a sentence saying so."""
-    match = _find_current(med, current)
+def _when(d: Optional[date]) -> str:
+    return f"{d:%b} {d.day}, {d.year}" if d else "the document's date"
+
+
+def _past_dates(med: Dict[str, Any], visit_day: Optional[date]) -> tuple:
+    """Start and stop of a past period: as printed, else the document's date."""
+    start = _day(med.get("start_date")) or visit_day
+    end = _day(med.get("stop_date")) or visit_day
+    if start and end and end < start:
+        start = end
+    return start, end
+
+
+def plan_medication(med: Dict[str, Any], periods: List[Medication], visit_day: Optional[date],
+                    today: Optional[date] = None) -> Dict[str, Any]:
+    """What confirming this medication would do to the patient's medications, with a sentence saying so.
+
+    periods: all of the patient's recorded dose periods, current and past. A recent document can add,
+    change or stop a current medication. A medication the document shows as stopped or inactive, or
+    any medication on an old document, is added to the history as a past period instead (unless one
+    already covers those dates), and never changes what's current.
+    """
+    today = today or date.today()
+    same = _same_medication(med, periods)
+    current = [m for m in same if m.is_current(today)]
+    wanted = (med.get("matched_medication") or "").strip().lower()
+    match = next((m for m in current if m.name.strip().lower() == wanted), current[0] if current else None)
     action = med.get("action") or "listed"
-    if action == "stop":
-        if match is None:
-            return {"plan": PLAN_NONE, "medication": None, "note": "Not on your medication list, so there's nothing to stop."}
-        if visit_day and visit_day < match.start_date:
-            return {"plan": PLAN_NONE, "medication": match, "note": f"{match.name} on your list started after this visit."}
+    stopped = bool(med.get("stop_date")) or med.get("status") == "inactive"
+    old = bool(visit_day) and (today - visit_day).days > OLD_DOCUMENT_DAYS
+    newer = bool(visit_day) and any(m.start_date > visit_day for m in same)
+    same_dose = match is not None and (not med.get("dose") or _dose_key(med.get("dose")) == _dose_key(match.dose))
+
+    # Discontinued at this visit while it's still on the list
+    if action == "stop" and match is not None and not old and (not visit_day or visit_day >= match.start_date):
         return {"plan": PLAN_STOP, "medication": match, "note": f"{match.name} will be marked stopped on the visit date."}
+
+    if stopped or old or newer or action == "stop":
+        if action == "stop" and not (med.get("start_date") or med.get("stop_date")):
+            # A discontinuation without dates says nothing new about the history
+            if not same:
+                return {"plan": PLAN_NONE, "medication": None, "note": "Not on your medication list, so there's nothing to stop."}
+            return {"plan": PLAN_NONE, "medication": same[0],
+                    "note": f"Your list has a later record of {same[0].name}, so this older stop changes nothing."}
+        start, end = _past_dates(med, visit_day)
+        covered = [m for m in same if start and end and m.start_date <= end and (m.end_date or date.max) >= start]
+        if covered:
+            m = covered[0]
+            return {"plan": PLAN_NONE, "medication": m,
+                    "note": f"Already in your history: {m.name}{f' {m.dose}' if m.dose else ''}, {_when(m.start_date)} – "
+                            f"{_when(m.end_date) if m.end_date else 'now'}."}
+        printed = med.get("start_date") or med.get("stop_date")
+        span = f"{_when(start)} – {_when(end)}" if start != end else f"on {_when(start)}"
+        why = "" if printed else " (no start or stop date is printed, so it's dated by the document)"
+        return {"plan": PLAN_HISTORY, "medication": None, "start": start, "end": end,
+                "note": f"Added to your history as a past medication, {span}{why}."}
+
     if match is None:
         return {"plan": PLAN_ADD, "medication": None,
                 "note": "Not on your medication list yet; it will be added, starting on the visit date."}
-    if not med.get("dose") or _dose_key(med.get("dose")) == _dose_key(match.dose):
+    if same_dose:
         return {"plan": PLAN_NONE, "medication": match, "note": f"Already on your list as {match.name}{f' {match.dose}' if match.dose else ''}."}
     if visit_day and visit_day <= match.start_date:
         return {"plan": PLAN_NONE, "medication": match, "note": f"{match.name} on your list was recorded at a dose starting after this visit."}
@@ -141,25 +192,33 @@ def plan_medication(med: Dict[str, Any], current: List[Medication], visit_day: O
             "note": f"On your list at {match.dose or 'no dose'}; the dose changes to {med['dose']} from the visit date."}
 
 
+def all_medications(patient_id: int, db: Session) -> List[Medication]:
+    """Every recorded dose period, newest first."""
+    return (db.query(Medication).filter(Medication.patient_id == patient_id)
+            .order_by(Medication.start_date.desc(), Medication.id.desc()).all())
+
+
 def current_medications(patient_id: int, db: Session) -> List[Medication]:
-    return [m for m in db.query(Medication).filter(Medication.patient_id == patient_id)
-            .order_by(Medication.start_date.desc(), Medication.id.desc()).all() if m.is_current()]
+    return [m for m in all_medications(patient_id, db) if m.is_current()]
 
 
 def medication_rows(parsed: Dict[str, Any], patient_id: int, db: Session) -> List[Dict[str, Any]]:
     """One row per medication read from the document, with what confirming it would do."""
-    current = current_medications(patient_id, db)
+    periods = all_medications(patient_id, db)
     visit_day = _day(parsed.get("date_collected"))
     done = set(parsed.get("saved_medications") or [])
     rows = []
     for index, med in enumerate(parsed.get("medications") or []):
-        plan = plan_medication(med, current, visit_day)
+        plan = plan_medication(med, periods, visit_day)
         rows.append({
             "index": index,
             "name": med.get("name"),
             "dose": med.get("dose"),
             "frequency": med.get("frequency"),
             "action": med.get("action") or "listed",
+            "start_date": med.get("start_date"),
+            "stop_date": med.get("stop_date"),
+            "status": med.get("status"),
             "prescriber": med.get("prescriber"),
             "reason": med.get("reason"),
             "plan": plan["plan"],
@@ -183,7 +242,7 @@ def save_medications(parsed: Dict[str, Any], indices: List[int], visit_day: Opti
         if visit_day is None:
             raise ValueError("Enter the visit date to update medications.")
         med = meds[index]
-        plan = plan_medication(med, current_medications(patient_id, db), visit_day)
+        plan = plan_medication(med, all_medications(patient_id, db), visit_day)
         match = plan["medication"]
         prescriber = provider_for(med.get("prescriber"))
         provider_id = prescriber.id if prescriber else default_provider_id
@@ -193,6 +252,11 @@ def save_medications(parsed: Dict[str, Any], indices: List[int], visit_day: Opti
                               reason=(med.get("reason") or "")[:255] or None, provider_id=provider_id, notes=note))
         elif plan["plan"] == PLAN_STOP:
             match.end_date = visit_day
+        elif plan["plan"] == PLAN_HISTORY:
+            db.add(Medication(patient_id=patient_id, name=med["name"][:255], kind="medication", dose=_cut(med.get("dose"), 100),
+                              frequency=_cut(med.get("frequency"), 100), route=_cut(med.get("route"), 50),
+                              start_date=plan["start"], end_date=plan["end"], reason=(med.get("reason") or "")[:255] or None,
+                              provider_id=provider_id, notes=note))
         elif plan["plan"] == PLAN_CHANGE:
             db.add(Medication(patient_id=patient_id, name=match.name, kind=match.kind, dose=_cut(med.get("dose"), 100),
                               frequency=_cut(med.get("frequency"), 100) or match.frequency, route=match.route, start_date=visit_day,

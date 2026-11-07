@@ -427,7 +427,7 @@ def test_visit_page(page):
 
 
 def test_visit_summary_vitals_and_medications(page, ai, tmp_path):
-    from test_visit_summary import AI_READING
+    from test_visit_summary import AI_READING, VISIT
     ready(page)
     api(page, "POST", "/api/medications/", {"patient_id": 1, "name": "Amlodipine", "dose": "5 mg", "start_date": "2025-01-01"})
     ai.reply = AI_READING
@@ -443,7 +443,7 @@ def test_visit_summary_vitals_and_medications(page, ai, tmp_path):
     assert page.is_checked("[aria-label='Mark stopped: Amlodipine']") and page.is_checked("[aria-label='Add to your list: Lisinopril']")
     page.uncheck("[aria-label='Add to your list: Atorvastatin']", force=True)
     key = page.get_attribute(".review-card", "data-key")
-    assert page.input_value(f"#date-{key}") == "2026-03-02" and "Visit date" in page.text_content(f"label[for='date-{key}']")
+    assert page.input_value(f"#date-{key}") == VISIT and "Visit date" in page.text_content(f"label[for='date-{key}']")
     assert page.text_content("#importButton").strip() == "Import 10 items"
     axe_clean(page, ".review-card")
 
@@ -453,7 +453,7 @@ def test_visit_summary_vitals_and_medications(page, ai, tmp_path):
     summary_text = page.text_content("#importSummary")
     assert "7 vitals" in summary_text and "3 medication changes" in summary_text and "Stopped" in summary_text
     names = {(m["name"], m["end_date"]) for m in api(page, "GET", "/api/medications/?patient_id=1")}
-    assert ("Lisinopril", None) in names and ("Amlodipine", "2026-03-02") in names and not any(n == "Atorvastatin" for n, _ in names)
+    assert ("Lisinopril", None) in names and ("Amlodipine", VISIT) in names and not any(n == "Atorvastatin" for n, _ in names)
     assert len(api(page, "GET", "/api/vitals/?patient_id=1")) == 7
 
 
@@ -624,3 +624,20 @@ def test_charts_report_drawing_problems(page):
     page.evaluate(pick)
     page.wait_for_selector("#chartsError:not([hidden])")
     assert "Reload the page" in page.text_content("#chartsError")
+
+
+def test_old_document_medications_review(page, ai, tmp_path):
+    ready(page)
+    ai.reply = {"visit_date": "2023-04-01", "tests": [], "medications": [
+        {"name": "Simvastatin", "dose": "10 mg", "action": "listed", "start_date": "2016-02-01", "stop_date": "2018-12-31"},
+        {"name": "Metoprolol", "dose": "25 mg", "action": "continue"}]}
+    old = tmp_path / "old.pdf"
+    old.write_bytes(pdfs.visit_summary(visit="04/01/2023", tag="browser old"))
+    page.goto(page.base + "/import", wait_until="networkidle")
+    page.set_input_files("#fileInput", str(old))
+    page.wait_for_selector(".meds-table")
+    card = page.text_content(".review-card")
+    assert "This document is from" in card and "added to the history as past ones" in card
+    assert page.locator(".meds-table").text_content().count("Add to history") == 2
+    assert page.is_checked("[aria-label='Add to history: Simvastatin']")
+    axe_clean(page, ".review-card")

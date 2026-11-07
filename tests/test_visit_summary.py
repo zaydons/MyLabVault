@@ -1,10 +1,15 @@
 """Visit summaries read with AI (Bedrock mocked): vitals and medication changes on the review screen."""
 
+from datetime import date, timedelta
+
 import pdfs
 
+# A recent visit (older documents are history: see test_old_document_medications_go_to_history)
+VISIT = (date.today() - timedelta(days=20)).isoformat()
+BEFORE = (date.today() - timedelta(days=21)).isoformat()
 SUMMARY = pdfs.visit_summary()
 AI_READING = {
-    "visit_date": "2026-03-02", "ordering_provider": "Alex Doe, PA-C", "tests": [],
+    "visit_date": VISIT, "ordering_provider": "Alex Doe, PA-C", "tests": [],
     "vitals": [
         {"kind": "blood_pressure", "value": 128, "value2": 82, "unit": "mmHg"},
         {"kind": "temperature", "value": 98.4, "unit": "°F"},
@@ -33,7 +38,7 @@ def setup_list(client):
         assert client.post("/api/medications/", json={"patient_id": 1, "name": name, "dose": dose, "frequency": "once daily",
                                                       "start_date": "2025-01-01"}).status_code == 200
     client.post("/api/vitals/", json={"patient_id": 1, "vital_type": "weight", "value": 180.5, "unit": "lb",
-                                      "measured_at": "2026-03-02T09:00:00"})
+                                      "measured_at": f"{VISIT}T09:00:00"})
 
 
 def test_built_in_reader_finds_no_results():
@@ -47,7 +52,7 @@ def test_review_and_save(client, ai):
     ai.reply = AI_READING
     # The built-in reader finds no lab results, so the upload is read with AI
     p = client.post("/api/pdf/upload", files={"file": ("visit.pdf", SUMMARY, "application/pdf")}).json()
-    assert p["parser"] == "ai" and p["date_collected"] == "2026-03-02" and p["total_tests_found"] == 0
+    assert p["parser"] == "ai" and p["date_collected"] == VISIT and p["total_tests_found"] == 0
     assert "Metformin" in ai.requests[-1]["messages"][0]["content"][1]["text"]  # current medications sent for matching
     assert p["matched_provider"]["name"] == "Alex Doe"
 
@@ -68,16 +73,16 @@ def test_review_and_save(client, ai):
     assert r.status_code == 200 and data["failed_count"] == 0, r.text
     saved = data["files"][0]
     assert saved["vitals_count"] == 6 and [c["plan"] for c in saved["medication_changes"]] == ["add", "change_dose", "stop"]
-    assert saved["dates"] == ["2026-03-02"]
+    assert saved["dates"] == [VISIT]
 
     stored = client.get("/api/vitals/?patient_id=1").json()
-    assert len(stored) == 7 and all(v["measured_at"].startswith("2026-03-02") for v in stored)
+    assert len(stored) == 7 and all(v["measured_at"].startswith(VISIT) for v in stored)
     meds = {(m["name"], m["dose"]): m for m in client.get("/api/medications/?patient_id=1").json()}
     lisinopril = meds[("Lisinopril", "10 mg")]
-    assert lisinopril["start_date"] == "2026-03-02" and lisinopril["end_date"] is None and lisinopril["provider_name"] == "Alex Doe"
-    assert meds[("Metformin", "500 mg")]["end_date"] == "2026-03-01"
-    assert meds[("Metformin", "1000 mg")]["start_date"] == "2026-03-02" and meds[("Metformin", "1000 mg")]["end_date"] is None
-    assert meds[("Amlodipine", "5 mg")]["end_date"] == "2026-03-02"
+    assert lisinopril["start_date"] == VISIT and lisinopril["end_date"] is None and lisinopril["provider_name"] == "Alex Doe"
+    assert meds[("Metformin", "500 mg")]["end_date"] == BEFORE
+    assert meds[("Metformin", "1000 mg")]["start_date"] == VISIT and meds[("Metformin", "1000 mg")]["end_date"] is None
+    assert meds[("Amlodipine", "5 mg")]["end_date"] == VISIT
     assert meds[("Atorvastatin", "20 mg")]["end_date"] is None
 
     # Saved rows are marked on the review; the import can no longer be re-read
@@ -97,19 +102,83 @@ def test_visit_date_needed(client, ai):
     body = {"import_id": p["import_id"], "selected_tests": [], "provider_id": 1, "selected_vitals": [0]}
     r = client.post("/api/pdf/confirm", json=body)
     assert r.status_code == 400 and "visit date" in r.json()["detail"]
-    r = client.post("/api/pdf/confirm", json={**body, "manual_date": "2026-03-02"})
+    r = client.post("/api/pdf/confirm", json={**body, "manual_date": VISIT})
     assert r.status_code == 200 and r.json()["data"]["vitals_count"] == 1
 
 
 def test_medication_plan_dates():
-    from datetime import date
     from api.models import Medication
     from api.services.visit_review import plan_medication
+    today = date(2026, 6, 15)
     current = [Medication(id=1, name="Metformin", dose="500 mg", start_date=date(2026, 5, 1))]
-    later = plan_medication({"name": "Metformin", "dose": "1000 mg", "action": "continue"}, current, date(2026, 3, 2))
-    assert later["plan"] == "none"  # the dose on the list started after this visit
-    assert plan_medication({"name": "Metformin", "action": "stop"}, current, date(2026, 3, 2))["plan"] == "none"
-    assert plan_medication({"name": "metformin hcl", "dose": "500mg", "action": "new"}, current, date(2026, 6, 1))["plan"] == "none"
+    later = plan_medication({"name": "Metformin", "dose": "1000 mg", "action": "continue"}, current, date(2026, 3, 2), today)
+    assert later["plan"] == "history"  # a dose from before the one on the list: a past period, current untouched
+    stop = plan_medication({"name": "Metformin", "action": "stop"}, current, date(2026, 3, 2), today)
+    assert stop["plan"] == "none" and "later record" in stop["note"]
+    assert plan_medication({"name": "metformin hcl", "dose": "500mg", "action": "new"}, current, date(2026, 6, 1), today)["plan"] == "none"
+
+
+def test_medication_history_plans():
+    from api.models import Medication
+    from api.services.visit_review import plan_medication
+    today = date(2026, 11, 1)
+    periods = [Medication(id=1, name="Lisinopril", dose="10 mg", start_date=date(2025, 1, 1)),
+               Medication(id=2, name="Atorvastatin", dose="20 mg", start_date=date(2019, 1, 1), end_date=date(2020, 6, 30))]
+    plan = lambda med, visit=date(2026, 10, 20): plan_medication(med, periods, visit, today)  # noqa: E731
+    # Printed stop date or inactive: a past period with its own dates, unless the history already covers them
+    past = plan({"name": "Simvastatin", "dose": "10 mg", "action": "listed", "start_date": "2016-02-01", "stop_date": "2018-12-31"})
+    assert past["plan"] == "history" and (past["start"], past["end"]) == (date(2016, 2, 1), date(2018, 12, 31))
+    covered = plan({"name": "Atorvastatin", "dose": "20 mg", "action": "listed", "start_date": "2019-03-01", "stop_date": "2020-01-01"})
+    assert covered["plan"] == "none" and "Already in your history" in covered["note"]
+    assert plan({"name": "Ibuprofen", "status": "inactive", "action": "listed"})["plan"] == "history"
+    # An old document never changes current medications
+    old = date(2023, 4, 1)
+    assert plan({"name": "Lisinopril", "dose": "10 mg", "action": "continue"}, old)["plan"] == "history"  # before it was on the list
+    assert plan({"name": "Lisinopril", "dose": "20 mg", "action": "stop"}, old)["plan"] == "none"
+    assert plan({"name": "Metoprolol", "dose": "25 mg", "action": "new"}, old)["plan"] == "history"
+    # A recent document still adds, changes and stops
+    assert plan({"name": "Metoprolol", "dose": "25 mg", "action": "new"})["plan"] == "add"
+    assert plan({"name": "Lisinopril", "dose": "20 mg", "action": "continue"})["plan"] == "change_dose"
+    assert plan({"name": "Lisinopril", "action": "stop"})["plan"] == "stop"
+
+
+def test_old_document_medications_go_to_history(client, ai):
+    client.post("/api/medications/", json={"patient_id": 1, "name": "Lisinopril", "dose": "10 mg", "start_date": "2025-01-01"})
+    ai.reply = {"visit_date": "2023-04-01", "tests": [], "medications": [
+        {"name": "Simvastatin", "dose": "10 mg", "action": "listed", "start_date": "2016-02-01", "stop_date": "2018-12-31"},
+        {"name": "Metoprolol", "dose": "25 mg", "action": "continue"},
+        {"name": "Lisinopril", "dose": "5 mg", "action": "stop"},
+    ]}
+    p = client.post("/api/pdf/upload", files={"file": ("old.pdf", pdfs.visit_summary(visit="04/01/2023", tag="old"), "application/pdf")},
+                    params={"ai": "true"}).json()
+    assert [(m["plan"], m["start_date"], m["stop_date"]) for m in p["medications"]] == [
+        ("history", "2016-02-01", "2018-12-31"), ("history", None, None), ("none", None, None)]
+    assert "dated by the document" in p["medications"][1]["note"]
+    r = client.post("/api/pdf/confirm", json={"import_id": p["import_id"], "selected_tests": [], "provider_id": 1,
+                                              "selected_medications": [0, 1, 2]}).json()["data"]
+    assert [c["plan"] for c in r["medication_changes"]] == ["history", "history"]
+    meds = {m["name"]: m for m in client.get("/api/medications/?patient_id=1").json()}
+    assert (meds["Simvastatin"]["start_date"], meds["Simvastatin"]["end_date"]) == ("2016-02-01", "2018-12-31")
+    assert (meds["Metoprolol"]["start_date"], meds["Metoprolol"]["end_date"]) == ("2023-04-01", "2023-04-01")
+    assert meds["Lisinopril"]["end_date"] is None and meds["Lisinopril"]["dose"] == "10 mg"  # current one untouched
+    # Importing the same history again finds it already there
+    again = client.post("/api/pdf/upload", files={"file": ("old2.pdf", pdfs.visit_summary(visit="04/01/2023", tag="again"), "application/pdf")},
+                        params={"ai": "true"}).json()
+    assert [m["plan"] for m in again["medications"]] == ["none", "none", "none"]
+
+
+def test_pdf_limits_for_the_ai_reader(client, ai):
+    from reportlab.pdfgen import canvas
+    import io
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer)
+    for i in range(101):
+        c.drawString(72, 720, f"Page {i + 1}")
+        c.showPage()
+    c.save()
+    r = client.post("/api/pdf/upload", files={"file": ("big.pdf", buffer.getvalue(), "application/pdf")}, params={"ai": "true"})
+    assert r.status_code == 400 and "101 pages" in r.json()["detail"] and "Split it" in r.json()["detail"]
+    assert ai.requests == []  # nothing sent
 
 
 def test_provider_name_with_credential_after_comma():

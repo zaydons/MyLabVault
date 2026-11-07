@@ -7,6 +7,7 @@ preview/confirm flow is reused.
 """
 
 import base64
+import io
 import logging
 import os
 import time
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 # Bedrock request payload limit is 20 MB and base64 adds a third, so cap the raw PDF size.
 MAX_PDF_BYTES = 14 * 1024 * 1024
+# Claude reads at most 100 pages of a PDF in one request
+MAX_PDF_PAGES = 100
+SPLIT_ADVICE = "Split it into smaller PDFs (20 to 30 pages each works well) and upload them one at a time."
 TOOL_NAME = "record_lab_report"
 # One retry when the model does not return a valid tool call.
 MAX_ATTEMPTS = 2
@@ -99,6 +103,10 @@ class ExtractedMedication(BaseModel):
     dose: Optional[str] = Field(None, description="Strength per dose as printed, e.g. '25 mg'")
     frequency: Optional[str] = Field(None, description="How often, in plain words, e.g. 'once daily', 'twice daily', 'weekly', 'as needed'")
     route: Optional[str] = Field(None, description="How it's taken, e.g. 'by mouth', 'injection', 'topical'")
+    start_date: Optional[str] = Field(None, description="Date started as YYYY-MM-DD, if printed (e.g. in a medication history table)")
+    stop_date: Optional[str] = Field(None, description="Date stopped or discontinued as YYYY-MM-DD, if printed")
+    status: Optional[Literal["active", "inactive"]] = Field(
+        None, description="'active' or 'inactive' when the document marks it (e.g. Active / Inactive / Historical columns); null otherwise")
     action: Literal["new", "continue", "stop", "listed"] = Field(
         description="What the document says happened at this visit: 'new' (started or prescribed), 'continue' "
                     "(keep taking), 'stop' (discontinued), or 'listed' when it's only listed without saying",
@@ -154,8 +162,9 @@ may have no lab results at all. Record vital signs (blood pressure, temperature,
 rate, weight, height, oxygen saturation, blood glucose) in vitals; skip derived values such as BMI, \
 ideal body weight, weight in a second unit or weight change. Record every medication in medications, \
 with the action the document gives it at this visit: medications under headings such as "New" or \
-"Started" are new, "Continue" or "Current" are continue, "Discontinue" or "Stopped" are stop. For \
-matched_medication, compare with the patient's current medications provided."""
+"Started" are new, "Continue" or "Current" are continue, "Discontinue" or "Stopped" are stop. Older \
+records and medication history tables often print start and stop dates and an active or inactive \
+status: record those too. For matched_medication, compare with the patient's medications provided."""
 
 
 def _inline_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -273,6 +282,15 @@ def _to_vital(vital: ExtractedVital) -> Optional[Dict[str, Any]]:
             "unit": unit, "date": _normalize_date(vital.date)}
 
 
+def _page_count(content: bytes) -> Optional[int]:
+    """Number of pages, or None when the PDF can't be opened here (the AI service may still read it)."""
+    try:
+        import pypdf
+        return len(pypdf.PdfReader(io.BytesIO(content)).pages)
+    except Exception:
+        return None
+
+
 def _to_medication(med: ExtractedMedication, known: Dict[str, str]) -> Dict[str, Any]:
     clean = lambda text: (text or "").strip() or None  # noqa: E731
     return {
@@ -281,6 +299,7 @@ def _to_medication(med: ExtractedMedication, known: Dict[str, str]) -> Dict[str,
         "matched_medication": known.get(med.matched_medication.strip().lower()) if med.matched_medication else None,
         "dose": clean(med.dose), "frequency": clean(med.frequency), "route": clean(med.route),
         "action": med.action, "prescriber": clean(med.prescriber), "reason": clean(med.reason),
+        "start_date": _normalize_date(med.start_date), "stop_date": _normalize_date(med.stop_date), "status": med.status,
     }
 
 
@@ -316,7 +335,7 @@ async def call_tool(system: str, messages: List[Dict[str, Any]], tool_name: str,
             if response.stop_reason == "refusal":
                 raise AIParseError("The AI service declined to process this request")
             if response.stop_reason == "max_tokens":
-                raise AIParseError("The request is too long for the AI service")
+                raise AIParseError("The AI's answer was too long for one request: the document has too many results. " + SPLIT_ADVICE)
             tool_input = next(
                 (block.input for block in response.content
                  if block.type == "tool_use" and block.name == tool_name),
@@ -371,7 +390,10 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
     if not content:
         raise AIParseError("PDF content is empty")
     if len(content) > MAX_PDF_BYTES:
-        raise AIParseError("PDF is too large for AI parsing")
+        raise AIParseError(f"The PDF is {len(content) / 1048576:.0f} MB; the AI reader takes up to {MAX_PDF_BYTES // 1048576} MB. " + SPLIT_ADVICE)
+    pages = _page_count(content)
+    if pages and pages > MAX_PDF_PAGES:
+        raise AIParseError(f"The PDF has {pages} pages; the AI reader takes up to {MAX_PDF_PAGES}. " + SPLIT_ADVICE)
 
     known_names = {name.strip().lower(): name for name in known_lab_names if name}
     names_list = "\n".join(f"- {name}" for name in sorted(known_names.values())) or "(none yet)"
@@ -392,7 +414,7 @@ async def parse_pdf_with_ai(content: bytes, known_lab_names: List[str],
             {
                 "type": "text",
                 "text": f"Existing test names in the app:\n{names_list}\n\n"
-                        f"The patient's current medications in the app:\n{meds_list}\n\n"
+                        f"The patient's medications in the app (current and past):\n{meds_list}\n\n"
                         f"Extract the lab results, vital signs and medications from this document and record "
                         f"them with the {TOOL_NAME} tool.",
             },
