@@ -303,6 +303,8 @@
         }
 
         /* ---- Result status badges: text + icon, never color alone ---- */
+        /* The hidden attribute always hides, even with a display utility class such as d-flex (both !important; this comes later) */
+        [hidden] { display: none !important; }
         .badge-status-normal, .badge-status-out, .badge-status-abnormal, .badge-status-none, .badge-status-info { border: 1px solid transparent; font-weight: 600; }
         .badge-status-normal { background: #e3f3e8; color: #1b5e2f; border-color: #b7dfc3; }
         .badge-status-out { background: #fff1c2; color: #6b4300; border-color: #f0d27a; }
