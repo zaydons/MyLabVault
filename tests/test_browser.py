@@ -8,6 +8,7 @@ import os
 import socket
 import threading
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -641,3 +642,39 @@ def test_old_document_medications_review(page, ai, tmp_path):
     assert page.locator(".meds-table").text_content().count("Add to history") == 2
     assert page.is_checked("[aria-label='Add to history: Simvastatin']")
     axe_clean(page, ".review-card")
+
+
+def test_vaccine_import_review(page, ai, tmp_path):
+    """An immunization record's doses: one already saved is unticked, an undated one needs its date."""
+    ready(page)
+    flu = (date.today() - timedelta(days=60)).isoformat()
+    api(page, "POST", "/api/vaccines/", {"patient_id": 1, "vaccine": "Influenza (flu)", "date_given": flu})
+    ai.reply = {"tests": [], "immunizations": [
+        {"vaccine": "Flu shot", "matched_vaccine": "Influenza (flu)", "date_given": flu},
+        {"vaccine": "Tdap", "date_given": None, "lot_number": "AB12"},
+        {"vaccine": "COVID-19", "matched_vaccine": "COVID-19", "date_given": flu, "manufacturer": "Pfizer"}]}
+    record = tmp_path / "shots.pdf"
+    record.write_bytes(pdfs.immunization_record(tag="browser"))
+    page.goto(page.base + "/import", wait_until="networkidle")
+    page.set_input_files("#fileInput", str(record))
+    page.wait_for_selector(".vaccines-table")
+    # No visit date is asked for: each dose has its own
+    assert not page.query_selector(".review-card input[id^='date-']")
+    table = page.text_content(".vaccines-table")
+    assert "Already saved" in table and "No date" in table and "Lot AB12" in table
+    checks = page.eval_on_selector_all(".vaccine-check", "bs => bs.map(b => b.checked)")
+    assert checks == [False, False, True]
+    assert "1 dose has no date" in page.text_content(".review-card")
+    axe_clean(page, ".review-card")
+
+    # Entering the missing date ticks the dose; both save
+    page.fill(".vaccine-date", (date.today() - timedelta(days=900)).isoformat())
+    page.dispatch_event(".vaccine-date", "change")
+    assert page.is_checked("[aria-label='Save Tdap']")
+    page.select_option(".review-card select[id^='provider-']", "1")
+    page.click("#importButton")
+    page.wait_for_selector("#importSummary:not([hidden])")
+    summary = page.text_content("#importSummary")
+    assert "Imported 2 vaccines" in summary and "Tdap" in summary
+    names = sorted(s["vaccine"] for s in api(page, "GET", "/api/vaccines/?patient_id=1"))
+    assert names == ["COVID-19", "Influenza (flu)", "Tdap"]
