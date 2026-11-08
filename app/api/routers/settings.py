@@ -171,6 +171,8 @@ def update_dark_mode_put(
 @router.post("/reset-data")
 def reset_data(db: Session = Depends(get_db)):
     """Reset all application data to initial state (DESTRUCTIVE OPERATION)."""
+    from .pdf_import import forget_recheck_all
+    forget_recheck_all()
     try:
         # Delete all data in correct dependency order to avoid foreign key constraint errors
         # 1. First delete LabResults and Vitals (depend on Lab, Patient, Provider)

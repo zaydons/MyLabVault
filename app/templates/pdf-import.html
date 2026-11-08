@@ -96,8 +96,10 @@
 
     <!-- History -->
     <div class="card" id="historySection">
-      <div class="card-header">
-        <h2 class="card-title"><i class="mdi mdi-history mr-2" aria-hidden="true"></i>Import history</h2>
+      <div class="card-header d-flex flex-wrap align-items-center">
+        <h2 class="card-title mr-auto"><i class="mdi mdi-history mr-2" aria-hidden="true"></i>Import history</h2>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="recheckAllOpen" hidden>
+          <i class="mdi mdi-robot-outline mr-1" aria-hidden="true"></i><span>Re-check all with AI</span></button>
       </div>
       <div class="card-body">
         <table id="historyTable" class="table table-striped" style="width: 100%;">
@@ -132,6 +134,37 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
         <button type="button" class="btn btn-primary" id="detailsReviewBtn" hidden>Review and import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Re-check every imported PDF with AI -->
+<div class="modal fade" id="recheckAllModal" tabindex="-1" role="dialog" aria-labelledby="recheckAllModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="recheckAllModalLabel">Re-check all with AI</h2>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="recheckAllError" role="alert"></div>
+        <div id="recheckAllIntro">
+          <p>Reads every imported PDF again with AI, one at a time, to find what older imports missed: vitals, medications, vaccines and diagnoses, and lab results that differ from what's saved.</p>
+          <p id="recheckAllCount" class="mb-2"></p>
+          <p class="small text-muted">Each PDF is sent to the AI service (Amazon Bedrock), so this costs about the same as uploading them again. Nothing is saved until you review each document afterwards. You can leave this page; the re-check carries on.</p>
+          <div class="custom-control custom-checkbox mb-2">
+            <input type="checkbox" class="custom-control-input" id="recheckAllSkip">
+            <label class="custom-control-label" for="recheckAllSkip">Skip documents already re-checked</label>
+          </div>
+        </div>
+        <div id="recheckAllProgress" role="status" aria-live="polite"></div>
+        <div id="recheckAllResults"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-outline-danger" id="recheckAllStop" hidden><i class="mdi mdi-stop mr-1" aria-hidden="true"></i>Stop</button>
+        <button type="button" class="btn btn-primary" id="recheckAllStart"><i class="mdi mdi-robot-outline mr-1" aria-hidden="true"></i><span>Start</span></button>
       </div>
     </div>
   </div>
@@ -201,7 +234,7 @@ const STATUS_BADGES = {
 
 // Reports with rows still to import can be reopened in the review
 function canReview(row) {
-    return row.status === 'pending' || row.status === 'failed' ||
+    return row.status === 'pending' || row.status === 'failed' || (row.to_review || 0) > 0 ||
         (row.status === 'completed' && (row.results_saved || 0) < (row.total_tests_found || 0));
 }
 
@@ -237,7 +270,8 @@ function initializeHistoryTable() {
                 const name = escapeHtml(row.filename);
                 let html = '';
                 if (canReview(row)) {
-                    html += `<button type="button" class="btn btn-primary btn-sm mr-1" data-review-import="${id}">${row.status === 'completed' ? 'Import remaining' : 'Review'}</button>`;
+                    html += `<button type="button" class="btn btn-primary btn-sm mr-1" data-review-import="${id}">${row.status !== 'completed' ? 'Review'
+                        : (row.results_saved || 0) < (row.total_tests_found || 0) ? 'Import remaining' : 'Review new details'}</button>`;
                 }
                 if (row.has_file) {
                     html += `<button type="button" class="btn btn-outline-secondary btn-sm mr-1" onclick="viewImportPdf(${id})" aria-label="View PDF ${name}" title="View PDF"><i class="mdi mdi-file-pdf-box" aria-hidden="true"></i></button>`;
@@ -368,6 +402,7 @@ function renderRecheck(c) {
             <a href="/api/pdf/${Number(c.import_id)}/file" target="_blank" rel="noopener">Open the PDF</a></p>
         <p class="mb-2">${s.same} ${s.same === 1 ? 'match' : 'matches'} · ${recheckPlural(s.different, 'different value')} · ${s.missing} not saved${s.only_saved ? ` · ${s.only_saved} saved but not found this time` : ''}</p>
         <p class="small text-muted">${lead}</p>
+        ${reviewNote(c.to_review, c.import_id)}
         ${rows.length ? `<div class="table-responsive"><table class="table table-sm mb-0" id="recheckTable">
             <caption class="sr-only">What the AI read compared with the saved results</caption>
             <thead><tr><th scope="col" style="width: 2.5rem;"><span class="sr-only">Apply</span></th><th scope="col">Test</th><th scope="col">Date</th>
@@ -391,6 +426,85 @@ function renderRecheck(c) {
     formatAllDatesOnPage();
 }
 
+// "1 diagnosis, 2 vaccines" from a re-check's to_review counts
+function reviewParts(counts) {
+    const names = { vitals: ['vital', 'vitals'], medications: ['medication change', 'medication changes'],
+                    vaccines: ['vaccine', 'vaccines'], diagnoses: ['diagnosis', 'diagnoses'] };
+    return Object.entries(counts || {}).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${names[k][n === 1 ? 0 : 1]}`);
+}
+
+function reviewNote(counts, importId) {
+    const parts = reviewParts(counts);
+    return parts.length ? `<div class="alert alert-info py-2"><i class="mdi mdi-clipboard-check-outline mr-1" aria-hidden="true"></i>Also found to review: ${escapeHtml(parts.join(', '))}.
+        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-review-import="${Number(importId)}" data-dismiss="modal">Review them</button></div>` : '';
+}
+
+// ---------- re-check all ----------
+let recheckAllTimer = null;
+
+function renderRecheckAll(job) {
+    const running = !!job.running;
+    const start = document.getElementById('recheckAllStart');
+    document.getElementById('recheckAllIntro').hidden = running;
+    document.getElementById('recheckAllStop').hidden = !running;
+    start.hidden = running;
+    const skip = document.getElementById('recheckAllSkip');
+    const count = skip.checked ? job.never_rechecked : job.eligible;
+    document.getElementById('recheckAllCount').innerHTML = `<strong>${recheckPlural(count, 'document')}</strong> will be read${skip.checked ? ' (never re-checked)' : ''}.`;
+    start.disabled = !count;
+    start.querySelector('span').textContent = job.total && !running ? 'Start again' : 'Start';
+    const total = job.total || 0, done = job.done || 0;
+    document.getElementById('recheckAllProgress').innerHTML = total ? `
+        <p class="mb-1">${running ? `Re-checking ${Math.min(done + 1, total)} of ${total}${job.current ? `: <strong>${escapeHtml(job.current)}</strong>` : ''}${job.stop_requested ? ' (stopping after this one)' : ''}…`
+            : `${job.stop_requested ? 'Stopped' : 'Finished'}: re-checked ${done} of ${recheckPlural(total, 'document')}.`}</p>
+        <div class="progress mb-3" style="height: .75rem;"><div class="progress-bar" role="progressbar" style="width: ${total ? Math.round(100 * done / total) : 0}%"
+            aria-valuenow="${done}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Documents re-checked"></div></div>` : '';
+    const results = job.results || [];
+    const withNews = results.filter(r => r.status === 'ok' && (reviewParts(r.to_review).length || r.summary.different || r.summary.missing));
+    const failed = results.filter(r => r.status === 'error');
+    const quiet = results.length - withNews.length - failed.length;
+    document.getElementById('recheckAllResults').innerHTML = results.length ? `
+        ${withNews.length ? `<h3 class="h6">To review</h3><ul class="list-group mb-3">${withNews.map(r => {
+            const news = reviewParts(r.to_review);
+            const tests = [r.summary.different ? recheckPlural(r.summary.different, 'result') + ' differ' + (r.summary.different === 1 ? 's' : '') : '',
+                           r.summary.missing ? `${r.summary.missing} not saved` : ''].filter(Boolean);
+            return `<li class="list-group-item d-flex flex-wrap align-items-center">
+                <div class="mr-auto"><strong>${escapeHtml(r.filename)}</strong><div class="small">${escapeHtml([...news, ...tests].join(' · '))}</div></div>
+                ${news.length ? `<button type="button" class="btn btn-primary btn-sm mr-1" data-review-import="${Number(r.import_id)}" data-dismiss="modal">Review</button>` : ''}
+                ${tests.length ? `<button type="button" class="btn btn-outline-primary btn-sm" data-recheck-results="${Number(r.import_id)}">Compare results</button>` : ''}</li>`;
+        }).join('')}</ul>` : ''}
+        ${quiet ? `<p class="mb-2"><i class="mdi mdi-check-circle-outline mr-1" aria-hidden="true"></i>${recheckPlural(quiet, 'document')} had nothing new.</p>` : ''}
+        ${failed.length ? `<h3 class="h6">Couldn't be re-checked</h3><ul class="mb-0">${failed.map(r => `<li>${escapeHtml(r.filename)}: ${escapeHtml(r.error)}</li>`).join('')}</ul>` : ''}` : '';
+}
+
+async function loadRecheckAll() {
+    try {
+        const job = await (await fetch('/api/pdf/recheck-all')).json();
+        renderRecheckAll(job);
+        const open = document.getElementById('recheckAllOpen');
+        open.querySelector('span').textContent = job.running ? `Re-checking ${Math.min((job.done || 0) + 1, job.total)} of ${job.total}…` : 'Re-check all with AI';
+        clearTimeout(recheckAllTimer);
+        if (job.running) recheckAllTimer = setTimeout(loadRecheckAll, 3000);
+        else if (job.finished_at && open.dataset.wasRunning) refreshHistory();
+        open.dataset.wasRunning = job.running ? '1' : '';
+    } catch (e) { /* server restarting: try again on the next open */ }
+}
+
+async function recheckAllAction(path) {
+    const error = document.getElementById('recheckAllError');
+    error.classList.add('d-none');
+    const skip = document.getElementById('recheckAllSkip').checked;
+    try {
+        const response = await fetch(path + (path.endsWith('recheck-all') && skip ? '?skip_rechecked=true' : ''), { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || 'The re-check couldn\'t be started.');
+        document.getElementById('recheckAllOpen').dataset.wasRunning = '1';
+    } catch (e) {
+        error.textContent = e.message; error.classList.remove('d-none');
+    }
+    loadRecheckAll();
+}
+
 function updateRecheckButton() {
     const n = document.querySelectorAll('.recheck-check:checked').length;
     const button = document.getElementById('recheckApply');
@@ -404,7 +518,8 @@ function recheckError(text) {
     box.classList.toggle('d-none', !text);
 }
 
-async function openRecheck(importId) {
+// stored: show the last re-check (e.g. from Re-check all) instead of reading the PDF again
+async function openRecheck(importId, stored) {
     recheckId = importId;
     recheckError('');
     document.getElementById('recheckContent').innerHTML = '';
@@ -412,7 +527,7 @@ async function openRecheck(importId) {
     updateRecheckButton();
     $('#recheckModal').modal('show');
     try {
-        const response = await fetch(`/api/pdf/${importId}/recheck`, { method: 'POST' });
+        const response = await fetch(`/api/pdf/${importId}/recheck`, { method: stored ? 'GET' : 'POST' });
         const data = await response.json();
         if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The re-check failed.');
         document.getElementById('recheckStatus').innerHTML = '';
@@ -452,6 +567,19 @@ $(document).ready(async function () {
     refreshHistory();
     document.getElementById('recheckContent').addEventListener('change', e => { if (e.target.classList.contains('recheck-check')) updateRecheckButton(); });
     document.getElementById('recheckApply').addEventListener('click', applyRecheck);
+    if (aiEnabled) {
+        document.getElementById('recheckAllOpen').hidden = false;
+        loadRecheckAll();
+    }
+    document.getElementById('recheckAllOpen').addEventListener('click', () => { loadRecheckAll(); $('#recheckAllModal').modal('show'); });
+    document.getElementById('recheckAllStart').addEventListener('click', () => recheckAllAction('/api/pdf/recheck-all'));
+    document.getElementById('recheckAllStop').addEventListener('click', () => recheckAllAction('/api/pdf/recheck-all/stop'));
+    document.getElementById('recheckAllSkip').addEventListener('change', loadRecheckAll);
+    document.getElementById('recheckAllResults').addEventListener('click', e => {
+        const button = e.target.closest('[data-recheck-results]');
+        if (!button) return;
+        $('#recheckAllModal').one('hidden.bs.modal', () => openRecheck(parseInt(button.dataset.recheckResults, 10), true)).modal('hide');
+    });
     await PdfReview.init();
 });
 </script>

@@ -9,6 +9,10 @@ it's kept on the import as parsed_data["recheck"] and compared with what's saved
     only_saved  saved from this import, but the AI didn't find it (shown for information)
 
 Nothing changes until apply_recheck is called with the rows to apply.
+
+The other things a document holds (vitals, medications, vaccines, diagnoses) are reviewed on the
+import's review card instead. merge_sections gives each one with nothing saved from it yet the fresh
+reading, so documents imported before the AI reader could read them can be backfilled.
 """
 
 from datetime import date, datetime
@@ -21,6 +25,26 @@ from ..models import Lab, LabResult, PDFImportLog
 from .import_review import _numeric, _range_of, find_lab, find_lab_in_unit, row_date
 
 APPLICABLE = ("different", "missing")
+# Sections of a reading reviewed on the import's review card; saved positions are kept as saved_<section>
+SECTIONS = ("vitals", "medications", "immunizations", "diagnoses")
+
+
+def merge_sections(parsed: Dict[str, Any], reading: Dict[str, Any]) -> List[str]:
+    """Take the fresh reading's sections that have nothing saved yet; returns the sections replaced.
+
+    A section with saved rows keeps its original reading: the saved positions point into it.
+    """
+    replaced = []
+    for section in SECTIONS:
+        if parsed.get(f"saved_{section}") or section not in reading:
+            continue
+        if (parsed.get(section) or []) != (reading.get(section) or []):
+            replaced.append(section)
+        parsed[section] = reading.get(section) or []
+    # A visit date found this time dates the vitals and medication changes
+    if not parsed.get("date_collected") and reading.get("date_collected"):
+        parsed["date_collected"] = reading["date_collected"]
+    return replaced
 
 
 def _lab_for(test: Dict[str, Any], db: Session) -> Optional[Lab]:

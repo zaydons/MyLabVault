@@ -37,7 +37,8 @@ jobs:
     name: Browser & accessibility
     # Not in the image build (github.workflow is the caller's name there)
     if: github.workflow == 'Tests'
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 has no Chromium build for ubuntu-latest (26.04). Move on when Playwright is upgraded.
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
