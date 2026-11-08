@@ -38,6 +38,7 @@ When it's on:
 - **Visit summaries** from your doctor are read too: their vitals and medication changes appear on the review card, to save on the Vitals page and apply to the Medications page. The names of the patient's current medications are sent along so the AI can match them.
 - **Diagnoses** in visit summaries and records exports are read too, to save on the Diagnoses page; the names of the patient's diagnoses are sent along for matching.
 - **Immunization records** are read the same way: their vaccine doses appear on the review card, to save on the Vaccines page. The patient's vaccine names (and common vaccine names) are sent along so the AI can match them.
+- **Re-check all with AI** on the Import page's history re-reads every imported PDF to backfill vitals, medications, vaccines and diagnoses that older imports didn't read. Each PDF is sent to Bedrock again, so expect about the same cost as uploading them all.
 - **Settings → Clean up** gets an **Ask AI to review** button that finds lab tests, panels, units and providers saved under different names. It sends only those names, not your results, and nothing is merged until you confirm.
 
 The PDF, including your name, date of birth and results, is sent to Claude in Amazon Bedrock in your AWS account. Data handling is covered by Amazon Bedrock's data-protection terms, and Anthropic has no access to the Bedrock inference infrastructure.

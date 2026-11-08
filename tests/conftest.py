@@ -27,7 +27,7 @@ from api.main import app, initialize_database  # noqa: E402
 from api import paths  # noqa: E402
 from api.database import engine  # noqa: E402
 from api.models import Base  # noqa: E402
-from api.routers import setup as setup_router  # noqa: E402
+from api.routers import pdf_import, setup as setup_router  # noqa: E402
 from api.utils.cache import api_cache  # noqa: E402
 
 initialize_database()
@@ -38,6 +38,7 @@ def reset_data():
     Base.metadata.drop_all(bind=engine)
     initialize_database()
     setup_router.reset_setup_state()
+    pdf_import.forget_recheck_all()
     api_cache.clear()
     shutil.rmtree(paths.UPLOADS_DIR, ignore_errors=True)
     paths.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)

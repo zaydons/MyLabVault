@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Form, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Depends, Form, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 import pypdf
@@ -451,19 +451,28 @@ def _recheck_import(import_id: int, db: Session) -> PDFImportLog:
     return import_log
 
 
-@router.post("/{import_id}/recheck")
-async def recheck_with_ai(import_id: int, request: Request, db: Session = Depends(get_db)):
-    """Read an import's PDF again with AI and compare it with the results saved from it.
+def _to_review(parsed_data: dict, patient_id: int, db: Session) -> dict:
+    """What an import's review card still offers outside its lab results, by section."""
+    return {
+        "vitals": sum(1 for v in visit_review.vital_rows(parsed_data, patient_id, db) if not (v["already_imported"] or v["already_saved"])),
+        "medications": sum(1 for m in visit_review.medication_rows(parsed_data, patient_id, db)
+                           if m["plan"] != visit_review.PLAN_NONE and not m["already_imported"]),
+        "vaccines": sum(1 for v in vaccine_review.immunization_rows(parsed_data, patient_id, db) if not (v["already_imported"] or v["already_saved"])),
+        "diagnoses": sum(1 for d in diagnosis_review.diagnosis_rows(parsed_data, patient_id, db)
+                         if d["plan"] != diagnosis_review.PLAN_NONE and not d["already_imported"]),
+    }
 
-    The original reading is kept; the fresh one is stored for applying corrections. Nothing is saved.
+
+async def _recheck_one(import_log: PDFImportLog, db: Session, fallback_patient: int) -> dict:
+    """Read an import's PDF again with AI: compare its lab results with what's saved, and give its other
+    sections (vitals, medications, vaccines, diagnoses) with nothing saved yet the fresh reading.
+
+    Raises HTTPException when the PDF is missing or the AI can't read it. Nothing is saved but the reading.
     """
-    if not ai_parser.is_enabled():
-        raise HTTPException(status_code=400, detail="AI parsing is not enabled")
-    import_log = _recheck_import(import_id, db)
     file_path = Path(import_log.file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="PDF file not found")
-    patient_id = _patient_id(request)
+    patient_id = recheck._patient_of(import_log, db, fallback_patient)
     try:
         reading = await _parse_with_ai(file_path.read_bytes(), db, patient_id)
     except AIParseError as e:
@@ -471,21 +480,145 @@ async def recheck_with_ai(import_id: int, request: Request, db: Session = Depend
     reading['checked_at'] = datetime.now().isoformat(timespec='seconds')
     parsed_data = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
     parsed_data['recheck'] = reading
+    recheck.merge_sections(parsed_data, reading)
     import_log.parsed_data = json.dumps(parsed_data)
+    if not import_log.date_collected and parsed_data.get('date_collected'):
+        import_log.date_collected = parsed_data['date_collected']
     db.commit()
     comparison = recheck.compare_with_saved(import_log, reading, patient_id, db)
-    audit("import.rechecked", import_id=import_log.id, **comparison['summary'])
+    comparison['to_review'] = _to_review(parsed_data, patient_id, db)
+    audit("import.rechecked", import_id=import_log.id, **comparison['summary'], **{f"new_{k}": v for k, v in comparison['to_review'].items()})
     return comparison
+
+
+@router.post("/{import_id}/recheck")
+async def recheck_with_ai(import_id: int, request: Request, db: Session = Depends(get_db)):
+    """Read an import's PDF again with AI and compare it with the results saved from it.
+
+    The original reading of its lab results is kept; the fresh one is stored for applying corrections.
+    Vitals, medications, vaccines and diagnoses with nothing saved yet take the fresh reading, for its
+    review card (to_review counts them). Nothing is saved.
+    """
+    if not ai_parser.is_enabled():
+        raise HTTPException(status_code=400, detail="AI parsing is not enabled")
+    return await _recheck_one(_recheck_import(import_id, db), db, _patient_id(request))
+
+
+# ---------- re-checking every import ----------
+
+# One job at a time, in this process. Documents are read one after another so the AI service isn't flooded.
+RECHECK_ALL = {"running": False}
+
+
+def forget_recheck_all() -> None:
+    """Drop the last re-check of every import (after Reset: its documents are gone). A running one stops."""
+    if RECHECK_ALL.get("running"):
+        RECHECK_ALL["stop_requested"] = True
+        RECHECK_ALL["results"] = []
+    else:
+        RECHECK_ALL.clear()
+        RECHECK_ALL["running"] = False
+
+
+def _recheckable(db: Session, skip_rechecked: bool) -> List[PDFImportLog]:
+    """Imports with a PDF on disk, oldest first; optionally only those never re-checked."""
+    imports = db.query(PDFImportLog).filter(PDFImportLog.file_path.isnot(None)).order_by(PDFImportLog.created_at).all()
+    found = [i for i in imports if Path(i.file_path).exists()]
+    if skip_rechecked:
+        found = [i for i in found if not (json.loads(i.parsed_data or '{}').get('recheck') or {}).get('checked_at')]
+    return found
+
+
+async def _run_recheck_all(ids: List[int], fallback_patient: int) -> None:
+    from ..database import SessionLocal
+    job = RECHECK_ALL
+    try:
+        for import_id in ids:
+            if job["stop_requested"]:
+                break
+            db = SessionLocal()
+            try:
+                import_log = db.query(PDFImportLog).filter_by(id=import_id).first()
+                if not import_log:
+                    continue
+                job["current"] = import_log.filename
+                entry = {"import_id": import_log.id, "filename": import_log.filename}
+                try:
+                    comparison = await _recheck_one(import_log, db, fallback_patient)
+                    entry.update(status="ok", summary=comparison["summary"], to_review=comparison["to_review"])
+                except HTTPException as e:
+                    db.rollback()
+                    entry.update(status="error", error=str(e.detail))
+                except Exception:
+                    db.rollback()
+                    logger.exception(f"Re-check of import {import_id} failed")
+                    entry.update(status="error", error="The re-check failed.")
+                job["results"].append(entry)
+                job["done"] += 1
+            finally:
+                db.close()
+    finally:
+        job.update(running=False, current=None, finished_at=datetime.now().isoformat(timespec='seconds'))
+        audit("import.recheck_all_finished", checked=job["done"], total=job["total"], stopped=job["stop_requested"],
+              failed=sum(1 for r in job["results"] if r["status"] == "error"))
+
+
+def _job_state(db: Session) -> dict:
+    job = {k: v for k, v in RECHECK_ALL.items()}
+    job.setdefault("results", [])
+    job["eligible"] = len(_recheckable(db, False))
+    job["never_rechecked"] = len(_recheckable(db, True))
+    return job
+
+
+@router.get("/recheck-all")
+def get_recheck_all(db: Session = Depends(get_db)):
+    """Progress of the current (or last) re-check of every import, and how many could be re-checked."""
+    return _job_state(db)
+
+
+@router.post("/recheck-all")
+async def start_recheck_all(request: Request, background_tasks: BackgroundTasks, skip_rechecked: bool = False,
+                            db: Session = Depends(get_db)):
+    """Re-check every import with a PDF with AI, one after another, in the background.
+
+    skip_rechecked leaves out imports already re-checked (to carry on after stopping). Each import is
+    compared and backfilled as by POST /{id}/recheck; nothing is saved until its review is confirmed.
+    """
+    if not ai_parser.is_enabled():
+        raise HTTPException(status_code=400, detail="AI parsing is not enabled")
+    if RECHECK_ALL.get("running"):
+        raise HTTPException(status_code=409, detail="A re-check of every import is already running")
+    ids = [i.id for i in _recheckable(db, skip_rechecked)]
+    if not ids:
+        raise HTTPException(status_code=400, detail="There are no imported PDFs to re-check")
+    RECHECK_ALL.clear()
+    RECHECK_ALL.update(running=True, stop_requested=False, total=len(ids), done=0, current=None, results=[],
+                       started_at=datetime.now().isoformat(timespec='seconds'), finished_at=None)
+    audit("import.recheck_all_started", total=len(ids), skip_rechecked=skip_rechecked)
+    background_tasks.add_task(_run_recheck_all, ids, _patient_id(request))
+    return _job_state(db)
+
+
+@router.post("/recheck-all/stop")
+def stop_recheck_all(db: Session = Depends(get_db)):
+    """Stop after the document being read now."""
+    if RECHECK_ALL.get("running"):
+        RECHECK_ALL["stop_requested"] = True
+    return _job_state(db)
 
 
 @router.get("/{import_id}/recheck")
 def get_recheck(import_id: int, request: Request, db: Session = Depends(get_db)):
     """The last AI re-check of an import, compared with what's saved now."""
     import_log = _recheck_import(import_id, db)
-    reading = (json.loads(import_log.parsed_data) if import_log.parsed_data else {}).get('recheck')
+    parsed_data = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
+    reading = parsed_data.get('recheck')
     if not reading:
         raise HTTPException(status_code=404, detail="This import hasn't been re-checked with AI")
-    return recheck.compare_with_saved(import_log, reading, _patient_id(request), db)
+    comparison = recheck.compare_with_saved(import_log, reading, _patient_id(request), db)
+    comparison['to_review'] = _to_review(parsed_data, recheck._patient_of(import_log, db, _patient_id(request)), db)
+    return comparison
 
 
 @router.post("/{import_id}/recheck/apply")
@@ -1240,6 +1373,10 @@ async def get_import_history(db: Session = Depends(get_db)):
         item["results_saved"] = saved.get(str(import_log.id), 0)
         item["has_file"] = bool(import_log.file_path)  # results entered by hand have no PDF
         item.update(_last_scanned(import_log))
+        # After an AI re-check, what its review card offers besides lab results
+        parsed = json.loads(import_log.parsed_data) if import_log.parsed_data else {}
+        item["to_review"] = (sum(_to_review(parsed, recheck._patient_of(import_log, db, 1), db).values())
+                             if parsed.get('recheck') else 0)
         history.append(item)
     return history
 

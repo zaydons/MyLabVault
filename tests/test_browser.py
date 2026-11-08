@@ -733,3 +733,32 @@ def test_diagnosis_import_review(page, ai, tmp_path):
     assert "Imported 2 diagnosis changes" in summary_text and "Diagnosis added:" in summary_text and "Past diagnosis added:" in summary_text
     names = sorted((d["name"], d["status"]) for d in api(page, "GET", "/api/diagnoses/?patient_id=1"))
     assert names == [("Essential hypertension", "active"), ("Fractured wrist", "resolved"), ("Hyperlipidemia", "active")]
+
+
+def test_recheck_all_backfills(page, ai):
+    """An old import with only lab results: Re-check all finds its diagnosis, and Review opens it."""
+    from test_recheck_all import AI_READING  # what the fresh read finds
+    ready(page)
+    report = pdfs.lab_report([["Cholesterol, Total", "185", "", "mg/dL", "100-199"], ["Glucose", "88", "", "mg/dL", "70-99"]], tag="browser all")
+    upload = page.request.post(page.base + "/api/pdf/upload", multipart={"file": {"name": "old.pdf", "mimeType": "application/pdf", "buffer": report}})
+    p = upload.json()
+    api(page, "POST", "/api/pdf/confirm", {"import_id": p["import_id"], "selected_tests": [0, 1], "provider_id": 1})
+
+    ai.reply = AI_READING
+    page.goto(page.base + "/import", wait_until="networkidle")
+    page.click("#recheckAllOpen")
+    page.wait_for_selector("#recheckAllModal.show")
+    page.wait_for_function("() => /1 document/.test(document.getElementById('recheckAllCount').textContent)")
+    axe_clean(page, "#recheckAllModal")
+    page.click("#recheckAllStart")
+    page.wait_for_function("() => /Finished/.test(document.getElementById('recheckAllProgress').textContent)", timeout=20000)
+    results = page.text_content("#recheckAllResults")
+    assert "old.pdf" in results and "1 diagnosis" in results and "1 vaccine" in results
+    axe_clean(page, "#recheckAllModal")
+
+    # Review opens its card with the new Diagnoses group; the history offers it too
+    page.click("#recheckAllResults [data-review-import]")
+    modal_closed(page, "#recheckAllModal")
+    page.wait_for_selector(".dx-table")
+    assert "Add as ongoing" in page.text_content(".dx-table")
+    page.wait_for_function("() => /Review new details/.test(document.getElementById('historyTable').textContent)")
