@@ -36,6 +36,7 @@ When it's on:
 - Each uploaded file gets a **Re-scan with AI** button on the import screen. Afterwards a comparison shows what the AI found that the built-in reader didn't (and vice versa), and you can switch back to the built-in results.
 - Results parsed by AI are marked with an **AI** badge. You still review and confirm them before anything is saved.
 - **Visit summaries** from your doctor are read too: their vitals and medication changes appear on the review card, to save on the Vitals page and apply to the Medications page. The names of the patient's current medications are sent along so the AI can match them.
+- **Diagnoses** in visit summaries and records exports are read too, to save on the Diagnoses page; the names of the patient's diagnoses are sent along for matching.
 - **Immunization records** are read the same way: their vaccine doses appear on the review card, to save on the Vaccines page. The patient's vaccine names (and common vaccine names) are sent along so the AI can match them.
 - **Settings → Clean up** gets an **Ask AI to review** button that finds lab tests, panels, units and providers saved under different names. It sends only those names, not your results, and nothing is merged until you confirm.
 

@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import Immunization as ImmunizationModel, Lab as LabModel, LabResult as LabResultModel, Medication as MedicationModel
+from ..models import Diagnosis as DiagnosisModel, Immunization as ImmunizationModel, Lab as LabModel, LabResult as LabResultModel, Medication as MedicationModel
 from .pages import get_selected_patient_id
 
 router = APIRouter()
@@ -20,6 +20,7 @@ PAGES = [
     ("Vitals", "/vitals", "vitals weight blood pressure heart rate"),
     ("Medications", "/medications", "medications medicines drugs prescriptions supplements vitamins"),
     ("Vaccines", "/vaccines", "vaccines vaccinations immunizations shots boosters"),
+    ("Diagnoses", "/diagnoses", "diagnoses conditions problems problem list icd"),
     ("Import", "/import", "import pdf upload report enter results by hand"),
     ("Lab Tests", "/labs", "lab tests manage"),
     ("Panels", "/panels", "panels"),
@@ -89,6 +90,18 @@ def search(request: Request, q: str = Query("", max_length=100), db: Session = D
         "detail": f"Vaccine · last given {shot.date_given.isoformat()}",
         "url": "/vaccines",
     } for shot in list(latest_shot.values())[:4]]
+
+    # This patient's diagnoses, by name or ICD-10 code
+    found = db.query(DiagnosisModel).filter(DiagnosisModel.patient_id == patient_id)
+    for word in words:
+        found = found.filter(func.lower(DiagnosisModel.name).contains(word, autoescape=True)
+                             | func.lower(func.coalesce(DiagnosisModel.icd10_code, "")).contains(word, autoescape=True))
+    items += [{
+        "type": "diagnosis",
+        "label": d.name,
+        "detail": " · ".join(filter(None, ["Diagnosis", d.icd10_code, "ongoing" if d.status == "active" else "resolved"])),
+        "url": "/diagnoses",
+    } for d in found.order_by(DiagnosisModel.name).limit(4).all()]
 
     items += [
         {"type": "page", "label": name, "detail": "Page", "url": url}
