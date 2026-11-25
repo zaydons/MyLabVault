@@ -762,3 +762,35 @@ def test_recheck_all_backfills(page, ai):
     page.wait_for_selector(".dx-table")
     assert "Add as ongoing" in page.text_content(".dx-table")
     page.wait_for_function("() => /Review new details/.test(document.getElementById('historyTable').textContent)")
+
+
+def test_apple_health_settings(page):
+    ready(page)
+    api(page, "POST", "/api/vitals/", {"patient_id": 1, "vital_type": "weight", "value": 180, "unit": "lb", "measured_at": "2026-10-01T08:00:00"})
+    page.goto(page.base + "/settings#apple-health", wait_until="networkidle")
+    page.wait_for_function("() => /Off/.test(document.getElementById('ahStatus').textContent)")
+    assert page.is_hidden("#ahSetup")
+    page.click("#ahCreate")
+    page.wait_for_selector("#ahTokenBox:not([hidden])")
+    token = page.input_value("#ahToken")
+    assert len(token) > 20
+    assert "1 reading waiting" in page.text_content("#ahStatus")
+    assert page.input_value("#ahGetUrl") == page.base + "/api/apple-health/vitals"
+    page.check("#ahUnitsMetric", force=True)
+    assert page.input_value("#ahGetUrl").endswith("?units=metric")
+    page.click("#ahSetup summary")
+    assert "Log Health Sample" in page.text_content("#ahSetup details")
+    axe_clean(page, "#apple-health")
+
+    # The token works for the Shortcut's call; marking everything as sent empties the queue
+    shortcut = page.request.get(page.base + "/api/apple-health/vitals", headers={"Authorization": f"Bearer {token}"}).json()
+    assert shortcut["Weight"][0]["value"] == 180
+    page.click("#ahMarkSent")
+    page.wait_for_function("() => /0 readings waiting/.test(document.getElementById('ahStatus').textContent)")
+
+    # Turning it off asks first, then stops the token
+    page.click("#ahOff")
+    page.wait_for_selector("#confirmationModal.show")
+    page.click("#confirmationModalConfirmBtn")
+    page.wait_for_function("() => /Off/.test(document.getElementById('ahStatus').textContent)")
+    assert page.request.get(page.base + "/api/apple-health/vitals", headers={"Authorization": f"Bearer {token}"}).status == 401

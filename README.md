@@ -43,6 +43,7 @@ MyLabVault is a self-hosted app for tracking your lab results, vitals, medicatio
 - **Record vitals**: Log weight, blood pressure and heart rate in one form from the dashboard or the Vitals page, or import them from a visit summary (see *Visit summaries* above)
 - **Blood pressure categories**: Readings are labelled Normal, Elevated, Stage 1, Stage 2 or Hypertensive crisis (AHA adult categories)
 - **More measurements**: Height, temperature, oxygen saturation, respiratory rate and blood glucose
+- **Send to Apple Health**: *Settings → Apple Health* creates a token for one patient and gives the two addresses an iPhone Shortcut uses, with step-by-step instructions for building it. The Shortcut fetches the readings not sent yet (weight, height, blood pressure, heart rate, temperature, oxygen saturation, respiratory rate, blood glucose) in US or metric units, logs each with the *Log Health Sample* action, and confirms them, so each reading is sent once; run it by hand or daily with a Personal Automation. Only the token's hash is stored, and it's never shown again. *Mark everything as sent* skips readings already in Health (for example after restoring a backup), *Send everything again* resends them all, and *Turn off* stops the token. Edits and deletions in MyLabVault don't change Health. Lab results, vaccines, diagnoses and medications can't be added to Health by any app (Health only gets those from a provider's Health Records connection). Your iPhone has to reach the server: on your home Wi-Fi, or through a VPN when away
 - **Your units**: Choose lb or kg, feet and inches or cm, °F or °C and mg/dL or mmol/L (or *US units* / *Metric units* in one click) in *Settings → General*. Every reading, chart, change and typical range is shown in those units and new readings default to them; readings keep the unit they were entered in, so switching never alters your data
 
 ### 💊 **Medications**
@@ -309,6 +310,8 @@ POST /api/medications/{id}/change-dose  # End the current dose and start a new o
 POST /api/medications/{id}/stop         # Record the stop date
 GET  /api/vaccines/            # Vaccine doses (filter with patient_id), each with its due status
 GET  /api/diagnoses/           # Diagnoses (filter with patient_id), ongoing first
+GET  /api/apple-health/vitals  # Vitals not sent to Apple Health yet, by Health type (Authorization: Bearer <token>; units=us|metric)
+POST /api/apple-health/vitals/sent  # {"through": n} from the call above: record them as sent
 GET  /api/search/?q=           # Quick search for tests and pages
 GET  /api/cleanup/suggestions  # Likely duplicate tests, panels, units and providers
 POST /api/cleanup/suggestions/ai  # The same, plus an AI review of the names

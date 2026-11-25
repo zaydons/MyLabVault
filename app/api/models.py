@@ -710,9 +710,10 @@ class UserSettings(Base):
             # If JSON is invalid, start with default options
             options = {"sidebar_open": True, "dark_mode": False}
         
-        # Update provided settings
+        # Update provided settings (the Apple Health token is only set through its own endpoints)
         for key, value in kwargs.items():
-            options[key] = value
+            if key != "apple_health":
+                options[key] = value
         
         # Save back to database
         settings.options = json.dumps(options)
@@ -729,6 +730,7 @@ class UserSettings(Base):
         except (json.JSONDecodeError, TypeError):
             options = {"sidebar_open": True, "dark_mode": False}
         
+        options.pop("apple_health", None)  # holds the Apple Health token's hash; never sent to pages
         return {
             "id": self.id,
             "user_id": self.user_id,
