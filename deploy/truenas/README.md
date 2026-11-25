@@ -85,6 +85,10 @@ The import screen shows the reason when an AI re-scan fails:
 | *not available in this AWS region* / *not a valid Bedrock model* | Use a region where the model is offered, or set `MYLABVAULT_AI_MODEL` to an inference profile ID listed under **Bedrock → Cross-region inference**. |
 | *Could not reach the AI service* | The app needs outbound internet access. |
 
+## Optional: send vitals to Apple Health
+
+*Settings → Apple Health* sets up an iPhone Shortcut that logs your vitals in the Health app (see the steps on that page). The iPhone calls the app at the address you use in the browser, for example `http://192.168.0.31:8000`, so it works on your home Wi-Fi. To sync away from home, reach the server through a VPN such as Tailscale or WireGuard rather than exposing port 8000 to the internet: only the Apple Health calls need a token, and the rest of the app has no login.
+
 ## Updating
 
 Every push to `main` publishes a new `:latest` image. The running version (for example `Version 2026.10.07.32 (5f86139)`) is shown at the bottom right of every page. TrueNAS always shows *Version 1.0.0* for custom apps, so use the app's footer instead. When a newer image has been published, an **Update available** badge appears next to it. The app checks GitHub every few hours; set `MYLABVAULT_UPDATE_CHECK: "false"` to turn the check off.

@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% from 'components/notification_modal.html' import notification_modal, confirmation_modal %}
 
 {% block title %}Settings - MyLabVault{% endblock %}
 
@@ -37,6 +38,9 @@
 .about-list dd { flex: 1 1 16rem; margin: 0; }
 .about-list code { color: inherit; background: rgba(0, 0, 0, .05); padding: 0 .25rem; border-radius: .2rem; }
 .dark-mode .about-list code { background: rgba(255, 255, 255, .08); }
+.ah-steps li { margin-bottom: .4rem; }
+.ah-steps code { color: inherit; background: rgba(0, 0, 0, .05); padding: 0 .25rem; border-radius: .2rem; }
+.dark-mode .ah-steps code { background: rgba(255, 255, 255, .08); }
 .data-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .5rem 1.5rem; margin: .5rem 0 0; }
 .data-counts div { display: flex; justify-content: space-between; border-bottom: 1px solid #e9ecef; padding: .35rem 0; }
 .data-counts dt { font-weight: 400; color: #495057; }
@@ -82,6 +86,7 @@
       <nav class="settings-nav" aria-label="Settings sections">
         <a href="#general" data-section="general" class="nav-link"><i class="mdi mdi-tune-variant" aria-hidden="true"></i>General</a>
         <a href="#backup" data-section="backup" class="nav-link"><i class="mdi mdi-backup-restore" aria-hidden="true"></i>Backup &amp; restore</a>
+        <a href="#apple-health" data-section="apple-health" class="nav-link"><i class="mdi mdi-heart-outline" aria-hidden="true"></i>Apple Health</a>
         <a href="#cleanup" data-section="cleanup" class="nav-link"><i class="mdi mdi-merge" aria-hidden="true"></i>Clean up</a>
         <a href="#about" data-section="about" class="nav-link"><i class="mdi mdi-information-outline" aria-hidden="true"></i>About</a>
         <a href="#danger" data-section="danger" class="nav-link settings-nav-danger"><i class="mdi mdi-alert-octagon-outline" aria-hidden="true"></i>Danger zone</a>
@@ -244,6 +249,82 @@
               </div>
             </div>
           </form>
+        </section>
+
+        <!-- Apple Health -->
+        <section class="settings-section" id="apple-health" aria-labelledby="appleHealthTitle" tabindex="-1">
+          <h2 id="appleHealthTitle">Apple Health</h2>
+          <p class="section-lead">Send vitals to the Health app on your iPhone with a Shortcut you build once: weight, height, blood pressure, heart rate, temperature, oxygen saturation, respiratory rate and blood glucose. Each reading is sent once; the next run only sends new ones. Lab results, vaccines, diagnoses and medications can't be added to Health by any app.</p>
+          <div class="setting-row">
+            <div class="setting-text">
+              <span class="setting-label">Status</span>
+              <p id="ahStatus" role="status" aria-live="polite">Loading…</p>
+            </div>
+            <div class="setting-control">
+              <label for="ahPatient" class="small mb-1">Patient whose vitals are sent</label>
+              <select class="custom-select mb-2" id="ahPatient"></select>
+              <button type="button" class="btn btn-primary btn-block" id="ahCreate"><i class="mdi mdi-key-plus mr-1" aria-hidden="true"></i><span>Create token</span></button>
+            </div>
+          </div>
+          <div class="alert alert-warning" id="ahTokenBox" hidden>
+            <label for="ahToken" class="font-weight-bold mb-1">Your token</label>
+            <div class="input-group mb-1">
+              <input type="text" class="form-control text-monospace" id="ahToken" readonly>
+              <div class="input-group-append"><button type="button" class="btn btn-outline-dark" data-copy="ahToken">Copy</button></div>
+            </div>
+            <p class="small mb-0">Copy it into the Shortcut now: it's shown only this once. Anyone with it can read this patient's vitals, so keep it to yourself. Creating a new token stops the old one.</p>
+          </div>
+          <div id="ahSetup" hidden>
+            <h3>Addresses for the Shortcut</h3>
+            <div class="form-group mb-2" role="radiogroup" aria-labelledby="ahUnitsLabel">
+              <span id="ahUnitsLabel" class="d-block small font-weight-bold mb-1">Units sent</span>
+              <div class="custom-control custom-radio custom-control-inline">
+                <input type="radio" class="custom-control-input" id="ahUnitsUs" name="ahUnits" value="us" checked>
+                <label class="custom-control-label" for="ahUnitsUs">US (lb, in, °F, mg/dL)</label>
+              </div>
+              <div class="custom-control custom-radio custom-control-inline">
+                <input type="radio" class="custom-control-input" id="ahUnitsMetric" name="ahUnits" value="metric">
+                <label class="custom-control-label" for="ahUnitsMetric">Metric (kg, cm, °C, mmol/L)</label>
+              </div>
+            </div>
+            <label for="ahGetUrl" class="small mb-1">1. Get the readings (GET)</label>
+            <div class="input-group mb-2">
+              <input type="text" class="form-control text-monospace" id="ahGetUrl" readonly>
+              <div class="input-group-append"><button type="button" class="btn btn-outline-secondary" data-copy="ahGetUrl">Copy</button></div>
+            </div>
+            <label for="ahSentUrl" class="small mb-1">2. Confirm they were logged (POST)</label>
+            <div class="input-group mb-2">
+              <input type="text" class="form-control text-monospace" id="ahSentUrl" readonly>
+              <div class="input-group-append"><button type="button" class="btn btn-outline-secondary" data-copy="ahSentUrl">Copy</button></div>
+            </div>
+            <p class="small text-muted">Your iPhone has to reach this server at that address: on your home Wi-Fi, or through a VPN when you're away.</p>
+            <details class="mb-3">
+              <summary class="font-weight-bold">How to build the Shortcut</summary>
+              <ol class="mt-2 mb-0 ah-steps">
+                <li>In the <strong>Shortcuts</strong> app, tap <strong>+</strong> to make a new shortcut and name it, e.g. <em>MyLabVault to Health</em>.</li>
+                <li>Add <strong>Get Contents of URL</strong> with address 1. Open <em>Show More</em>, keep Method <em>GET</em>, and add a header: key <code>Authorization</code>, text <code>Bearer</code>, a space, then your token.</li>
+                <li>For each kind of reading you record (you can skip the rest):
+                  <ol type="a">
+                    <li>Add <strong>Get Dictionary Value</strong>: get <em>Value</em> for key <code>Weight</code> (or <code>Height</code>, <code>Heart Rate</code>, <code>Body Temperature</code>, <code>Oxygen Saturation</code>, <code>Respiratory Rate</code>, <code>Blood Glucose</code>) in <em>Contents of URL</em>.</li>
+                    <li>Add <strong>Repeat with Each</strong> item in that <em>Dictionary Value</em>.</li>
+                    <li>Inside the repeat, add <strong>Get Dictionary Value</strong> for <code>value</code> in <em>Repeat Item</em>, then <strong>Log Health Sample</strong>: type <em>Weight</em> (matching the key), value <em>Dictionary Value</em>, the unit shown above (e.g. lb), and for the date, a <strong>Get Dictionary Value</strong> for <code>date</code> in <em>Repeat Item</em>.</li>
+                  </ol>
+                </li>
+                <li>For <code>Blood Pressure</code>, each item has <code>systolic</code> and <code>diastolic</code> instead of <code>value</code>. Log both in the Blood Pressure sample (if your iPhone shows them as two types, log one sample of each with the same date).</li>
+                <li>Last, add <strong>Get Dictionary Value</strong> for <code>through</code> in <em>Contents of URL</em>, then <strong>Get Contents of URL</strong> with address 2: Method <em>POST</em>, the same <code>Authorization</code> header, and a JSON body with a <em>Number</em> field <code>through</code> set to that <em>Dictionary Value</em>.</li>
+                <li>Run it once. The first time, iPhone asks to allow Shortcuts to write to Health and to reach this server; allow both.</li>
+                <li>To run it automatically, open <strong>Automation</strong>, tap <strong>+</strong>, choose <em>Time of Day</em> (e.g. daily) and <em>Run Immediately</em>, and pick the shortcut.</li>
+              </ol>
+            </details>
+            <div class="setting-actions">
+              <span class="setting-note">Already have these readings in Health, or restored a backup? <em>Mark everything as sent</em> so they aren't added twice. Deleted them in Health? <em>Send everything again</em>. Edits and deletions here don't change Health.</span>
+              <div>
+                <button type="button" class="btn btn-outline-secondary btn-sm mb-1" id="ahMarkSent">Mark everything as sent</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm mb-1" id="ahResend">Send everything again</button>
+                <button type="button" class="btn btn-outline-danger btn-sm mb-1" id="ahOff">Turn off</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Clean up -->
@@ -437,10 +518,93 @@
     </div>
   </div>
 </div>
+{{ notification_modal() }}
+{{ confirmation_modal() }}
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="/static/js/merge-duplicates.js"></script>
+<script>
+// ---------- Apple Health ----------
+(function () {
+    const $id = id => document.getElementById(id);
+    let status = null;
+
+    function urls() {
+        const units = document.querySelector('input[name="ahUnits"]:checked').value;
+        const base = `${window.location.origin}/api/apple-health/vitals`;
+        $id('ahGetUrl').value = units === 'us' ? base : `${base}?units=${units}`;
+        $id('ahSentUrl').value = `${base}/sent`;
+    }
+
+    function when(iso) { return iso ? new Date(iso).toLocaleString() : 'never'; }
+
+    function render(s) {
+        status = s;
+        $id('ahStatus').innerHTML = s.enabled
+            ? `<span class="badge badge-status-normal"><i class="mdi mdi-check-circle" aria-hidden="true"></i> On</span> for <strong>${escapeHtml(s.patient_name || '')}</strong>.
+               ${s.pending} reading${s.pending === 1 ? '' : 's'} waiting to be sent. Last sync: ${escapeHtml(when(s.last_sync))}.`
+            : '<span class="badge badge-status-none"><i class="mdi mdi-power" aria-hidden="true"></i> Off</span> Create a token to set up the Shortcut.';
+        $id('ahSetup').hidden = !s.enabled;
+        $id('ahCreate').querySelector('span').textContent = s.enabled ? 'Create a new token' : 'Create token';
+        if (s.enabled && s.patient_id) $id('ahPatient').value = s.patient_id;
+        urls();
+    }
+
+    async function call(method, path, body) {
+        const response = await fetch(`/api/apple-health${path}`, {
+            method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || 'That didn\'t work.');
+        return data;
+    }
+
+    async function load() {
+        try {
+            const [s, patients] = await Promise.all([call('GET', '/'), fetch('/api/patients/').then(r => r.ok ? r.json() : [])]);
+            const list = Array.isArray(patients) ? patients : (patients.data || []);
+            const selected = s.patient_id || parseInt(getCookie('selectedPatientId') || '1', 10);
+            $id('ahPatient').innerHTML = list.map(p => `<option value="${Number(p.id)}" ${p.id === selected ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
+            render(s);
+        } catch (e) { $id('ahStatus').textContent = 'Apple Health settings couldn\'t be loaded.'; }
+    }
+
+    async function act(fn) {
+        try { await fn(); } catch (e) { showNotification(e.message, 'error', 'Apple Health'); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!$id('apple-health')) return;
+        load();
+        document.querySelectorAll('input[name="ahUnits"]').forEach(r => r.addEventListener('change', urls));
+        $id('ahCreate').addEventListener('click', () => act(async () => {
+            if (status && status.enabled && !(await showConfirmation('The current token stops working, so the Shortcut needs the new one.', 'Create a new token', 'Create', 'Cancel'))) return;
+            const data = await call('POST', '/token', { patient_id: parseInt($id('ahPatient').value, 10) });
+            $id('ahToken').value = data.token;
+            $id('ahTokenBox').hidden = false;
+            render(data);
+            $id('ahToken').focus();
+            $id('ahToken').select();
+        }));
+        $id('ahResend').addEventListener('click', () => act(async () => render(await call('POST', '/resend'))));
+        $id('ahMarkSent').addEventListener('click', () => act(async () => render(await call('POST', '/mark-sent'))));
+        $id('ahOff').addEventListener('click', () => act(async () => {
+            if (!(await showConfirmation('The Shortcut stops working until you create a new token. Readings already in Health stay there.', 'Turn off Apple Health', 'Turn off', 'Cancel'))) return;
+            $id('ahTokenBox').hidden = true;
+            render(await call('DELETE', '/token'));
+        }));
+        $id('apple-health').addEventListener('click', async e => {
+            const button = e.target.closest('[data-copy]');
+            if (!button) return;
+            const field = $id(button.dataset.copy);
+            try { await navigator.clipboard.writeText(field.value); } catch (err) { field.select(); document.execCommand('copy'); }
+            button.textContent = 'Copied';
+            setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+        });
+    });
+})();
+</script>
 <script>
 // One section at a time, chosen from the list (and the address, e.g. /settings#backup).
 // Without JavaScript all sections show one after another.
